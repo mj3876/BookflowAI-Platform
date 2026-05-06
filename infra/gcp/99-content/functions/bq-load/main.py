@@ -11,6 +11,20 @@ def _configured_load_tables():
     return [table.strip() for table in raw_tables.split(",") if table.strip()]
 
 
+def _table_aliases():
+    raw_aliases = os.getenv("BOOKFLOW_LOAD_TABLE_ALIASES", "")
+    aliases = {}
+    for alias_pair in raw_aliases.split(","):
+        if ":" not in alias_pair:
+            continue
+        source_name, table_name = alias_pair.split(":", 1)
+        source_name = source_name.strip().lower()
+        table_name = table_name.strip()
+        if source_name and table_name:
+            aliases[source_name] = table_name
+    return aliases
+
+
 def _resolve_table_id(payload, object_name):
     explicit_table = payload.get("table_id") or payload.get("table")
     if explicit_table:
@@ -18,6 +32,10 @@ def _resolve_table_id(payload, object_name):
 
     configured_tables = _configured_load_tables()
     object_stem = PurePosixPath(object_name).stem.lower()
+    aliases = _table_aliases()
+    if object_stem in aliases and aliases[object_stem] in configured_tables:
+        return aliases[object_stem]
+
     for table in configured_tables:
         if table.lower() in object_stem:
             return table
@@ -68,7 +86,11 @@ def handler(request):
             job_config.source_format = bigquery.SourceFormat.CSV
             job_config.autodetect = True
             job_config.skip_leading_rows = int(payload.get("skip_leading_rows", 1))
-        job_config.write_disposition = "WRITE_TRUNCATE"
+        job_config.write_disposition = (
+            payload.get("write_disposition")
+            or os.getenv("BOOKFLOW_WRITE_DISPOSITION")
+            or bigquery.WriteDisposition.WRITE_APPEND
+        )
 
         job = client.load_table_from_uri(
             source_uri,
