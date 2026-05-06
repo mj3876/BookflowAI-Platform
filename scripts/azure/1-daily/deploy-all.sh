@@ -4,7 +4,10 @@
 #       .
 
 set -e
-export MSYS_NO_PATHCONV=1   # Git Bash   
+export MSYS_NO_PATHCONV=1   # Git Bash
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BICEP_DIR="$(cd "${SCRIPT_DIR}/../../../infra/azure" && (pwd -W 2>/dev/null || pwd))"
 
 RESOURCE_GROUP="rg-bookflow"
 LOCATION="japanwest"
@@ -122,7 +125,7 @@ az group create --name "$RESOURCE_GROUP" --location "$LOCATION" --output table
 echo ""
 echo "[1-2]  ID "
 deploy_stack "identity-deploy" \
-  --template-file modules/identity.bicep \
+  --template-file "${BICEP_DIR}/modules/identity.bicep" \
   --parameters location="$LOCATION" prefix="$PREFIX"
 
 FUNCTION_IDENTITY_ID=$(az identity show \
@@ -156,7 +159,7 @@ echo "  LogicApp Identity ID: $LOGICAPP_IDENTITY_ID"
 echo ""
 echo "[1-3] NSG "
 deploy_stack "nsg-deploy" \
-  --template-file modules/nsg.bicep \
+  --template-file "${BICEP_DIR}/modules/nsg.bicep" \
   --parameters location="$LOCATION" prefix="$PREFIX"
 
 SERVICES_NSG_ID=$(az network nsg show \
@@ -172,7 +175,7 @@ FUNCTION_NSG_ID=$(az network nsg show \
 echo ""
 echo "[1-4] Log Analytics Workspace "
 deploy_stack "monitor-deploy" \
-  --template-file modules/monitor.bicep \
+  --template-file "${BICEP_DIR}/modules/monitor.bicep" \
   --parameters location="$LOCATION" prefix="$PREFIX" logRetentionDays=90
 
 LOG_ANALYTICS_ID=$(az monitor log-analytics workspace show \
@@ -185,7 +188,7 @@ echo "  Log Analytics ID: $LOG_ANALYTICS_ID"
 echo ""
 echo "[1-5] VNet "
 deploy_stack "vnet-deploy" \
-  --template-file modules/vnet.bicep \
+  --template-file "${BICEP_DIR}/modules/vnet.bicep" \
   --parameters location="$LOCATION" \
               prefix="$PREFIX" \
               vnetAddressPrefix="172.16.0.0/16" \
@@ -242,7 +245,7 @@ if [ -n "$DELETED_KV" ]; then
 fi
 
 deploy_stack "keyvault-deploy" \
-  --template-file modules/keyvault.bicep \
+  --template-file "${BICEP_DIR}/modules/keyvault.bicep" \
   --parameters location="$LOCATION" \
               prefix="$PREFIX" \
               logAnalyticsWorkspaceId="$LOG_ANALYTICS_ID" \
@@ -271,7 +274,7 @@ echo "════════════════════════�
 echo ""
 echo "[3-1] Function App "
 deploy_stack "function-deploy" \
-  --template-file modules/function.bicep \
+  --template-file "${BICEP_DIR}/modules/function.bicep" \
   --parameters location="$LOCATION" \
               prefix="$PREFIX" \
               keyVaultUri="$KV_URI" \
@@ -324,7 +327,7 @@ echo "════════════════════════�
 echo ""
 echo "[4-1] Event Grid "
 deploy_stack "eventgrid-deploy" \
-  --template-file modules/eventgrid.bicep \
+  --template-file "${BICEP_DIR}/modules/eventgrid.bicep" \
   --parameters location="$LOCATION" \
               prefix="$PREFIX" \
               keyVaultId="$KV_ID"
@@ -340,7 +343,7 @@ echo "════════════════════════�
 echo ""
 echo "[5-1] Logic Apps "
 deploy_stack "logicapp-deploy" \
-  --template-file modules/logicapp.bicep \
+  --template-file "${BICEP_DIR}/modules/logicapp.bicep" \
   --parameters location="$LOCATION" \
               prefix="$PREFIX" \
               logicappIdentityId="$LOGICAPP_IDENTITY_ID" \
@@ -363,7 +366,7 @@ read
 echo ""
 echo "[6-1] VPN Gateway "
 deploy_stack "vpn-deploy" \
-  --template-file modules/vpn.bicep \
+  --template-file "${BICEP_DIR}/modules/vpn.bicep" \
   --parameters location="$LOCATION" \
               prefix="$PREFIX" \
               gatewaySubnetId="$GATEWAY_SUBNET_ID" \
