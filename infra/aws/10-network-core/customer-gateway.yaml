@@ -57,8 +57,3 @@ Outputs:
     Value: !Ref GcpCgw
     Export: { Name: !Sub '${ProjectName}-cgw-gcp-id' }
 
-  SetupInstructions:
-    Value: >
-       placeholder IP(0.0.0.0) CGW  skip.
-      Azure/GCP VPN Gateway   Public IP  →
-      'aws cloudformation deploy --parameter-overrides AzureVpnGatewayIp=x.x.x.x GcpHaVpnIp=y.y.y.y'  
