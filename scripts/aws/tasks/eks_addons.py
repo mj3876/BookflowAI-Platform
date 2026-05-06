@@ -123,12 +123,62 @@ def _ensure_duckdns_token_secret(token: str) -> None:
     subprocess.run(["kubectl", "apply", "-f", "-"], input=yaml, text=True, check=True)
 
 
-def _sync_pod_secrets() -> None:
-    """AWS Secrets Manager → K8s Secret 자동 sync (idempotent · 매일 redeploy 시 자동).
+def _alter_rds_pod_roles(rds_pw: str) -> None:
+    """RDS 의 6 pod role password 를 master password 와 일치시킴 (idempotent).
 
-    - bookflow/auth/entra-client-secret  → auth-pod-secret.AUTH_ENTRA_CLIENT_SECRET
-    - bookflow/auth/jwt-signing-key      → 7 Pod 의 *-secret.AUTH_JWT_SIGNING_KEY
-    - bookflow/rds/master-password       → auth-pod-secret.AUTH_RDS_PASSWORD (auth-pod 한정)
+    K8s Secret 의 AUTH_RDS_PASSWORD 가 master password 라 RDS role password 도 같아야 함.
+    매일 destroy/redeploy 시 003_grants.sql 이 'CHANGE_ME_*' placeholder 로 reset → 여기서 정정.
+    """
+    import boto3, json, time, base64
+    region = os.environ.get("AWS_REGION", "ap-northeast-1")
+    ssm = boto3.client("ssm", region_name=region)
+    ec2 = boto3.client("ec2", region_name=region)
+    rds = boto3.client("rds", region_name=region)
+
+    instances = ec2.describe_instances(Filters=[
+        {"Name": "tag:Name", "Values": ["bookflow-ansible-node"]},
+        {"Name": "instance-state-name", "Values": ["running"]},
+    ])["Reservations"]
+    if not instances:
+        log.warn("ansible-node not found · skip RDS role sync")
+        return
+    instance_id = instances[0]["Instances"][0]["InstanceId"]
+    rds_host = rds.describe_db_instances(DBInstanceIdentifier="bookflow-postgres")["DBInstances"][0]["Endpoint"]["Address"]
+
+    sql = " ".join([
+        f"ALTER ROLE {r} WITH PASSWORD $bf$" + rds_pw + "$bf$;"
+        for r in ["auth_pod", "inventory_svc", "forecast_svc", "decision_svc", "intervention_svc", "notification_svc"]
+    ])
+    sql_b64 = base64.b64encode(sql.encode()).decode()
+    cmd = (
+        f"echo {sql_b64} | base64 -d > /tmp/_alter_roles.sql && "
+        f"PGPASSWORD={json.dumps(rds_pw)} psql -h {rds_host} -U bookflow_admin -d bookflow "
+        f"-v ON_ERROR_STOP=1 -f /tmp/_alter_roles.sql"
+    )
+    r = ssm.send_command(InstanceIds=[instance_id], DocumentName="AWS-RunShellScript",
+                         Parameters={"commands": [cmd]}, Comment="sync 6 pod role passwords")
+    cid = r["Command"]["CommandId"]
+    for _ in range(20):
+        time.sleep(3)
+        inv = ssm.get_command_invocation(CommandId=cid, InstanceId=instance_id)
+        if inv["Status"] in ("Success", "Failed", "Cancelled", "TimedOut"):
+            break
+    if inv["Status"] != "Success":
+        log.err(f"ALTER ROLE failed: {inv.get('StandardErrorContent','')[:200]}")
+        raise SystemExit(1)
+    log.info("  ✓ RDS 6 pod role passwords synced with master")
+
+
+def _sync_pod_secrets() -> None:
+    """AWS Secrets Manager → K8s Secret 자동 sync + RDS role password 정합.
+
+    매일 destroy/redeploy 시 cicd-eks 가 secret.example.yaml 무시 (buildspec glob fix) +
+    이 함수가 idempotent 보장.
+
+    - bookflow/auth/entra-client-secret → auth-pod-secret.AUTH_ENTRA_CLIENT_SECRET
+    - bookflow/auth/jwt-signing-key     → 7 Pod 의 *-secret.AUTH_JWT_SIGNING_KEY
+    - bookflow/rds/master-password      → 7 Pod 의 *-secret.{POD}_RDS_PASSWORD + auth-pod-secret.AUTH_RDS_PASSWORD
+    - + RDS 의 6 pod role password 도 master 와 일치 (ALTER ROLE)
     """
     import boto3, json
     sm = boto3.client("secretsmanager", region_name=os.environ.get("AWS_REGION", "ap-northeast-1"))
@@ -137,6 +187,9 @@ def _sync_pod_secrets() -> None:
     entra = json.loads(sm.get_secret_value(SecretId="bookflow/auth/entra-client-secret")["SecretString"])
     jwt_key = sm.get_secret_value(SecretId="bookflow/auth/jwt-signing-key")["SecretString"]
     rds_pw = json.loads(sm.get_secret_value(SecretId="bookflow/rds/master-password")["SecretString"])["password"]
+
+    # RDS pod role password sync (master 와 일치 · 003_grants.sql 의 CHANGE_ME_* 정정)
+    _alter_rds_pod_roles(rds_pw)
 
     # auth-pod-secret (entra + jwt + rds)
     yaml = subprocess.run(
@@ -150,20 +203,25 @@ def _sync_pod_secrets() -> None:
     subprocess.run(["kubectl", "apply", "-f", "-"], input=yaml, text=True, check=True)
     log.info("  ✓ auth-pod-secret")
 
-    # 6 Pod (dual-mode auth · JWT key 만 같이 보장 · 기존 RDS_PASSWORD 는 patch)
-    for p in ["dashboard-svc", "decision-svc", "forecast-svc", "intervention-svc", "inventory-svc", "notification-svc"]:
-        # JWT key 만 patch (기존 secret 의 다른 key 는 보존)
-        import base64
-        jwt_b64 = base64.b64encode(jwt_key.encode()).decode()
-        # 기존 secret 의 ${POD}_RDS_PASSWORD 는 manifest 에서 placeholder 로 들어감 (별도 sync TODO)
-        subprocess.run(
-            ["kubectl", "patch", "secret", f"{p}-secret", "-n", "bookflow",
-             "--type=json",
-             "-p", f'[{{"op":"replace","path":"/data/AUTH_JWT_SIGNING_KEY","value":"{jwt_b64}"}}]'],
-            check=False,  # secret 없으면 silent skip · manifest apply 후 다음 run 에서 sync
-            capture_output=True,
-        )
-    log.info("  ✓ 6 Pod JWT key sync")
+    # 6 Pod dual-mode auth · *_RDS_PASSWORD + AUTH_JWT_SIGNING_KEY 둘 다 sync
+    pod_to_envprefix = {
+        "dashboard-svc": "DASHBOARD",
+        "decision-svc": "DECISION",
+        "forecast-svc": "FORECAST",
+        "intervention-svc": "INTERVENTION",
+        "inventory-svc": "INVENTORY",
+        "notification-svc": "NOTIFICATION",
+    }
+    for pod, prefix in pod_to_envprefix.items():
+        yaml = subprocess.run(
+            ["kubectl", "create", "secret", "generic", f"{pod}-secret", "-n", "bookflow",
+             f"--from-literal={prefix}_RDS_PASSWORD={rds_pw}",
+             f"--from-literal=AUTH_JWT_SIGNING_KEY={jwt_key}",
+             "--dry-run=client", "-o", "yaml"],
+            check=True, capture_output=True, text=True,
+        ).stdout
+        subprocess.run(["kubectl", "apply", "-f", "-"], input=yaml, text=True, check=True)
+    log.info("  ✓ 6 Pod RDS password + JWT key sync")
 
 
 def _apply_manifests() -> None:
