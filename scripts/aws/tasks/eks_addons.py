@@ -123,6 +123,49 @@ def _ensure_duckdns_token_secret(token: str) -> None:
     subprocess.run(["kubectl", "apply", "-f", "-"], input=yaml, text=True, check=True)
 
 
+def _sync_pod_secrets() -> None:
+    """AWS Secrets Manager → K8s Secret 자동 sync (idempotent · 매일 redeploy 시 자동).
+
+    - bookflow/auth/entra-client-secret  → auth-pod-secret.AUTH_ENTRA_CLIENT_SECRET
+    - bookflow/auth/jwt-signing-key      → 7 Pod 의 *-secret.AUTH_JWT_SIGNING_KEY
+    - bookflow/rds/master-password       → auth-pod-secret.AUTH_RDS_PASSWORD (auth-pod 한정)
+    """
+    import boto3, json
+    sm = boto3.client("secretsmanager", region_name=os.environ.get("AWS_REGION", "ap-northeast-1"))
+
+    log.info("sync K8s Secrets from AWS Secrets Manager")
+    entra = json.loads(sm.get_secret_value(SecretId="bookflow/auth/entra-client-secret")["SecretString"])
+    jwt_key = sm.get_secret_value(SecretId="bookflow/auth/jwt-signing-key")["SecretString"]
+    rds_pw = json.loads(sm.get_secret_value(SecretId="bookflow/rds/master-password")["SecretString"])["password"]
+
+    # auth-pod-secret (entra + jwt + rds)
+    yaml = subprocess.run(
+        ["kubectl", "create", "secret", "generic", "auth-pod-secret", "-n", "bookflow",
+         f"--from-literal=AUTH_ENTRA_CLIENT_SECRET={entra['client_secret']}",
+         f"--from-literal=AUTH_JWT_SIGNING_KEY={jwt_key}",
+         f"--from-literal=AUTH_RDS_PASSWORD={rds_pw}",
+         "--dry-run=client", "-o", "yaml"],
+        check=True, capture_output=True, text=True,
+    ).stdout
+    subprocess.run(["kubectl", "apply", "-f", "-"], input=yaml, text=True, check=True)
+    log.info("  ✓ auth-pod-secret")
+
+    # 6 Pod (dual-mode auth · JWT key 만 같이 보장 · 기존 RDS_PASSWORD 는 patch)
+    for p in ["dashboard-svc", "decision-svc", "forecast-svc", "intervention-svc", "inventory-svc", "notification-svc"]:
+        # JWT key 만 patch (기존 secret 의 다른 key 는 보존)
+        import base64
+        jwt_b64 = base64.b64encode(jwt_key.encode()).decode()
+        # 기존 secret 의 ${POD}_RDS_PASSWORD 는 manifest 에서 placeholder 로 들어감 (별도 sync TODO)
+        subprocess.run(
+            ["kubectl", "patch", "secret", f"{p}-secret", "-n", "bookflow",
+             "--type=json",
+             "-p", f'[{{"op":"replace","path":"/data/AUTH_JWT_SIGNING_KEY","value":"{jwt_b64}"}}]'],
+            check=False,  # secret 없으면 silent skip · manifest apply 후 다음 run 에서 sync
+            capture_output=True,
+        )
+    log.info("  ✓ 6 Pod JWT key sync")
+
+
 def _apply_manifests() -> None:
     apps = _apps_dir()
     manifests = [
@@ -155,6 +198,7 @@ def deploy() -> None:
     _helm_install_webhook_duckdns(token)
     _ensure_duckdns_token_secret(token)
     _apply_manifests()
+    _sync_pod_secrets()
 
     log.step("=== task-eks-addons done ===")
     log.info("https://bookflow.duckdns.org/ should serve in 60-90s after first cert issuance")
