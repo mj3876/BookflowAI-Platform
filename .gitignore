@@ -104,3 +104,5 @@ terraform-provider-*.log
 tmp_pdf_images/
 
 scripts/gcp/data/
+# Local-only generated CSVs (regenerated from BOOKFLOW/01_데이터스키마/*.parquet)
+infra/aws/20-data-persistent/seed-data/parquet_csv/
