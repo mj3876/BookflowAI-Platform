@@ -1,6 +1,6 @@
 // main.bicep
 // 전체 Azure 인프라 오케스트레이션
-// VPN Connection 은 포함하지 않음 — AWS TGW 구축 후 vpn-connection.bicep 별도 배포
+// VPN Connection: AWS TGW 구축 후 awsTgwActiveIp 등 채워서 같이 배포
 
 targetScope = 'resourceGroup'
 
@@ -18,6 +18,16 @@ param vpnBgpAsn int
 param logRetentionDays int
 
 param securityAdminObjectId string
+
+// ── AWS Cross-Cloud VPN 파라미터 (선택) ─────────────────────
+// AWS TGW 의 VPN attachment 가 만든 첫 번째 tunnel public IP + inside CIDR 의 customer side IP + PSK
+// 빈 문자열이면 vpn-connection 모듈 skip (Phase 1-3) · 채워지면 deploy (Phase 4+)
+param awsTgwActiveIp string = ''
+param awsTgwBgpPeeringIp string = ''
+@secure()
+param vpnPreSharedKey string = ''
+// AWS APIPA inside CIDR 의 customer side IP (예: 169.254.21.6) — VPN GW 의 customBgpIpAddresses 로 사용
+param vpnCustomBgpIpAddresses array = []
 
 // ── 1. 관리 ID ────────────────────────────────────────────
 module identity 'modules/identity.bicep' = {
@@ -116,7 +126,7 @@ module logicapp 'modules/logicapp.bicep' = {
   }
 }
 
-// ── 9. VPN Gateway (VNet 참조) — Connection 은 별도 배포 ──
+// ── 9. VPN Gateway (VNet 참조) ──
 module vpn 'modules/vpn.bicep' = {
   name: 'vpn-deploy'
   dependsOn: [vnet]
@@ -125,6 +135,20 @@ module vpn 'modules/vpn.bicep' = {
     prefix: prefix
     gatewaySubnetId: vnet.outputs.gatewaySubnetId
     vpnBgpAsn: vpnBgpAsn
+    customBgpIpAddresses: vpnCustomBgpIpAddresses
+  }
+}
+
+// ── 10. VPN Connection (선택 · AWS Tunnel IP 채워질 때만 deploy) ──
+module vpnConnection 'modules/vpn-connection.bicep' = if (!empty(awsTgwActiveIp)) {
+  name: 'vpn-connection-deploy'
+  dependsOn: [vpn]
+  params: {
+    prefix: prefix
+    vpnGatewayName: 'vpngw-${prefix}'
+    awsTgwActiveIp: awsTgwActiveIp
+    awsTgwBgpPeeringIp: awsTgwBgpPeeringIp
+    preSharedKey: vpnPreSharedKey
   }
 }
 
