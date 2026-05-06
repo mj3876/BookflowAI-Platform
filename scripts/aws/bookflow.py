@@ -24,6 +24,7 @@ from scripts.aws.tasks import base, cicd_ecs, cicd_eks, cross_cloud, foundation,
 TASK_MODULES = {
     "data":           "data",
     "msa-pods":       "msa_pods",
+    "eks-addons":     "eks_addons",
     "mocks":          "mocks",
     "etl-streaming":  "etl_streaming",
     "publisher":      "publisher",
