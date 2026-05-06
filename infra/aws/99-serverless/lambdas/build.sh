@@ -20,7 +20,8 @@ cd "$(dirname "$0")"
 if [[ $# -gt 0 ]]; then
   LAMBDAS=("$@")
 else
-  mapfile -t LAMBDAS < <(find . -mindepth 2 -maxdepth 2 -name lambda_function.py -exec dirname {} \; | sed 's|^\./||' | sort)
+  # find Lambdas with either lambda_function.py or index.py (handler entrypoint)
+  mapfile -t LAMBDAS < <(find . -mindepth 2 -maxdepth 2 \( -name lambda_function.py -o -name index.py \) -exec dirname {} \; | sed 's|^\./||' | sort -u)
 fi
 
 # Verify bucket exists

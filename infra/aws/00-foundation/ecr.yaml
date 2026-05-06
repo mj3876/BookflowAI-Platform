@@ -87,6 +87,17 @@ Resources:
         LifecyclePolicyText: |
           { "rules": [{ "rulePriority": 1, "description": " 10 ", "selection": { "tagStatus": "any", "countType": "imageCountMoreThan", "countNumber": 10 }, "action": { "type": "expire" } }] }
 
+  # V6.2 PPT slide 30 rename: publish-watcher -> publisher-watcher (canonical Apps eks-pods folder)
+  EcrPublisherWatcher:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub ${ProjectName}/publisher-watcher
+      ImageScanningConfiguration: { ScanOnPush: true }
+      EncryptionConfiguration: { EncryptionType: AES256 }
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          { "rules": [{ "rulePriority": 1, "description": " 10 ", "selection": { "tagStatus": "any", "countType": "imageCountMoreThan", "countNumber": 10 }, "action": { "type": "expire" } }] }
+
   # ─── ECS Task  (3) ───
   EcrOnlineSim:
     Type: AWS::ECR::Repository

@@ -58,11 +58,14 @@ GRANT INSERT                ON audit_log        TO forecast_svc;
 GRANT INSERT, UPDATE        ON pending_orders   TO decision_svc;
 GRANT INSERT                ON audit_log        TO decision_svc;
 
--- intervention-svc: approval + execute + returns finalizer
+-- intervention-svc: approval + execute + returns finalizer + HQ master controls
 GRANT INSERT, UPDATE        ON pending_orders   TO intervention_svc;
 GRANT INSERT, UPDATE        ON order_approvals  TO intervention_svc;
 GRANT INSERT, UPDATE        ON returns          TO intervention_svc;
 GRANT INSERT                ON audit_log        TO intervention_svc;
+-- HQ 도서 ON/OFF + 소진 모드 (FR-A6.1·A6.2): active + discontinue_* 컬럼만
+GRANT UPDATE (active, discontinue_mode, discontinue_reason, discontinue_at, discontinue_by, reactivated_at)
+                            ON books            TO intervention_svc;
 
 -- notification-svc: notifications log writer
 GRANT INSERT, UPDATE        ON notifications_log TO notification_svc;

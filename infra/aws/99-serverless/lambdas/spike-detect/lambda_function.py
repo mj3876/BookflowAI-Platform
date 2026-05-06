@@ -25,7 +25,7 @@ log.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
 RDS_HOST = os.environ["RDS_HOST"]
 RDS_PORT = int(os.environ.get("RDS_PORT", "5432"))
 RDS_DB = os.environ.get("RDS_DB", "bookflow")
-RDS_USER = os.environ.get("RDS_USER", "spike_detect")
+RDS_USER_ENV = os.environ.get("RDS_USER", "spike_detect")  # fallback if secret JSON has no username
 RDS_SECRET_ARN = os.environ["RDS_SECRET_ARN"]
 REDIS_HOST = os.environ["REDIS_HOST"]
 REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))
@@ -34,23 +34,31 @@ Z_THRESHOLD = float(os.environ.get("Z_THRESHOLD", "2.0"))
 WINDOW_MINUTES = int(os.environ.get("WINDOW_MINUTES", "60"))
 
 _secrets = boto3.client("secretsmanager")
-_rds_password: str | None = None
+_rds_credentials: tuple[str, str] | None = None
 _redis = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True, socket_connect_timeout=3)
 
 
-def _get_password() -> str:
-    global _rds_password
-    if _rds_password is None:
+def _get_credentials() -> tuple[str, str]:
+    """Read (username, password) from secret JSON; fallback to env RDS_USER if secret has none.
+
+    Supports per-pod secret (`bookflow/rds/spike_detect`) AND master fallback
+    (`bookflow/rds/master-password` returns `{username: bookflow_admin, ...}`).
+    """
+    global _rds_credentials
+    if _rds_credentials is None:
         sec = _secrets.get_secret_value(SecretId=RDS_SECRET_ARN)
         body = json.loads(sec["SecretString"])
-        _rds_password = body.get("password") or body.get("Password")
-    return _rds_password
+        user = body.get("username") or body.get("Username") or RDS_USER_ENV
+        pwd = body.get("password") or body.get("Password")
+        _rds_credentials = (user, pwd)
+    return _rds_credentials
 
 
 def _conn():
+    user, pwd = _get_credentials()
     return psycopg.connect(
         host=RDS_HOST, port=RDS_PORT, dbname=RDS_DB,
-        user=RDS_USER, password=_get_password(),
+        user=user, password=pwd,
         connect_timeout=5,
     )
 

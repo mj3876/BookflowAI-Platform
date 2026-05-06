@@ -1,11 +1,14 @@
-﻿"""base-up / base-down ·   base  +    destroy."""
+﻿"""base-up / base-down ·  Tier 10 VPC × 5 + Tier 30 ECS cluster (모두 독립 → 병렬)."""
 from ..lib import Stack, log
+from ..lib.parallel import parallel_deploy
 
+# 5 VPC (sales-data · egress · data · bookflow-ai · ansible) — 모두 서로 독립
 TIER10 = [
     ("vpc-sales-data",   "10-network-core/vpc-sales-data.yaml"),
     ("vpc-egress",       "10-network-core/vpc-egress.yaml"),
     ("vpc-data",         "10-network-core/vpc-data.yaml"),
     ("vpc-bookflow-ai",  "10-network-core/vpc-bookflow-ai.yaml"),
+    ("vpc-ansible",      "10-network-core/vpc-ansible.yaml"),
 ]
 
 TIER30 = [
@@ -14,12 +17,14 @@ TIER30 = [
 
 
 def deploy() -> None:
-    log.step("=== base-up · Tier 10 + Tier 30 base ===")
-    for name, template in TIER10:
-        Stack(tier="10", name=name, template=template).deploy()
-    for name, template in TIER30:
-        Stack(tier="30", name=name, template=template).deploy()
-    log.step("=== base-up  (Tier 00  + Tier 10/30 base) ===")
+    log.step("=== base-up · Tier 10 VPC × 5 + Tier 30 ECS cluster (parallel) ===")
+    # VPC × 5 + ECS cluster 모두 독립 → 6 stacks 동시 deploy (~3-5min)
+    stacks = (
+        [Stack(tier="10", name=n, template=t) for n, t in TIER10]
+        + [Stack(tier="30", name=n, template=t) for n, t in TIER30]
+    )
+    parallel_deploy(stacks, label=f"{len(stacks)} VPCs + ECS cluster")
+    log.step("=== base-up done ===")
 
 
 def destroy() -> None:

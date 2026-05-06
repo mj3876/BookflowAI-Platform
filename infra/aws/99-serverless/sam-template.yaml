@@ -76,12 +76,11 @@ Resources:
     Properties:
       FunctionName: !Sub ${ProjectName}-aladin-sync
       Handler: index.lambda_handler
-      InlineCode: |
-        import json
-        import os
-        def lambda_handler(event, context):
-            print(f"[aladin-sync] placeholder - event={json.dumps(event)}")
-            return {"statusCode": 200, "body": "aladin-sync placeholder"}
+      Timeout: 60
+      MemorySize: 512
+      CodeUri:
+        Bucket: !Ref LambdaArtifactBucket
+        Key: lambda/aladin-sync.zip
       Policies:
         - S3WritePolicy:
             BucketName: !ImportValue
@@ -105,11 +104,11 @@ Resources:
     Properties:
       FunctionName: !Sub ${ProjectName}-event-sync
       Handler: index.lambda_handler
-      InlineCode: |
-        import json
-        def lambda_handler(event, context):
-            print(f"[event-sync] placeholder - event={json.dumps(event)}")
-            return {"statusCode": 200, "body": "event-sync placeholder"}
+      Timeout: 60
+      MemorySize: 256
+      CodeUri:
+        Bucket: !Ref LambdaArtifactBucket
+        Key: lambda/event-sync.zip
       Policies:
         - S3WritePolicy:
             BucketName: !ImportValue
@@ -133,11 +132,11 @@ Resources:
     Properties:
       FunctionName: !Sub ${ProjectName}-sns-gen
       Handler: index.lambda_handler
-      InlineCode: |
-        import json
-        def lambda_handler(event, context):
-            print(f"[sns-gen] placeholder - event={json.dumps(event)}")
-            return {"statusCode": 200, "body": "sns-gen placeholder"}
+      Timeout: 60
+      MemorySize: 256
+      CodeUri:
+        Bucket: !Ref LambdaArtifactBucket
+        Key: lambda/sns-gen.zip
       Policies:
         - S3WritePolicy:
             BucketName: !ImportValue
