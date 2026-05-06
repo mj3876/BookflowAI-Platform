@@ -191,6 +191,7 @@ CREATE TABLE IF NOT EXISTS users (
     role                    VARCHAR(30) NOT NULL,
     scope_wh_id             SMALLINT,
     scope_store_id          INTEGER,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_login_at           TIMESTAMPTZ
 );
 

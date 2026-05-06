@@ -1,5 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW - Tier 60 - Transit Gateway Hub + 4 VPC Attachments + Route Tables (Phase 3-4 cross-cloud; Ansible VPC excluded)
+Description: BOOKFLOW - Tier 60 - Transit Gateway Hub + 5 VPC Attachments + Route Tables (Phase 3-4 cross-cloud; Ansible VPC included after peering teardown)
 Parameters:
   ProjectName:
     Type: String
@@ -92,6 +92,21 @@ Resources:
         DnsSupport: enable
       Tags: [{ Key: Name, Value: !Sub '${ProjectName}-tgw-attach-data' }]
 
+  TgwAttachAnsible:
+    Type: AWS::EC2::TransitGatewayVpcAttachment
+    Properties:
+      TransitGatewayId: !Ref Tgw
+      VpcId: !ImportValue
+        Fn::Sub: ${ProjectName}-vpc-ansible-id
+      SubnetIds:
+        - !ImportValue
+          Fn::Sub: ${ProjectName}-subnet-ansible-private-az1
+        - !ImportValue
+          Fn::Sub: ${ProjectName}-subnet-ansible-private-az2
+      Options:
+        DnsSupport: enable
+      Tags: [{ Key: Name, Value: !Sub '${ProjectName}-tgw-attach-ansible' }]
+
   # ─── RT Association (4 VPC) ───
   RtAssocBookflowAi:
     Type: AWS::EC2::TransitGatewayRouteTableAssociation
@@ -115,6 +130,12 @@ Resources:
     Type: AWS::EC2::TransitGatewayRouteTableAssociation
     Properties:
       TransitGatewayAttachmentId: !Ref TgwAttachData
+      TransitGatewayRouteTableId: !Ref TgwRouteTable
+
+  RtAssocAnsible:
+    Type: AWS::EC2::TransitGatewayRouteTableAssociation
+    Properties:
+      TransitGatewayAttachmentId: !Ref TgwAttachAnsible
       TransitGatewayRouteTableId: !Ref TgwRouteTable
 
   # ─── RT Propagation (4 VPC ·    ) ───
@@ -142,6 +163,12 @@ Resources:
       TransitGatewayAttachmentId: !Ref TgwAttachData
       TransitGatewayRouteTableId: !Ref TgwRouteTable
 
+  RtPropAnsible:
+    Type: AWS::EC2::TransitGatewayRouteTablePropagation
+    Properties:
+      TransitGatewayAttachmentId: !Ref TgwAttachAnsible
+      TransitGatewayRouteTableId: !Ref TgwRouteTable
+
 Outputs:
   TgwId:
     Value: !Ref Tgw
@@ -167,3 +194,6 @@ Outputs:
   TgwAttachDataId:
     Value: !Ref TgwAttachData
     Export: { Name: !Sub '${ProjectName}-tgw-attach-data-id' }
+  TgwAttachAnsibleId:
+    Value: !Ref TgwAttachAnsible
+    Export: { Name: !Sub '${ProjectName}-tgw-attach-ansible-id' }

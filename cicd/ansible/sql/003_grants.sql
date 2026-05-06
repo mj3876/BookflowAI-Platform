@@ -74,9 +74,11 @@ GRANT INSERT                ON audit_log         TO notification_svc;
 -- dashboard-svc: read only (fan-in HUB · WebSocket broker · no direct writes)
 -- (already covered by bookflow_app SELECT)
 
--- auth-pod: users last_login_at update
-GRANT UPDATE (last_login_at) ON users           TO auth_pod;
-GRANT INSERT                 ON audit_log        TO auth_pod;
+-- auth-pod: OIDC self-provisioning · INSERT new users + UPDATE info on each login (Phase γ)
+GRANT SELECT                                            ON users     TO auth_pod;
+GRANT INSERT                                            ON users     TO auth_pod;
+GRANT UPDATE (email, display_name, last_login_at)       ON users     TO auth_pod;
+GRANT INSERT                                            ON audit_log TO auth_pod;
 
 -- publish-watcher: new_book_requests writer (external publisher source)
 GRANT INSERT, UPDATE        ON new_book_requests TO publish_watcher;
