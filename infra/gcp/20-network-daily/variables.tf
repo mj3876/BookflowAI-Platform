@@ -3,6 +3,11 @@ variable "aws_vpc_cidrs" {
   type        = list(string)
 }
 
+variable "azure_vnet_cidr" {
+  description = "Azure VNet CIDR range used for cross-cloud firewall policy alignment."
+  type        = string
+}
+
 variable "aws_peer_ips" {
   description = "AWS VPN public peer IPs exposed for the two TGW tunnel endpoints."
   type        = list(string)
@@ -55,4 +60,22 @@ variable "gcp_routed_cidr" {
 variable "psc_endpoint_host_offset" {
   description = "Host offset inside gcp_routed_cidr used for the Google APIs Private Service Connect endpoint."
   type        = number
+}
+
+variable "private_service_target_tags" {
+  description = "Network tags for GCP workloads allowed to receive translated cross-cloud private traffic."
+  type        = list(string)
+  default     = ["bookflow-private-api"]
+}
+
+variable "cross_cloud_ingress_tcp_ports" {
+  description = "TCP ports allowed from AWS VPCs and Azure VNet into tagged GCP private workloads."
+  type        = list(string)
+  default     = ["443"]
+}
+
+variable "cross_cloud_egress_tcp_ports" {
+  description = "TCP ports allowed from tagged GCP private workloads toward AWS VPCs and Azure VNet."
+  type        = list(string)
+  default     = ["443"]
 }

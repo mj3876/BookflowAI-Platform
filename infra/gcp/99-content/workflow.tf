@@ -105,6 +105,8 @@ main:
     #             sales_table: "${var.sales_table}"
     #             inventory_table: "${var.inventory_daily_table}"
     #             features_table: "${var.features_table}"
+    #             books_table: "${var.books_static_table}"
+    #             locations_table: "${var.locations_static_table}"
     #             training_table: "${var.training_table}"
     #             model_name: "${var.existing_books_model_name}"
     #             forecast_table: "${var.forecast_table}"

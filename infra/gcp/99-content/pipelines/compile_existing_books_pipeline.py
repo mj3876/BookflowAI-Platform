@@ -46,6 +46,8 @@ def build_training_dataset(
     sales_table: str,
     inventory_table: str,
     features_table: str,
+    books_table: str,
+    locations_table: str,
     location: str,
     training_table: str,
 ) -> str:
@@ -58,22 +60,48 @@ def build_training_dataset(
     CREATE OR REPLACE TABLE `{table_id}` AS
     SELECT
       sf.isbn13,
-      sf.location_id,
-      DATE(sf.sales_date) AS sales_date,
-      SUM(CAST(sf.quantity AS FLOAT64)) AS units_sold,
-      AVG(CAST(inv.on_hand_qty AS FLOAT64)) AS on_hand_qty,
-      AVG(CAST(feat.holiday_flag AS INT64)) AS holiday_flag,
-      AVG(CAST(feat.event_score AS FLOAT64)) AS event_score,
-      AVG(CAST(feat.sns_score AS FLOAT64)) AS sns_score
+      sf.store_id,
+      SAFE.PARSE_DATE('%Y-%m-%d', CAST(sf.sale_date AS STRING)) AS sale_date,
+      SUM(CAST(sf.qty_sold AS FLOAT64)) AS qty_sold,
+      ANY_VALUE(bs.category_id) AS category_id,
+      ANY_VALUE(bs.category_name) AS category_name,
+      ANY_VALUE(bs.publisher) AS publisher,
+      ANY_VALUE(bs.author) AS author,
+      ANY_VALUE(bs.price_tier) AS price_tier,
+      ANY_VALUE(bs.sales_point) AS sales_point,
+      ANY_VALUE(bs.item_page) AS item_page,
+      ANY_VALUE(ls.location_type) AS location_type,
+      ANY_VALUE(ls.wh_id) AS wh_id,
+      ANY_VALUE(ls.size) AS size,
+      ANY_VALUE(ls.is_virtual) AS is_virtual,
+      LOGICAL_OR(COALESCE(feat.is_holiday, FALSE)) AS is_holiday,
+      ANY_VALUE(feat.season) AS season,
+      ANY_VALUE(feat.day_of_week) AS day_of_week,
+      LOGICAL_OR(COALESCE(feat.is_weekend, FALSE)) AS is_weekend,
+      ANY_VALUE(feat.month) AS month,
+      AVG(CAST(feat.event_nearby_days AS FLOAT64)) AS event_nearby_days,
+      AVG(CAST(feat.sns_mentions_1d AS FLOAT64)) AS sns_mentions_1d,
+      AVG(CAST(feat.sns_mentions_7d AS FLOAT64)) AS sns_mentions_7d,
+      AVG(CAST(feat.on_hand_total AS FLOAT64)) AS on_hand_total,
+      AVG(CAST(feat.days_since_last_stockout AS FLOAT64)) AS days_since_last_stockout,
+      AVG(CAST(feat.book_age_days AS FLOAT64)) AS book_age_days,
+      LOGICAL_OR(COALESCE(feat.is_bestseller_flag, FALSE)) AS is_bestseller_flag,
+      AVG(CAST(inv.on_hand AS FLOAT64)) AS on_hand,
+      AVG(CAST(inv.reserved_qty AS FLOAT64)) AS reserved_qty
     FROM `{project_id}.{dataset_id}.{sales_table}` AS sf
+    LEFT JOIN `{project_id}.{dataset_id}.{books_table}` AS bs
+      ON sf.isbn13 = bs.isbn13
+    LEFT JOIN `{project_id}.{dataset_id}.{locations_table}` AS ls
+      ON sf.store_id = ls.location_id
     LEFT JOIN `{project_id}.{dataset_id}.{inventory_table}` AS inv
       ON sf.isbn13 = inv.isbn13
-     AND sf.location_id = inv.location_id
-     AND DATE(sf.sales_date) = DATE(inv.snapshot_date)
+     AND sf.store_id = inv.location_id
+     AND SAFE.PARSE_DATE('%Y-%m-%d', CAST(sf.sale_date AS STRING)) = SAFE.PARSE_DATE('%Y-%m-%d', CAST(inv.snapshot_date AS STRING))
     LEFT JOIN `{project_id}.{dataset_id}.{features_table}` AS feat
       ON sf.isbn13 = feat.isbn13
-     AND DATE(sf.sales_date) = DATE(feat.feature_date)
-    GROUP BY isbn13, location_id, sales_date
+     AND SAFE.PARSE_DATE('%Y-%m-%d', CAST(sf.sale_date AS STRING)) = SAFE.PARSE_DATE('%Y-%m-%d', CAST(feat.feature_date AS STRING))
+    WHERE SAFE.PARSE_DATE('%Y-%m-%d', CAST(sf.sale_date AS STRING)) IS NOT NULL
+    GROUP BY sf.isbn13, sf.store_id, sale_date
     """
 
     client.query(query).result()
@@ -101,19 +129,20 @@ def train_demand_model(
     CREATE OR REPLACE MODEL `{model_id}`
     OPTIONS(
       MODEL_TYPE = 'BOOSTED_TREE_REGRESSOR',
-      INPUT_LABEL_COLS = ['units_sold'],
+      INPUT_LABEL_COLS = ['qty_sold'],
       MAX_ITERATIONS = 25
     ) AS
     SELECT
-      units_sold,
-      EXTRACT(DAYOFWEEK FROM sales_date) AS day_of_week,
-      EXTRACT(MONTH FROM sales_date) AS month,
-      on_hand_qty,
-      holiday_flag,
-      event_score,
-      sns_score
+      qty_sold,
+      EXTRACT(DAYOFWEEK FROM sale_date) AS day_of_week,
+      EXTRACT(MONTH FROM sale_date) AS month,
+      COALESCE(on_hand, 0) AS on_hand,
+      CAST(COALESCE(is_holiday, FALSE) AS INT64) AS holiday_flag,
+      COALESCE(event_nearby_days, 0) AS event_nearby_days,
+      COALESCE(sns_mentions_1d, 0) AS sns_mentions_1d,
+      COALESCE(sns_mentions_7d, 0) AS sns_mentions_7d
     FROM `{source_table_id}`
-    WHERE units_sold IS NOT NULL
+    WHERE qty_sold IS NOT NULL
     """
 
     client.query(query).result()
@@ -168,24 +197,29 @@ def write_batch_forecast(
     query = f"""
     CREATE OR REPLACE TABLE `{forecast_table_id}` AS
     SELECT
+      CURRENT_DATE() AS prediction_date,
+      DATE_ADD(sale_date, INTERVAL 1 DAY) AS target_date,
       isbn13,
-      location_id,
-      sales_date AS forecast_date,
-      predicted_units_sold AS forecast_qty,
-      CURRENT_TIMESTAMP() AS created_at
+      store_id,
+      predicted_qty_sold AS predicted_demand,
+      CAST(NULL AS NUMERIC) AS confidence_low,
+      CAST(NULL AS NUMERIC) AS confidence_high,
+      '{model_name}' AS model_version,
+      CAST(NULL AS INT64) AS inference_ms
     FROM ML.PREDICT(
       MODEL `{model_id}`,
       (
         SELECT
           isbn13,
-          location_id,
-          sales_date,
-          EXTRACT(DAYOFWEEK FROM sales_date) AS day_of_week,
-          EXTRACT(MONTH FROM sales_date) AS month,
-          on_hand_qty,
-          holiday_flag,
-          event_score,
-          sns_score
+          store_id,
+          sale_date,
+          EXTRACT(DAYOFWEEK FROM sale_date) AS day_of_week,
+          EXTRACT(MONTH FROM sale_date) AS month,
+          COALESCE(on_hand, 0) AS on_hand,
+          CAST(COALESCE(is_holiday, FALSE) AS INT64) AS holiday_flag,
+          COALESCE(event_nearby_days, 0) AS event_nearby_days,
+          COALESCE(sns_mentions_1d, 0) AS sns_mentions_1d,
+          COALESCE(sns_mentions_7d, 0) AS sns_mentions_7d
         FROM `{source_table_id}`
       )
     )
@@ -210,6 +244,8 @@ def create_pipeline():
         sales_table: str,
         inventory_table: str,
         features_table: str,
+        books_table: str,
+        locations_table: str,
         training_table: str,
         model_name: str,
         forecast_table: str,
@@ -228,6 +264,8 @@ def create_pipeline():
             sales_table=sales_table,
             inventory_table=inventory_table,
             features_table=features_table,
+            books_table=books_table,
+            locations_table=locations_table,
             location=bq_location,
             training_table=training_table,
         ).after(runtime_config)

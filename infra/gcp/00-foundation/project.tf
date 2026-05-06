@@ -26,6 +26,16 @@ variable "bigquery_location" {
   type        = string
 }
 
+variable "bigquery_dataset_id" {
+  description = "BigQuery dataset id for BOOKFLOW analytics resources."
+  type        = string
+}
+
+variable "bigquery_table_ids" {
+  description = "Logical BigQuery table ids used by the BOOKFLOW analytics and Vertex AI pipelines."
+  type        = map(string)
+}
+
 variable "vpc_cidr" {
   description = "GCP internal CIDR range allowed by the BOOKFLOW foundation firewall."
   type        = string

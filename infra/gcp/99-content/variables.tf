@@ -41,7 +41,6 @@ variable "vpc_name" {
 variable "dataset_id" {
   description = "BigQuery dataset id."
   type        = string
-  default     = "bookflow_dw"
 }
 
 variable "training_table" {
@@ -62,6 +61,22 @@ variable "inventory_daily_table" {
 variable "features_table" {
   description = "BigQuery source table containing feature values for the existing-books forecast pipeline."
   type        = string
+}
+
+variable "books_static_table" {
+  description = "BigQuery source table containing static book attributes for feature engineering."
+  type        = string
+}
+
+variable "locations_static_table" {
+  description = "BigQuery source table containing static location attributes for feature engineering."
+  type        = string
+}
+
+variable "load_table_aliases" {
+  description = "Mapping from incoming GCS object stems to BigQuery load table ids."
+  type        = map(string)
+  default     = {}
 }
 
 variable "forecast_table" {
@@ -90,6 +105,11 @@ variable "vertex_pipeline_template_uri" {
   description = "Vertex AI Pipeline template URI used for existing-book training and batch prediction."
   type        = string
   default     = null
+}
+
+variable "vertex_pipeline_template_object" {
+  description = "Object path in the models bucket for the compiled existing-books Vertex AI Pipeline template."
+  type        = string
 }
 
 variable "vertex_pipeline_root" {
