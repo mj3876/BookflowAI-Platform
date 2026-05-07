@@ -126,7 +126,7 @@ Resources:
       Command:
         Name: glueetl
         ScriptLocation: !Sub
-          - s3://${BucketName}/raw-pos-mart/pos_etl.py
+          - s3://${BucketName}/scripts/raw_pos_mart.py
           - BucketName: !ImportValue
               Fn::Sub: ${ProjectName}-s3-glue-scripts-name
         PythonVersion: '3'
@@ -161,7 +161,7 @@ Resources:
       Command:
         Name: glueetl
         ScriptLocation: !Sub
-          - s3://${BucketName}/raw-sns-mart/sns_agg.py
+          - s3://${BucketName}/scripts/raw_sns_mart.py
           - BucketName: !ImportValue
               Fn::Sub: ${ProjectName}-s3-glue-scripts-name
         PythonVersion: '3'
@@ -195,7 +195,7 @@ Resources:
       Command:
         Name: glueetl
         ScriptLocation: !Sub
-          - s3://${BucketName}/raw-aladin-mart/aladin_etl.py
+          - s3://${BucketName}/scripts/raw_aladin_mart.py
           - BucketName: !ImportValue
               Fn::Sub: ${ProjectName}-s3-glue-scripts-name
         PythonVersion: '3'
@@ -229,7 +229,7 @@ Resources:
       Command:
         Name: glueetl
         ScriptLocation: !Sub
-          - s3://${BucketName}/raw-event-mart/event_etl.py
+          - s3://${BucketName}/scripts/raw_event_mart.py
           - BucketName: !ImportValue
               Fn::Sub: ${ProjectName}-s3-glue-scripts-name
         PythonVersion: '3'
@@ -263,7 +263,7 @@ Resources:
       Command:
         Name: glueetl
         ScriptLocation: !Sub
-          - s3://${BucketName}/sales-daily-agg/sales_agg.py
+          - s3://${BucketName}/scripts/sales_daily_agg.py
           - BucketName: !ImportValue
               Fn::Sub: ${ProjectName}-s3-glue-scripts-name
         PythonVersion: '3'
@@ -295,7 +295,7 @@ Resources:
       Command:
         Name: glueetl
         ScriptLocation: !Sub
-          - s3://${BucketName}/features-build/features_build.py
+          - s3://${BucketName}/scripts/features_build.py
           - BucketName: !ImportValue
               Fn::Sub: ${ProjectName}-s3-glue-scripts-name
         PythonVersion: '3'

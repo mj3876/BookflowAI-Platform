@@ -11,7 +11,7 @@ BICEP_DIR="$(cd "${SCRIPT_DIR}/../../../infra/azure" && (pwd -W 2>/dev/null || p
 
 RESOURCE_GROUP="rg-bookflow"
 LOCATION="japanwest"
-PREFIX="bookflow"
+PREFIX="bookflow01"
 
 # ──   ─────────────────────────────────────────────
 
@@ -120,6 +120,17 @@ echo "════════════════════════�
 echo ""
 echo "[1-1] Resource Group /"
 az group create --name "$RESOURCE_GROUP" --location "$LOCATION" --output table
+
+# ARM 배포 이력 초기화 (PREFIX 변경·완전 재배포 시 스킵 방지)
+echo ""
+echo "[1-0] ARM 배포 이력 초기화"
+for DEPLOY_NAME in identity-deploy nsg-deploy monitor-deploy vnet-deploy \
+                   keyvault-deploy function-deploy eventgrid-deploy \
+                   logicapp-deploy vpn-deploy; do
+  az deployment group delete \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$DEPLOY_NAME" 2>/dev/null && echo "  삭제: $DEPLOY_NAME" || true
+done
 
 # Identity
 echo ""

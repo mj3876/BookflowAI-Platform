@@ -66,6 +66,12 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
+      # EventBridge 알림 활성화: Glue 가 Parquet 파일을 쓸 때마다 EventBridge 로 이벤트 전송
+      # sam-template.yaml 의 MartToGcsFn S3EventBridge Rule 이 이 이벤트를 수신
+      # S3 → EventBridge → mart-to-gcs Lambda → GCS staging → BigQuery
+      NotificationConfiguration:
+        EventBridgeConfiguration:
+          EventBridgeEnabled: true
 
   # Audit bucket (CloudTrail logs - only when EnableAuditBucket=true)
   AuditBucket:

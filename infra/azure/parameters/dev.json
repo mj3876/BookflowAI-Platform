@@ -4,7 +4,7 @@
   "parameters": {
     "environment": { "value": "dev" },
     "location": { "value": "japanwest" },
-    "prefix": { "value": "bookflowmj" },
+    "prefix": { "value": "bookflow01" },
     "vnetAddressPrefix": { "value": "172.16.0.0/16" },
     "gatewaySubnetPrefix": { "value": "172.16.1.0/27" },
     "servicesSubnetPrefix": { "value": "172.16.2.0/24" },

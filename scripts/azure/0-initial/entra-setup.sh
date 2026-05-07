@@ -9,7 +9,7 @@
 
 set -e
 
-PREFIX="bookflowmj"  # Bicep 의 prefix 와 일치 (kv-${PREFIX})
+PREFIX="bookflow01"  # Bicep 의 prefix 와 일치 (kv-${PREFIX})
 APP_NAME="BookFlow-Internal"
 REDIRECT_URIS_JSON='["https://auth.bookflow.internal/callback","https://bookflow.duckdns.org/auth/callback"]'
 
