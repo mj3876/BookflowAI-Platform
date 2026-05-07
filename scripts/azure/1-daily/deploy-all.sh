@@ -11,7 +11,7 @@ BICEP_DIR="$(cd "${SCRIPT_DIR}/../../../infra/azure" && (pwd -W 2>/dev/null || p
 
 RESOURCE_GROUP="rg-bookflow"
 LOCATION="japanwest"
-PREFIX="bookflowmj"
+PREFIX="bookflow01"
 
 # ──   ─────────────────────────────────────────────
 
