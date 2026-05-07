@@ -1,6 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 10 · Sales Data VPC (10.1.0.0/16) · POS  ECS · Private only
-
+Description: BOOKFLOW - Tier 10 - Sales Data VPC (10.1.0.0/16) - POS simulators + ECS - Private only
 Parameters:
   ProjectName:
     Type: String

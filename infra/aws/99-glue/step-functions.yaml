@@ -1,13 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 99-glue · ETL3 Step Functions State Machine (Glue 6 Jobs orchestration)
-
-# :
-#    04:00 KST · forecast-trigger Lambda  invoke
-#   [Parallel: 4 raw_*_mart] → sales_daily_agg → features_build → DONE
-#     SNS  ()
-#
-#  V1: Step Functions  (4,000 transitions/)  · ~500 transitions/
-
+Description: BOOKFLOW - Tier 99-glue - ETL3 Step Functions State Machine (orchestrates 6 Glue Jobs)
 Parameters:
   ProjectName:
     Type: String

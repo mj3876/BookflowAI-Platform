@@ -3,6 +3,10 @@
 # Per the architecture rule, deploy only during 09:00-18:00 KST via start-day.sh
 # and destroy after business hours via stop-day.sh.
 
+locals {
+  psc_endpoint_ip = cidrhost(var.gcp_routed_cidr, var.psc_endpoint_host_offset)
+}
+
 resource "google_project_service" "dns" {
   project            = var.project_id
   service            = "dns.googleapis.com"
@@ -15,7 +19,7 @@ resource "google_compute_global_address" "psc_googleapis_ip" {
   address_type = "INTERNAL"
   purpose      = "PRIVATE_SERVICE_CONNECT"
   network      = data.google_compute_network.bookflow_vpc.id
-  address      = var.psc_endpoint_ip
+  address      = local.psc_endpoint_ip
 }
 
 resource "google_compute_global_forwarding_rule" "psc_googleapis" {
@@ -56,7 +60,7 @@ resource "google_dns_record_set" "private_googleapis" {
   managed_zone = google_dns_managed_zone.googleapis_private.name
   type         = "A"
   ttl          = 300
-  rrdatas      = [var.psc_endpoint_ip]
+  rrdatas      = [local.psc_endpoint_ip]
 }
 
 resource "google_dns_record_set" "wildcard_private_googleapis" {
@@ -65,7 +69,7 @@ resource "google_dns_record_set" "wildcard_private_googleapis" {
   managed_zone = google_dns_managed_zone.googleapis_private.name
   type         = "A"
   ttl          = 300
-  rrdatas      = [var.psc_endpoint_ip]
+  rrdatas      = [local.psc_endpoint_ip]
 }
 
 resource "google_dns_record_set" "bigquery_googleapis" {
@@ -74,5 +78,5 @@ resource "google_dns_record_set" "bigquery_googleapis" {
   managed_zone = google_dns_managed_zone.googleapis_private.name
   type         = "A"
   ttl          = 300
-  rrdatas      = [var.psc_endpoint_ip]
+  rrdatas      = [local.psc_endpoint_ip]
 }

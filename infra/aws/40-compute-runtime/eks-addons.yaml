@@ -1,6 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 40 · EKS Core Addons (vpc-cni · kube-proxy · coredns · ebs-csi-driver · pod-identity-agent)
-
+Description: BOOKFLOW - Tier 40 - EKS Core Addons (vpc-cni, kube-proxy, coredns, ebs-csi-driver, pod-identity-agent)
 Parameters:
   ProjectName:
     Type: String

@@ -12,14 +12,25 @@ main:
   steps:
     - init:
         assign:
-          - bucket: $${default(map.get(event, "bucket"), "${data.google_storage_bucket.staging.name}")}
-          - object_name: $${default(map.get(event, "name"), "")}
+          - event_data: $${default(map.get(event, "data"), event)}
+          - bucket: $${default(map.get(event, "bucket"), default(map.get(event_data, "bucket"), "${data.google_storage_bucket.staging.name}"))}
+          - object_name: $${default(map.get(event, "name"), default(map.get(event_data, "name"), ""))}
           - request:
               bucket: $${bucket}
               object: $${object_name}
               dataset_id: "${local.dataset_id}"
               project_id: "${var.project_id}"
               bq_location: "${var.bigquery_location}"
+    - filter_internal_artifacts:
+        switch:
+          - condition: $${len(text.find_all_regex(object_name, "^functions/|^pipelines/|\\.zip$|\\.json$")) > 0}
+            next: return_ignored_artifact
+        next: load_bigquery
+    - return_ignored_artifact:
+        return:
+          route: "ignored_internal_artifact"
+          object: $${object_name}
+          status: "Ignored non-data object in staging bucket."
     - load_bigquery:
         call: http.post
         args:
@@ -34,7 +45,12 @@ main:
         switch:
           - condition: $${len(text.find_all_regex(object_name, "new[-_]book|publisher|new_book")) > 0}
             next: assemble_new_book_features
-        next: start_existing_book_pipeline
+        next: skip_pipeline_for_test
+    - return_historical_load_success:
+        return:
+          route: "historical_data_load"
+          status: "Success"
+          bq_load: $${bq_load_result.body}
     - assemble_new_book_features:
         call: http.post
         args:
@@ -66,29 +82,40 @@ main:
           route: "new_book_realtime_inference"
           bq_load: $${bq_load_result.body}
           vertex: $${vertex_result.body}
-    - start_existing_book_pipeline:
-        call: googleapis.aiplatform.v1.projects.locations.pipelineJobs.create
-        args:
-          parent: "projects/${var.project_id}/locations/${local.region}"
-          region: "${local.region}"
-          body:
-            displayName: "bookflow-existing-books-forecast"
-            serviceAccount: "${google_service_account.vertex_pipeline.email}"
-            templateUri: "${local.vertex_pipeline_template_uri}"
-            runtimeConfig:
-              gcsOutputDirectory: "${local.vertex_pipeline_root}"
-              parameterValues:
-                project_id: "${var.project_id}"
-                dataset_id: "${local.dataset_id}"
-                staging_bucket: "${data.google_storage_bucket.staging.name}"
-                models_bucket: "${data.google_storage_bucket.models.name}"
-                source_object: $${object_name}
-        result: pipeline_result
-    - return_existing_books:
-        return:
-          route: "existing_books_batch_pipeline"
-          bq_load: $${bq_load_result.body}
-          pipeline: $${pipeline_result}
+    - skip_pipeline_for_test:
+        return: "Dry run: Data loaded to BigQuery successfully. Vertex AI pipeline was skipped for cost saving."
+    # - start_existing_book_pipeline:
+    #     call: googleapis.aiplatform.v1.projects.locations.pipelineJobs.create
+    #     args:
+    #       parent: "projects/${var.project_id}/locations/${local.region}"
+    #       region: "${local.region}"
+    #       body:
+    #         displayName: "bookflow-existing-books-forecast"
+    #         serviceAccount: "${google_service_account.vertex_pipeline.email}"
+    #         templateUri: "${local.vertex_pipeline_template_uri}"
+    #         runtimeConfig:
+    #           gcsOutputDirectory: "${local.vertex_pipeline_root}"
+    #           parameterValues:
+    #             project_id: "${var.project_id}"
+    #             dataset_id: "${local.dataset_id}"
+    #             bq_location: "${var.bigquery_location}"
+    #             staging_bucket: "${data.google_storage_bucket.staging.name}"
+    #             models_bucket: "${data.google_storage_bucket.models.name}"
+    #             source_object: $${object_name}
+    #             sales_table: "${var.sales_table}"
+    #             inventory_table: "${var.inventory_daily_table}"
+    #             features_table: "${var.features_table}"
+    #             books_table: "${var.books_static_table}"
+    #             locations_table: "${var.locations_static_table}"
+    #             training_table: "${var.training_table}"
+    #             model_name: "${var.existing_books_model_name}"
+    #             forecast_table: "${var.forecast_table}"
+    #     result: pipeline_result
+    # - return_existing_books:
+    #     return:
+    #       route: "existing_books_batch_pipeline"
+    #       bq_load: $${bq_load_result.body}
+    #       pipeline: $${pipeline_result}
 YAML
 
   depends_on = [

@@ -23,8 +23,7 @@ locals {
 
   staging_bucket_name          = coalesce(var.staging_bucket_name, "${var.project_id}-bookflow-staging")
   models_bucket_name           = coalesce(var.models_bucket_name, "${var.project_id}-bookflow-models")
-  function_source_bucket_name  = coalesce(var.function_source_bucket_name, local.staging_bucket_name)
-  vertex_pipeline_template_uri = coalesce(var.vertex_pipeline_template_uri, "gs://${var.project_id}-bookflow-models/pipelines/bookflow-existing-books-pipeline.json")
+  vertex_pipeline_template_uri = coalesce(var.vertex_pipeline_template_uri, "gs://${local.models_bucket_name}/${var.vertex_pipeline_template_object}")
   vertex_pipeline_root         = coalesce(var.vertex_pipeline_root, "gs://${var.project_id}-bookflow-models/pipeline-root")
 
   function_specs = {
@@ -37,12 +36,22 @@ locals {
       timeout      = 540
       min_instance = 0
       max_instance = 3
-      source       = var.function_source_objects.bq_load
+      source_dir   = "bq-load"
+      zip_name     = "bookflow-bq-load.zip"
       env = {
-        BOOKFLOW_DATASET_ID        = var.dataset_id
-        BOOKFLOW_BQ_LOCATION       = var.bigquery_location
-        BOOKFLOW_STAGING_BUCKET    = local.staging_bucket_name
-        BOOKFLOW_LOAD_TABLES       = "sales_fact,inventory_daily,features,books_static,locations_static"
+        BOOKFLOW_DATASET_ID     = var.dataset_id
+        BOOKFLOW_BQ_LOCATION    = var.bigquery_location
+        BOOKFLOW_STAGING_BUCKET = local.staging_bucket_name
+        BOOKFLOW_LOAD_TABLES = join(",", [
+          var.sales_table,
+          var.inventory_daily_table,
+          var.features_table,
+          var.books_static_table,
+          var.locations_static_table,
+        ])
+        BOOKFLOW_LOAD_TABLE_ALIASES = join(",", [
+          for source_name, table_name in var.load_table_aliases : "${source_name}:${table_name}"
+        ])
         BOOKFLOW_WRITE_DISPOSITION = "WRITE_APPEND"
       }
     }
@@ -55,11 +64,16 @@ locals {
       timeout      = 540
       min_instance = 0
       max_instance = 3
-      source       = var.function_source_objects.feature_assemble
+      source_dir   = "feature-assemble"
+      zip_name     = "bookflow-feature-assemble.zip"
       env = {
-        BOOKFLOW_DATASET_ID     = var.dataset_id
-        BOOKFLOW_BQ_LOCATION    = var.bigquery_location
-        BOOKFLOW_FEATURE_TABLES = "sales_fact,books_static,features"
+        BOOKFLOW_DATASET_ID  = var.dataset_id
+        BOOKFLOW_BQ_LOCATION = var.bigquery_location
+        BOOKFLOW_FEATURE_TABLES = join(",", [
+          var.sales_table,
+          var.books_static_table,
+          var.features_table,
+        ])
       }
     }
     vertex_invoke = {
@@ -71,7 +85,8 @@ locals {
       timeout      = 540
       min_instance = 0
       max_instance = var.function_max_instance_count
-      source       = var.function_source_objects.vertex_invoke
+      source_dir   = "vertex-invoke"
+      zip_name     = "bookflow-vertex-invoke.zip"
       env = {
         BOOKFLOW_VERTEX_ENDPOINT = google_vertex_ai_endpoint.forecast.name
         BOOKFLOW_VERTEX_LOCATION = local.region

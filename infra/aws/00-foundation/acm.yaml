@@ -1,9 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: >
-  BOOKFLOW · Tier 00 · ACM
-  Client VPN server cert skeleton ( cert easy-rsa   aws acm import-certificate  1)
-   yaml " cert " ARN Parameter Store  .
-
+Description: BOOKFLOW - Tier 00 - ACM Client VPN server cert skeleton (easy-rsa generated, imported via aws acm import-certificate; ARN stored in Parameter Store)
 Parameters:
   ProjectName:
     Type: String

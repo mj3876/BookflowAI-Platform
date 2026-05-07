@@ -1,6 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 20 · ElastiCache Redis (Data VPC DB subnet ·  Single-node ·  Replication Group)
-
+Description: BOOKFLOW - Tier 20 - ElastiCache Redis (Data VPC DB subnet; Single-node for dev, Replication Group for prod)
 Parameters:
   ProjectName:
     Type: String

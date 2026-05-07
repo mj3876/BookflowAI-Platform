@@ -1,8 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: >
-  BOOKFLOW · Tier 10 · Customer Gateway × 2 (Azure VNet GW · GCP HA VPN)
-  IP Parameter( placeholder) · Phase 2 (Azure)·(GCP)  IP 
-
+Description: BOOKFLOW - Tier 10 - Customer Gateway x2 (Azure VNet GW + GCP HA VPN). IP set via Parameter (placeholder until Phase 2 Azure/GCP deploy provides real public IP)
 Parameters:
   ProjectName:
     Type: String
@@ -60,8 +57,3 @@ Outputs:
     Value: !Ref GcpCgw
     Export: { Name: !Sub '${ProjectName}-cgw-gcp-id' }
 
-  SetupInstructions:
-    Value: >
-       placeholder IP(0.0.0.0) CGW  skip.
-      Azure/GCP VPN Gateway   Public IP  →
-      'aws cloudformation deploy --parameter-overrides AzureVpnGatewayIp=x.x.x.x GcpHaVpnIp=y.y.y.y'  

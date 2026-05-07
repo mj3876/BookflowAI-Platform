@@ -1,6 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 00 · CloudTrail (Management events · S3  · KMS )
-
+Description: BOOKFLOW - Tier 00 - CloudTrail Management events trail (S3 destination + KMS encrypted)
 Parameters:
   ProjectName:
     Type: String

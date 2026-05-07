@@ -1,3 +1,22 @@
+data "archive_file" "function_source" {
+  for_each = local.function_specs
+
+  type        = "zip"
+  source_dir  = "${path.module}/functions/${each.value.source_dir}"
+  output_path = "${path.module}/functions/${each.value.zip_name}"
+}
+
+resource "google_storage_bucket_object" "function_source" {
+  for_each = local.function_specs
+
+  bucket       = data.google_storage_bucket.staging.name
+  name         = "functions/${each.value.zip_name}"
+  source       = data.archive_file.function_source[each.key].output_path
+  content_type = "application/zip"
+
+  detect_md5hash = data.archive_file.function_source[each.key].output_md5
+}
+
 resource "google_cloudfunctions2_function" "content" {
   for_each = local.function_specs
 
@@ -13,8 +32,9 @@ resource "google_cloudfunctions2_function" "content" {
 
     source {
       storage_source {
-        bucket = data.google_storage_bucket.function_source.name
-        object = each.value.source
+        bucket     = google_storage_bucket_object.function_source[each.key].bucket
+        object     = google_storage_bucket_object.function_source[each.key].name
+        generation = google_storage_bucket_object.function_source[each.key].generation
       }
     }
   }
@@ -44,5 +64,6 @@ resource "google_cloudfunctions2_function" "content" {
     google_project_service.required["artifactregistry.googleapis.com"],
     google_project_service.required["cloudbuild.googleapis.com"],
     data.google_vpc_access_connector.bookflow,
+    google_storage_bucket_object.function_source,
   ]
 }

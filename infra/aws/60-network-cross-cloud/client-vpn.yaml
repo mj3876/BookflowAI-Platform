@@ -1,11 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 60 · Client VPN Endpoint (3  access · BookFlow AI VPC subnet · ACM mutual auth)
-
-# :
-#   3  (··)  OpenVPN client  
-#   Internal ALB · EKS Pod   (  )
-#   .ovpn  + Client cert    ( SSM   )
-
+Description: BOOKFLOW - Tier 60 - Client VPN Endpoint (3 user access, BookFlow AI VPC subnet, ACM mutual auth)
 Parameters:
   ProjectName:
     Type: String

@@ -1,10 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: >
-  BOOKFLOW · Tier 10 · Sales Data VPC Interface Endpoints (3)
-  ECR api/dkr (ECS Fargate image pull) · Kinesis (POS put_records)
-  + S3 Gateway Endpoint
-   AZ ·  
-
+Description: "BOOKFLOW - Tier 10 - Sales Data VPC Interface Endpoints (3): ECR api/dkr (ECS Fargate image pull) + Kinesis (POS put_records) + S3 Gateway Endpoint (single AZ for cost optimization)"
 Parameters:
   ProjectName:
     Type: String

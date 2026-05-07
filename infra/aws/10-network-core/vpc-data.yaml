@@ -1,6 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 10 · Data VPC (10.3.0.0/16) · RDS + Redis  · Private + DB subnet
-
+Description: BOOKFLOW - Tier 10 - Data VPC (10.3.0.0/16) - RDS + Redis isolated; Private + DB subnet
 Parameters:
   ProjectName:
     Type: String

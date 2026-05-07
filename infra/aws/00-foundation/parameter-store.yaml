@@ -1,6 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 00 · SSM Parameter Store (Standard tier   )
-
+Description: BOOKFLOW - Tier 00 - SSM Parameter Store (Standard tier baseline parameters)
 Parameters:
   ProjectName:
     Type: String

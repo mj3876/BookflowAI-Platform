@@ -1,5 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW - Tier 40 - Publisher ASG (Ubuntu 24 - t3.small × 2 - Egress VPC Public - CodeDeploy Blue/Green target)
+Description: BOOKFLOW - Tier 40 - Publisher ASG (Ubuntu 24, t3.small x2, Egress VPC Public, CodeDeploy Blue/Green target)
 
 Parameters:
   ProjectName:

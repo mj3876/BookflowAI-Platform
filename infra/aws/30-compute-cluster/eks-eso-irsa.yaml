@@ -1,6 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 30 · External Secrets Operator IRSA Role (auth-pod  Pod  Secrets Manager → K8s Secret  sync)
-
+Description: BOOKFLOW - Tier 30 - External Secrets Operator IRSA Role (auth-pod and other Pods sync from Secrets Manager to K8s Secret)
 Parameters:
   ProjectName:
     Type: String

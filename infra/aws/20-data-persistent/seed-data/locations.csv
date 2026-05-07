@@ -1,0 +1,15 @@
+location_id,location_type,wh_id,name,size,region,is_virtual,active
+1,WH,1,수도권 물류센터,L,경기 이천시,false,true
+2,WH,2,영남 물류센터,L,경남 양산시,false,true
+3,STORE_OFFLINE,1,강남점,L,서울 강남구,false,true
+4,STORE_OFFLINE,1,홍대점,M,서울 마포구,false,true
+5,STORE_OFFLINE,1,잠실점,M,서울 송파구,false,true
+6,STORE_OFFLINE,1,신촌점,S,서울 서대문구,false,true
+7,STORE_OFFLINE,1,수원점,S,경기 수원시,false,true
+8,STORE_ONLINE,1,WH1온라인,,서울,true,true
+9,STORE_OFFLINE,2,부산점,L,부산 해운대구,false,true
+10,STORE_OFFLINE,2,대구점,M,대구 중구,false,true
+11,STORE_OFFLINE,2,광주점,M,광주 동구,false,true
+12,STORE_OFFLINE,2,대전점,S,대전 서구,false,true
+13,STORE_OFFLINE,2,울산점,S,울산 남구,false,true
+14,STORE_ONLINE,2,WH2온라인,,부산,true,true

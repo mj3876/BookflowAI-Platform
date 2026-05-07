@@ -1,8 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: >
-  BOOKFLOW · Tier 10 · VPC Peering · Sales Data ↔ Egress
-  ECS  (Sales Data) →  API External ALB (Egress) 
-
+Description: "BOOKFLOW - Tier 10 - VPC Peering: Sales Data <-> Egress. ECS simulators (Sales Data) -> inventory API External ALB (Egress) test path"
 Parameters:
   ProjectName:
     Type: String

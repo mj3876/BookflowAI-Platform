@@ -1,6 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 20 · RDS PostgreSQL (Data VPC DB subnet ·  Single-AZ ·  Multi-AZ)
-
+Description: BOOKFLOW - Tier 20 - RDS PostgreSQL (Data VPC DB subnet; Single-AZ for dev, Multi-AZ for prod)
 Parameters:
   ProjectName:
     Type: String

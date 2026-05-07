@@ -1,6 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 40 · EKS Managed Node Group (EC2 · t3.medium × 2 ON_DEMAND · BookFlow AI VPC Private)
-
+Description: BOOKFLOW - Tier 40 - EKS Managed Node Group (EC2 t3.medium x2 ON_DEMAND, BookFlow AI VPC Private)
 Parameters:
   ProjectName:
     Type: String

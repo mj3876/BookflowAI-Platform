@@ -1,6 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 10 · Egress VPC (10.2.0.0/16) · DMZ · Public only + IGW
-
+Description: BOOKFLOW - Tier 10 - Egress VPC (10.2.0.0/16) - DMZ - Public subnets only + IGW
 Parameters:
   ProjectName:
     Type: String

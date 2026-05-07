@@ -1,6 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 30 · EKS Control Plane (BookFlow AI VPC Private) + Access Entry + OIDC + KMS envelope
-
+Description: BOOKFLOW - Tier 30 - EKS Control Plane (BookFlow AI VPC Private) + Access Entry + OIDC + KMS envelope encryption
 Parameters:
   ProjectName:
     Type: String
@@ -10,7 +9,7 @@ Parameters:
     Default: bookflow-eks
   KubernetesVersion:
     Type: String
-    Default: '1.30'
+    Default: '1.33'
   CiCdRoleArn:
     Type: String
     Default: ''

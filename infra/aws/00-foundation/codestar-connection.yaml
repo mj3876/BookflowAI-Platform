@@ -1,10 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: >
-  BOOKFLOW · Tier 00 · CodeStar Connection (GitHub OAuth for CodePipeline)
-  ⚠   AWS Console   Activate  (PENDING → AVAILABLE)
-  : 1)  stack deploy · 2) Console Developer Tools > Connections  pending 
-        3) Update pending connection · 4) GitHub App  · 5)  
-
+Description: "BOOKFLOW - Tier 00 - CodeStar Connection for GitHub OAuth (CodePipeline source). Manual activation required in AWS Console (PENDING -> AVAILABLE): deploy stack, then Console > Developer Tools > Connections > Update pending connection > install GitHub App"
 Parameters:
   ProjectName:
     Type: String

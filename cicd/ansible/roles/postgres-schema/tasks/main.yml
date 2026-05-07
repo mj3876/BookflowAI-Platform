@@ -1,6 +1,51 @@
-﻿# Postgres schema role · community.postgresql.postgresql_query 
-# : —
-# BOOKFLOW V6.2
+---
+# postgres-schema role
+# Resolves RDS connection info from CFN exports + Secrets Manager
+# Used by rds-schema, rds-seed, rds-grants, rds-verify playbooks
+# Sets: db_host, db_master_user, db_master_password, db_port, db_name
 
-# TODO:    
-# : docs/ARCHITECTURE.md · docs/DEPLOYMENT.md
+- name: Get RDS endpoint from CFN export
+  ansible.builtin.command:
+    cmd: >-
+      aws cloudformation list-exports
+      --region {{ aws_region }}
+      --query "Exports[?Name=='{{ project_name }}-rds-endpoint'].Value | [0]"
+      --output text
+  register: rds_endpoint_result
+  changed_when: false
+
+- name: Set RDS endpoint fact
+  ansible.builtin.set_fact:
+    db_host: "{{ rds_endpoint_result.stdout | trim }}"
+
+- name: Fail if RDS endpoint missing
+  ansible.builtin.fail:
+    msg: "RDS endpoint not found in CFN exports. Deploy bookflow-20-rds first."
+  when: db_host == "" or db_host == "None"
+
+- name: Get RDS master credentials from Secrets Manager
+  ansible.builtin.command:
+    cmd: >-
+      aws secretsmanager get-secret-value
+      --region {{ aws_region }}
+      --secret-id {{ rds_secret_id }}
+      --query SecretString
+      --output text
+  register: rds_secret_result
+  changed_when: false
+  no_log: true
+
+- name: Parse RDS master credentials
+  ansible.builtin.set_fact:
+    db_master_user: "{{ (rds_secret_result.stdout | from_json).username }}"
+    db_master_password: "{{ (rds_secret_result.stdout | from_json).password }}"
+  no_log: true
+
+- name: Verify connection
+  community.postgresql.postgresql_ping:
+    login_host: "{{ db_host }}"
+    login_port: "{{ db_port | default(5432) }}"
+    login_user: "{{ db_master_user }}"
+    login_password: "{{ db_master_password }}"
+    db: "{{ db_name }}"
+  no_log: true

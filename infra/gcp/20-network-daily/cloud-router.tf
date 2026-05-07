@@ -1,7 +1,6 @@
 variable "gcp_router_asn" {
   description = "Private ASN for the GCP Cloud Router."
   type        = number
-  default     = 64514
 }
 
 resource "google_compute_router" "bookflow_aws_router" {
@@ -12,6 +11,15 @@ resource "google_compute_router" "bookflow_aws_router" {
 
   bgp {
     asn            = var.gcp_router_asn
-    advertise_mode = "DEFAULT"
+    advertise_mode = "CUSTOM"
+
+    advertised_groups = [
+      "ALL_SUBNETS",
+    ]
+
+    advertised_ip_ranges {
+      range       = var.gcp_routed_cidr
+      description = "PSC endpoint range routed from AWS TGW to GCP private Google APIs."
+    }
   }
 }

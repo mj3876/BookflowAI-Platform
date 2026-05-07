@@ -1,16 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 60 · Site-to-Site VPN (Azure + GCP) · TGW Attachment + IPSec Tunnel
-
-#  :
-#   Phase 1-2: 
-#   Phase 3-4: TGW   cross-cloud  (auth-pod → Azure Entra · forecast-svc → Vertex AI)
-#
-# :
-#   1. Tier 10 customer-gateway ·  IP  
-#   2. Tier 60 tgw · TGW Hub  
-#
-# Provider parameter  azure/gcp  
-
+Description: BOOKFLOW - Tier 60 - Site-to-Site VPN (Azure + GCP) - TGW Attachment + IPSec Tunnels
 Parameters:
   ProjectName:
     Type: String

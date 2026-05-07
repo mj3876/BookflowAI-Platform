@@ -22,10 +22,6 @@ data "google_storage_bucket" "models" {
   name = local.models_bucket_name
 }
 
-data "google_storage_bucket" "function_source" {
-  name = local.function_source_bucket_name
-}
-
 data "google_bigquery_dataset" "bookflow_dw" {
   project    = var.project_id
   dataset_id = local.dataset_id

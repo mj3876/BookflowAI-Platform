@@ -1,6 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 00 · CloudWatch Log Groups +  Alarm ( · retention 7)
-
+Description: BOOKFLOW - Tier 00 - CloudWatch Log Groups + Alarms (retention 7 days)
 Parameters:
   ProjectName:
     Type: String

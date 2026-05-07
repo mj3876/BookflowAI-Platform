@@ -1,6 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 00 · KMS CMK 2 (EKS envelope · CloudTrail)
-
+Description: BOOKFLOW - Tier 00 - KMS CMKs x2 (EKS envelope encryption + CloudTrail log encryption)
 Parameters:
   ProjectName:
     Type: String

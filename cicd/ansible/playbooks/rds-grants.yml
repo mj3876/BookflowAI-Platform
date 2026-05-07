@@ -1,6 +1,61 @@
-﻿# RDS    playbook
-# : —
-# BOOKFLOW V6.2
+---
+# rds-grants playbook
+# Apply 003_grants.sql (bookflow_app role + 11 pod login roles + least-privilege grants)
 
-# TODO:    
-# : docs/ARCHITECTURE.md · docs/DEPLOYMENT.md
+- name: BookFlow RDS grants apply
+  hosts: localhost
+  gather_facts: false
+  vars:
+    aws_region: ap-northeast-1
+    project_name: bookflow
+    rds_secret_id: bookflow/rds/master-password
+    db_port: 5432
+    db_name: bookflow
+    sql_dir: "{{ playbook_dir }}/../sql"
+
+  tasks:
+    - name: Resolve RDS connection
+      ansible.builtin.import_role:
+        name: postgres-schema
+
+    - name: Read 003_grants.sql
+      ansible.builtin.slurp:
+        src: "{{ sql_dir }}/003_grants.sql"
+      register: grants_sql
+
+    - name: Apply 003_grants.sql
+      community.postgresql.postgresql_query:
+        login_host: "{{ db_host }}"
+        login_port: "{{ db_port }}"
+        login_user: "{{ db_master_user }}"
+        login_password: "{{ db_master_password }}"
+        db: "{{ db_name }}"
+        query: "{{ grants_sql.content | b64decode }}"
+        autocommit: true
+      no_log: true
+
+    - name: Verify role count (expect bookflow_app + 11 pod roles = 12)
+      community.postgresql.postgresql_query:
+        login_host: "{{ db_host }}"
+        login_port: "{{ db_port }}"
+        login_user: "{{ db_master_user }}"
+        login_password: "{{ db_master_password }}"
+        db: "{{ db_name }}"
+        query: >-
+          SELECT count(*) AS n
+          FROM pg_roles
+          WHERE rolname IN ('bookflow_app','auth_pod','inventory_svc','forecast_svc',
+                            'decision_svc','intervention_svc','notification_svc',
+                            'dashboard_svc','publish_watcher','pos_ingestor',
+                            'spike_detect','aladin_sync')
+      register: role_count
+      no_log: true
+
+    - name: Show role count
+      ansible.builtin.debug:
+        msg: "Roles created: {{ role_count.query_result[0].n }}"
+
+    - name: Fail if roles missing
+      ansible.builtin.fail:
+        msg: "Expected 12 roles, got {{ role_count.query_result[0].n }}"
+      when: role_count.query_result[0].n | int != 12

@@ -1,6 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 50 · WAFv2 WebACL (Regional) + External ALB Association + AWS Managed Rules + Rate Limit
-
+Description: BOOKFLOW - Tier 50 - WAFv2 WebACL (Regional) + External ALB Association + AWS Managed Rules + Rate Limit
 Parameters:
   ProjectName:
     Type: String

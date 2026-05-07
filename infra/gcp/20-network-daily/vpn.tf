@@ -77,25 +77,3 @@ resource "google_compute_router_peer" "aws_peers" {
     ]
   }
 }
-
-locals {
-  # Two-tunnel HA plan:
-  # - tunnel 0: GCP HA VPN interface 0 -> AWS external gateway interface 0
-  # - tunnel 1: GCP HA VPN interface 1 -> AWS external gateway interface 1
-  default_bgp_sessions = {
-    "0" = {
-      vpn_gateway_interface           = 0
-      peer_external_gateway_interface = 0
-      router_ip_cidr                  = "169.254.21.2/30"
-      peer_ip_address                 = "169.254.21.1"
-      advertised_route_priority       = 100
-    }
-    "1" = {
-      vpn_gateway_interface           = 1
-      peer_external_gateway_interface = 1
-      router_ip_cidr                  = "169.254.22.2/30"
-      peer_ip_address                 = "169.254.22.1"
-      advertised_route_priority       = 110
-    }
-  }
-}

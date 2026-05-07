@@ -1,10 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: >
-  BOOKFLOW · Tier 00 Foundation · IAM
-  GitHub Actions OIDC Provider + GHA  Role  .
-    IAM Role (CodePipeline service · CodeBuild service · Ansible CN · EKS Cluster · ECS Task )
-    stack   ( ).
-
+Description: BOOKFLOW - Tier 00 Foundation - IAM (GitHub Actions OIDC Provider + execution Roles for CodePipeline, CodeBuild, Ansible CN, EKS Cluster, ECS Task; one-shot stack, never destroyed)
 Parameters:
   ProjectName:
     Type: String

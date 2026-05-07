@@ -1,6 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 30 · Ansible Control Node (Ubuntu 24 · t3.nano · Ansible VPC Public · SG ingress block · SSM  · K8s  )
-
+Description: BOOKFLOW - Tier 30 - Ansible Control Node (Ubuntu 24, t3.nano, Ansible VPC Public, SG ingress blocked, SSM Session Manager only, K8s admin entry)
 Parameters:
   ProjectName:
     Type: String
@@ -75,6 +74,15 @@ Resources:
                   - glue:GetJob
                   - glue:BatchGetJobs
                 Resource: !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:job/${ProjectName}-*
+        - PolicyName: CloudFormationExportsRead
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudformation:ListExports
+                  - cloudformation:DescribeStacks
+                Resource: '*'
 
   AnsibleNodeInstanceProfile:
     Type: AWS::IAM::InstanceProfile

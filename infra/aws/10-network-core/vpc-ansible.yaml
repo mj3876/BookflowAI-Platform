@@ -1,6 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 10 · Ansible VPC (10.4.0.0/16) · Public subnet (Ansible Node ·  outbound) + Private subnet × 2
-
+Description: BOOKFLOW - Tier 10 - Ansible VPC (10.4.0.0/16) - Public subnet (Ansible Node, outbound) + Private subnet x2
 Parameters:
   ProjectName:
     Type: String

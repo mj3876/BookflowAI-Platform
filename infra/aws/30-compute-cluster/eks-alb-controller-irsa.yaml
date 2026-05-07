@@ -1,6 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 30 · ALB Controller IRSA Role (Pod  CI/CD  K8s yaml  apply)
-
+Description: BOOKFLOW - Tier 30 - ALB Controller IRSA Role (allows AWS Load Balancer Controller Pod to apply K8s Ingress yaml via CI/CD)
 Parameters:
   ProjectName:
     Type: String

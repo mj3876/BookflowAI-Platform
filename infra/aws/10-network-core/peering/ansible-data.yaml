@@ -1,8 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: >
-  BOOKFLOW · Tier 10 · VPC Peering · Ansible ↔ Data
-  Ansible CN → RDS (schema/seed/grants SQL ) · RDS  GitOps 
-
+Description: "BOOKFLOW - Tier 10 - VPC Peering: Ansible <-> Data. Ansible CN -> RDS (schema/seed/grants SQL apply for RDS GitOps)"
 Parameters:
   ProjectName:
     Type: String
@@ -20,6 +17,15 @@ Resources:
     Type: AWS::EC2::Route
     Properties:
       RouteTableId: !ImportValue { 'Fn::Sub': '${ProjectName}-rt-ansible-private' }
+      DestinationCidrBlock: 10.3.0.0/16
+      VpcPeeringConnectionId: !Ref Peering
+
+  # ansible-node lives in PUBLIC subnet (SSM-only, no inbound). Public RT
+  # also needs the peering route or RDS connection times out.
+  RouteAnsiblePublicToData:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !ImportValue { 'Fn::Sub': '${ProjectName}-rt-ansible-public' }
       DestinationCidrBlock: 10.3.0.0/16
       VpcPeeringConnectionId: !Ref Peering
 

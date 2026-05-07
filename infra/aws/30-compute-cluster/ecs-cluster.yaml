@@ -1,6 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 30 · ECS Cluster + Fargate Capacity Provider + Container Insights
-
+Description: BOOKFLOW - Tier 30 - ECS Cluster + Fargate Capacity Provider + Container Insights
 Parameters:
   ProjectName:
     Type: String

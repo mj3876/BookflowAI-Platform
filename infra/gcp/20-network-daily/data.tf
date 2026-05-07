@@ -9,7 +9,12 @@ variable "region" {
   default     = "asia-northeast1"
 }
 
+variable "vpc_name" {
+  description = "Existing GCP VPC name created by the foundation layer."
+  type        = string
+}
+
 data "google_compute_network" "bookflow_vpc" {
-  name    = "bookflow-vpc"
+  name    = var.vpc_name
   project = var.project_id
 }

@@ -1,11 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: >
-  BOOKFLOW · Tier 10 · Ansible VPC Interface Endpoints
-  SSM + SSMMessages + EC2Messages (Session Manager · GHA → SSM SendCommand)
-  Secrets Manager (RDS  )
-  Glue (Script deploy)
-  + S3 Gateway (Glue Scripts bucket sync)
-
+Description: "BOOKFLOW - Tier 10 - Ansible VPC Interface Endpoints: SSM + SSMMessages + EC2Messages (Session Manager, GHA -> SSM SendCommand) + Secrets Manager (RDS creds) + Glue (script deploy) + S3 Gateway (Glue scripts bucket sync)"
 Parameters:
   ProjectName:
     Type: String

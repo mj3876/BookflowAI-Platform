@@ -3,10 +3,14 @@ variable "aws_vpc_cidrs" {
   type        = list(string)
 }
 
+variable "azure_vnet_cidr" {
+  description = "Azure VNet CIDR range used for cross-cloud firewall policy alignment."
+  type        = string
+}
+
 variable "aws_peer_ips" {
   description = "AWS VPN public peer IPs exposed for the two TGW tunnel endpoints."
   type        = list(string)
-  default     = ["1.1.1.1", "2.2.2.2"]
 
   validation {
     condition     = length(var.aws_peer_ips) == 2
@@ -20,9 +24,8 @@ variable "aws_tgw_bgp_asn" {
 }
 
 variable "vpn_shared_secret" {
-  description = "Pre-shared key reused by the HA VPN tunnels for local collaboration only."
+  description = "Pre-shared key reused by the HA VPN tunnels. Must match the AWS GcpPresharedKey parameter."
   type        = string
-  default     = "dummy-shared-secret-change-me"
   sensitive   = true
 }
 
@@ -49,7 +52,30 @@ variable "bgp_sessions" {
   }
 }
 
-variable "psc_endpoint_ip" {
-  description = "Internal IP used by the Private Service Connect endpoint for Google APIs."
+variable "gcp_routed_cidr" {
+  description = "GCP CIDR that AWS routes toward the TGW/VPN path. Must contain psc_endpoint_ip for AWS-to-PSC access."
   type        = string
+}
+
+variable "psc_endpoint_host_offset" {
+  description = "Host offset inside gcp_routed_cidr used for the Google APIs Private Service Connect endpoint."
+  type        = number
+}
+
+variable "private_service_target_tags" {
+  description = "Network tags for GCP workloads allowed to receive translated cross-cloud private traffic."
+  type        = list(string)
+  default     = ["bookflow-private-api"]
+}
+
+variable "cross_cloud_ingress_tcp_ports" {
+  description = "TCP ports allowed from AWS VPCs and Azure VNet into tagged GCP private workloads."
+  type        = list(string)
+  default     = ["443"]
+}
+
+variable "cross_cloud_egress_tcp_ports" {
+  description = "TCP ports allowed from tagged GCP private workloads toward AWS VPCs and Azure VNet."
+  type        = list(string)
+  default     = ["443"]
 }

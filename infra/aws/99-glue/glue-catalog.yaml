@@ -1,17 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 99-glue · Glue Database + 6 Jobs (Flex) + IAM + Connection (BigQuery) + Data Quality
-
-# 6 Jobs (V6.2 +  V1):
-#   1. raw_pos_mart       (POS raw → mart)
-#   2. raw_sns_mart       (SNS raw → mart)
-#   3. raw_aladin_mart    ( raw → mart)
-#   4. raw_event_mart     ( raw → mart)
-#   5. sales_daily_agg    (  )
-#   6. features_build     (forecast  feature )
-#
-# : $4.06/ · 14 DPU · Flex execution ($0.29/DPU-hr ·  $0.44  34% )
-# : s3://bookflow-glue-scripts-*/scripts/*.py · CI/CD Pipeline 5 (Glue)  push
-
+Description: BOOKFLOW - Tier 99-glue - Glue Database + 6 Jobs (Flex) + IAM + Connection (BigQuery) + Data Quality
 Parameters:
   ProjectName:
     Type: String

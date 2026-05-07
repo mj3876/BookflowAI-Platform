@@ -1,6 +1,75 @@
-﻿# RDS  DDL  playbook (idempotent)
-# : —
-# BOOKFLOW V6.2
+---
+# rds-schema playbook
+# Apply 19 tables + 2 views + 28 indexes (sql/001_tables.sql, 002_indexes.sql)
+# Idempotent: CREATE TABLE/INDEX IF NOT EXISTS
 
-# TODO:    
-# : docs/ARCHITECTURE.md · docs/DEPLOYMENT.md
+- name: BookFlow RDS schema apply
+  hosts: localhost
+  gather_facts: false
+  vars:
+    aws_region: ap-northeast-1
+    project_name: bookflow
+    rds_secret_id: bookflow/rds/master-password
+    db_port: 5432
+    db_name: bookflow
+    sql_dir: "{{ playbook_dir }}/../sql"
+
+  tasks:
+    - name: Resolve RDS connection
+      ansible.builtin.import_role:
+        name: postgres-schema
+
+    - name: Read 001_tables.sql
+      ansible.builtin.slurp:
+        src: "{{ sql_dir }}/001_tables.sql"
+      register: tables_sql
+
+    - name: Apply 001_tables.sql (DDL)
+      community.postgresql.postgresql_query:
+        login_host: "{{ db_host }}"
+        login_port: "{{ db_port }}"
+        login_user: "{{ db_master_user }}"
+        login_password: "{{ db_master_password }}"
+        db: "{{ db_name }}"
+        query: "{{ tables_sql.content | b64decode }}"
+        autocommit: true
+      no_log: true
+
+    - name: Read 002_indexes.sql
+      ansible.builtin.slurp:
+        src: "{{ sql_dir }}/002_indexes.sql"
+      register: indexes_sql
+
+    - name: Apply 002_indexes.sql (indexes)
+      community.postgresql.postgresql_query:
+        login_host: "{{ db_host }}"
+        login_port: "{{ db_port }}"
+        login_user: "{{ db_master_user }}"
+        login_password: "{{ db_master_password }}"
+        db: "{{ db_name }}"
+        query: "{{ indexes_sql.content | b64decode }}"
+        autocommit: true
+      no_log: true
+
+    - name: Verify table count (expect 19)
+      community.postgresql.postgresql_query:
+        login_host: "{{ db_host }}"
+        login_port: "{{ db_port }}"
+        login_user: "{{ db_master_user }}"
+        login_password: "{{ db_master_password }}"
+        db: "{{ db_name }}"
+        query: >-
+          SELECT count(*) AS n
+          FROM information_schema.tables
+          WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+      register: table_count
+      no_log: true
+
+    - name: Show table count
+      ansible.builtin.debug:
+        msg: "Tables in public schema: {{ table_count.query_result[0].n }}"
+
+    - name: Fail if table count != 19
+      ansible.builtin.fail:
+        msg: "Expected 19 tables, got {{ table_count.query_result[0].n }}"
+      when: table_count.query_result[0].n | int != 19

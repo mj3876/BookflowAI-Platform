@@ -1,0 +1,4 @@
+psycopg[binary]==3.2.13
+redis==5.2.1
+typing-extensions>=4.6
+

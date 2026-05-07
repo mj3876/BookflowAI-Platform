@@ -1,14 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 50 · External ALB (Egress VPC Public) + Target Groups (Publisher Blue/Green + inventory-api) + Listener (HTTP 80 + Test 8080)
-
-# :
-#   ALB (internet-facing · Egress VPC Public)
-#   ├─ Listener 80 (PROD)
-#   │   ├─ Default action  → publisher-blue (Publisher EC2 ASG · Blue/Green Active)
-#   │   └─ Rule /api/inventory/* (priority 10) → inventory-api (ECS Fargate)
-#   └─ Listener 8080 (TEST)
-#       └─ Default action  → publisher-green (Publisher EC2 ASG · Blue/Green Standby · CodeDeploy  traffic)
-
+Description: BOOKFLOW - Tier 50 - External ALB (Egress VPC Public) + Target Groups (Publisher Blue/Green + inventory-api) + Listeners (HTTP 80 PROD + 8080 TEST)
 Parameters:
   ProjectName:
     Type: String

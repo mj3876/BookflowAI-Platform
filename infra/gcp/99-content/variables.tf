@@ -41,7 +41,52 @@ variable "vpc_name" {
 variable "dataset_id" {
   description = "BigQuery dataset id."
   type        = string
-  default     = "bookflow_dw"
+}
+
+variable "training_table" {
+  description = "BigQuery table used as the Vertex pipeline training dataset."
+  type        = string
+}
+
+variable "sales_table" {
+  description = "BigQuery source table containing sales facts for the existing-books forecast pipeline."
+  type        = string
+}
+
+variable "inventory_daily_table" {
+  description = "BigQuery source table containing daily inventory snapshots for the existing-books forecast pipeline."
+  type        = string
+}
+
+variable "features_table" {
+  description = "BigQuery source table containing feature values for the existing-books forecast pipeline."
+  type        = string
+}
+
+variable "books_static_table" {
+  description = "BigQuery source table containing static book attributes for feature engineering."
+  type        = string
+}
+
+variable "locations_static_table" {
+  description = "BigQuery source table containing static location attributes for feature engineering."
+  type        = string
+}
+
+variable "load_table_aliases" {
+  description = "Mapping from incoming GCS object stems to BigQuery load table ids."
+  type        = map(string)
+  default     = {}
+}
+
+variable "forecast_table" {
+  description = "BigQuery table where the Vertex pipeline writes forecast results."
+  type        = string
+}
+
+variable "existing_books_model_name" {
+  description = "BigQuery ML model name created by the existing-books forecast pipeline."
+  type        = string
 }
 
 variable "staging_bucket_name" {
@@ -56,30 +101,15 @@ variable "models_bucket_name" {
   default     = null
 }
 
-variable "function_source_bucket_name" {
-  description = "Bucket containing zipped Cloud Function source archives. Defaults to the staging bucket."
-  type        = string
-  default     = null
-}
-
-variable "function_source_objects" {
-  description = "Zipped source object names for each Cloud Function."
-  type = object({
-    bq_load          = string
-    feature_assemble = string
-    vertex_invoke    = string
-  })
-  default = {
-    bq_load          = "functions/bookflow-bq-load.zip"
-    feature_assemble = "functions/bookflow-feature-assemble.zip"
-    vertex_invoke    = "functions/bookflow-vertex-invoke.zip"
-  }
-}
-
 variable "vertex_pipeline_template_uri" {
   description = "Vertex AI Pipeline template URI used for existing-book training and batch prediction."
   type        = string
   default     = null
+}
+
+variable "vertex_pipeline_template_object" {
+  description = "Object path in the models bucket for the compiled existing-books Vertex AI Pipeline template."
+  type        = string
 }
 
 variable "vertex_pipeline_root" {

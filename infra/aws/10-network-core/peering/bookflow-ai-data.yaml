@@ -1,8 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: >
-  BOOKFLOW · Tier 10 · VPC Peering · BookFlow AI ↔ Data
-  Pod(EKS) → RDS/Redis  · ·  Peering 
-
+Description: "BOOKFLOW - Tier 10 - VPC Peering: BookFlow AI <-> Data. EKS Pods -> RDS/Redis access (Phase 1-2 cheap peering; replaced by TGW in Phase 3-4)"
 Parameters:
   ProjectName:
     Type: String

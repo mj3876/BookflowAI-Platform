@@ -1,10 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: >
-  BOOKFLOW · Tier 10 · BookFlow AI VPC Interface Endpoints (7)
-  ECR api · ECR dkr · Kinesis · SSM · Secrets Manager · CloudWatch Logs · KMS
-  + S3 Gateway Endpoint
-   AZ (AZ1) ·  
-
+Description: "BOOKFLOW - Tier 10 - BookFlow AI VPC Interface Endpoints (7): ECR api, ECR dkr, Kinesis, SSM, Secrets Manager, CloudWatch Logs, KMS + S3 Gateway Endpoint (single AZ AZ1 for cost optimization)"
 Parameters:
   ProjectName:
     Type: String

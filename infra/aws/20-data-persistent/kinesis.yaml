@@ -1,14 +1,18 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 20 · Kinesis pos-events Data Stream (5 shards) + Firehose → S3 Raw (VPC )
-
+Description: BOOKFLOW - Tier 20 - Kinesis pos-events Data Stream (5 shards) + Firehose to S3 Raw (via VPC endpoint)
 Parameters:
   ProjectName:
     Type: String
     Default: bookflow
+  # NOTE: Raw bucket name resolved from CFN export `${ProjectName}-s3-raw-name`
+  # (s3.yaml stack). Override via Parameter only if you really need to bypass
+  # the s3 stack output - leave empty to use the export.
   RawBucketName:
     Type: String
-    Default: bookflow-raw-354493396671
-    Description: S3 Raw  (    · ImportValue )
+    Default: ''
+    Description: >-
+      Optional S3 Raw bucket override. Empty -> use ImportValue from s3 stack
+      (bookflow-s3-raw-name).
   ShardCount:
     Type: Number
     Default: 5
@@ -24,6 +28,9 @@ Parameters:
     Default: 5
     MinValue: 1
     MaxValue: 128
+
+Conditions:
+  UseRawBucketOverride: !Not [!Equals [!Ref RawBucketName, '']]
 
 Resources:
   # ─── Kinesis Data Stream (POS   ) ───
@@ -75,8 +82,20 @@ Resources:
                   - s3:ListBucketMultipartUploads
                   - s3:PutObject
                 Resource:
-                  - !Sub arn:aws:s3:::${RawBucketName}
-                  - !Sub arn:aws:s3:::${RawBucketName}/*
+                  - !If
+                    - UseRawBucketOverride
+                    - !Sub arn:aws:s3:::${RawBucketName}
+                    - !Sub
+                      - arn:aws:s3:::${B}
+                      - B: !ImportValue
+                          Fn::Sub: ${ProjectName}-s3-raw-name
+                  - !If
+                    - UseRawBucketOverride
+                    - !Sub arn:aws:s3:::${RawBucketName}/*
+                    - !Sub
+                      - arn:aws:s3:::${B}/*
+                      - B: !ImportValue
+                          Fn::Sub: ${ProjectName}-s3-raw-name
         - PolicyName: CloudWatchLogs
           PolicyDocument:
             Version: '2012-10-17'
@@ -114,7 +133,13 @@ Resources:
         KinesisStreamARN: !GetAtt PosEventsStream.Arn
         RoleARN: !GetAtt FirehoseRole.Arn
       ExtendedS3DestinationConfiguration:
-        BucketARN: !Sub arn:aws:s3:::${RawBucketName}
+        BucketARN: !If
+          - UseRawBucketOverride
+          - !Sub arn:aws:s3:::${RawBucketName}
+          - !Sub
+            - arn:aws:s3:::${B}
+            - B: !ImportValue
+                Fn::Sub: ${ProjectName}-s3-raw-name
         RoleARN: !GetAtt FirehoseRole.Arn
         Prefix: pos-events/year=!{timestamp:yyyy}/month=!{timestamp:MM}/day=!{timestamp:dd}/
         ErrorOutputPrefix: pos-events-errors/!{firehose:error-output-type}/year=!{timestamp:yyyy}/month=!{timestamp:MM}/day=!{timestamp:dd}/

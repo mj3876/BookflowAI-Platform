@@ -1,6 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 00 · ECR Repositories (11 · EKS Pod 7 + EKS CronJob 1 + ECS Service 3)
-
+Description: "BOOKFLOW - Tier 00 - ECR Repositories (11 total: 7 EKS Pods + 1 EKS CronJob + 3 ECS Services)"
 Parameters:
   ProjectName:
     Type: String
@@ -82,6 +81,17 @@ Resources:
     Type: AWS::ECR::Repository
     Properties:
       RepositoryName: !Sub ${ProjectName}/publish-watcher
+      ImageScanningConfiguration: { ScanOnPush: true }
+      EncryptionConfiguration: { EncryptionType: AES256 }
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          { "rules": [{ "rulePriority": 1, "description": " 10 ", "selection": { "tagStatus": "any", "countType": "imageCountMoreThan", "countNumber": 10 }, "action": { "type": "expire" } }] }
+
+  # V6.2 PPT slide 30 rename: publish-watcher -> publisher-watcher (canonical Apps eks-pods folder)
+  EcrPublisherWatcher:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub ${ProjectName}/publisher-watcher
       ImageScanningConfiguration: { ScanOnPush: true }
       EncryptionConfiguration: { EncryptionType: AES256 }
       LifecyclePolicy:
