@@ -1,13 +1,12 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 00 · CloudWatch Log Groups + 기본 Alarm (영구 · retention 7일)
-
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW - Tier 00 - CloudWatch Log Groups + Alarms (retention 7 days)
 Parameters:
   ProjectName:
     Type: String
     Default: bookflow
 
 Resources:
-  # ─── 공용 Log Groups (retention 7일) ───
+  # ───  Log Groups (retention 7) ───
   EksLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -62,10 +61,10 @@ Resources:
       LogGroupName: !Sub /aws/lambda/${ProjectName}-secret-forwarder
       RetentionInDays: 7
 
-  # ─── 기본 Alarm (예시 · 실제 리소스가 올라갈 때 추가) ───
-  # BOOKFLOW는 모든 알림을 Azure Logic Apps 로 통일 → AWS SNS Topic 사용 안 함
-  # CloudWatch Alarm → EventBridge Rule → Azure Logic App HTTP trigger 경로
-  # RDS / EKS / Lambda 등의 alarm은 각 리소스 stack에서 자체 선언 (분산 관리 원칙)
+  # ───  Alarm ( ·     ) ───
+  # BOOKFLOW   Azure Logic Apps   → AWS SNS Topic   
+  # CloudWatch Alarm → EventBridge Rule → Azure Logic App HTTP trigger 
+  # RDS / EKS / Lambda  alarm   stack   (  )
 
 Outputs:
   EksLogGroupName:

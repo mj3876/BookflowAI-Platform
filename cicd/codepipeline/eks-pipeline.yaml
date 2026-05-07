@@ -1,0 +1,275 @@
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW · CICD · EKS Pipeline (CodePipeline + CodeBuild · 7 Pod + 1 CronJob → ECR → kubectl rollout)
+
+# ────────────────────────────────────────────────────────────────────
+# :
+#   [BookFlowAI-Apps · main · path:eks-pods/**]
+#     → CodeStar Connection webhook
+#     → CodePipeline V2 (Source · Build)
+#     → CodeBuild
+#         1. ECR login (aws ecr get-login-password)
+#         2. docker build × 8 (7 pod + 1 cronjob) → ECR push (tag = commit SHA)
+#         3. aws eks update-kubeconfig (Access Entry   · IAM role   )
+#         4. envsubst K8s manifest → kubectl apply (image SHA )
+#         5. kubectl rollout status 
+#     → EKS rolling update
+#
+#  :
+#   1. Tier 00 codestar-connection.yaml  (PENDING → Available  )
+#   2. Tier 00 ecr.yaml  (8 ECR repo  · auth-pod, dashboard-svc, forecast-svc,
+#      decision-svc, intervention-svc, inventory-svc, notification-svc, publish-watcher)
+#   3. Tier 30 eks-cluster.yaml  (cluster ACTIVE)
+#
+#  ( stack deploy  1):
+#   eks-cluster stack  update-stack   stack  CodeBuildRoleArn 
+#     aws cloudformation update-stack --stack-name bookflow-30-eks-cluster \
+#       --use-previous-template \
+#       --parameters ParameterKey=CiCdRoleArn,ParameterValue=<arn from outputs>
+#   → eks-cluster.yaml  CiCdAccessEntry   CodeBuild role  cluster admin  
+#
+# : 🟡   deploy (idle   0 ·  destroy/create   )
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: bookflow
+
+  AppsRepoFullName:
+    Type: String
+    Default: MyosoonHwang/BookFlowAI-Apps
+    Description: GitHub owner/repo (CodeStar Connection  access   repo)
+
+  AppsBranch:
+    Type: String
+    Default: main
+
+  EksClusterName:
+    Type: String
+    Default: bookflow-eks
+    Description: Tier 30 eks-cluster  cluster 
+
+  KubectlVersion:
+    Type: String
+    Default: '1.30'
+    Description: CodeBuild  install  kubectl  (EKS cluster   )
+
+Resources:
+  # ────────────────────────────────────────────────────────────────
+  # 1. CodeBuild IAM Role
+  #    - ECR push  ( bookflow ECR repo)
+  #    - EKS describe + cluster access (Access Entry  cluster admin)
+  #    - S3 artifacts /
+  #    - CloudWatch Logs ( )
+  # ────────────────────────────────────────────────────────────────
+  CodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-cb-eks-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: codebuild.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: codebuild-eks-policy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # ECR (8 pod repo )
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:CompleteLayerUpload
+                  - ecr:InitiateLayerUpload
+                  - ecr:PutImage
+                  - ecr:UploadLayerPart
+                  - ecr:BatchGetImage
+                  - ecr:DescribeRepositories
+                  - ecr:DescribeImages
+                Resource: !Sub arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/${ProjectName}/*
+
+              # EKS · Access Entry  cluster admin · DescribeCluster  IAM  
+              - Effect: Allow
+                Action:
+                  - eks:DescribeCluster
+                  - eks:ListClusters
+                Resource: !Sub arn:aws:eks:${AWS::Region}:${AWS::AccountId}:cluster/${EksClusterName}
+
+              # S3 artifacts (CodePipeline   source/build artifacts)
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                  - s3:GetBucketLocation
+                Resource:
+                  - !Sub arn:aws:s3:::${ProjectName}-cp-artifacts-${AWS::AccountId}
+                  - !Sub arn:aws:s3:::${ProjectName}-cp-artifacts-${AWS::AccountId}/*
+
+              # CloudWatch Logs
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/${ProjectName}-cb-eks*
+
+  # ────────────────────────────────────────────────────────────────
+  # 2. CodeBuild Project
+  #    - Privileged mode = true (Docker daemon )
+  #    - Compute: BUILD_GENERAL1_MEDIUM (4GB · 2vCPU · Docker build )
+  #    - Image: aws/codebuild/standard:7.0 (Ubuntu 22.04 · Docker + AWS CLI  )
+  #    - BuildSpec: source repo  eks-pods/buildspec.yml 
+  # ────────────────────────────────────────────────────────────────
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub ${ProjectName}-cb-eks
+      ServiceRole: !GetAtt CodeBuildRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_MEDIUM
+        Image: aws/codebuild/standard:7.0
+        PrivilegedMode: true   # Docker daemon   
+        EnvironmentVariables:
+          - { Name: AWS_REGION, Value: !Ref AWS::Region }
+          - { Name: AWS_ACCOUNT_ID, Value: !Ref AWS::AccountId }
+          - { Name: ECR_REGISTRY, Value: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com' }
+          - { Name: PROJECT_NAME, Value: !Ref ProjectName }
+          - { Name: EKS_CLUSTER_NAME, Value: !Ref EksClusterName }
+          - { Name: KUBECTL_VERSION, Value: !Ref KubectlVersion }
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: eks-pods/buildspec.yml   # source artifact   
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName: !Sub /aws/codebuild/${ProjectName}-cb-eks
+      TimeoutInMinutes: 30
+
+  # ────────────────────────────────────────────────────────────────
+  # 3. CodePipeline IAM Role
+  #    - CodeStar UseConnection (GitHub source pull)
+  #    - CodeBuild StartBuild
+  #    - S3 artifacts /
+  # ────────────────────────────────────────────────────────────────
+  PipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-cp-eks-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: codepipeline.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: codepipeline-eks-policy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - codestar-connections:UseConnection
+                Resource: !ImportValue
+                  Fn::Sub: ${ProjectName}-codestar-github-connection-arn
+              - Effect: Allow
+                Action:
+                  - codebuild:StartBuild
+                  - codebuild:BatchGetBuilds
+                Resource: !GetAtt CodeBuildProject.Arn
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                  - s3:GetBucketVersioning
+                Resource:
+                  - !Sub arn:aws:s3:::${ProjectName}-cp-artifacts-${AWS::AccountId}
+                  - !Sub arn:aws:s3:::${ProjectName}-cp-artifacts-${AWS::AccountId}/*
+
+  # ────────────────────────────────────────────────────────────────
+  # 4. CodePipeline V2
+  #    - V2 = path filter (eks-pods/**)  · branch filter 
+  #    - Stages: Source → Build (Approval   1 )
+  # ────────────────────────────────────────────────────────────────
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !Sub ${ProjectName}-cp-eks
+      RoleArn: !GetAtt PipelineRole.Arn
+      PipelineType: V2
+      ArtifactStore:
+        Type: S3
+        Location: !Sub ${ProjectName}-cp-artifacts-${AWS::AccountId}
+      Triggers:
+        - ProviderType: CodeStarSourceConnection
+          GitConfiguration:
+            SourceActionName: Source
+            Push:
+              - Branches:
+                  Includes: [!Ref AppsBranch]
+                FilePaths:
+                  Includes: ['eks-pods/**']
+      Stages:
+        # ── Source ──────────────────────────────────────────
+        - Name: Source
+          Actions:
+            - Name: Source
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: '1'
+              Configuration:
+                ConnectionArn: !ImportValue
+                  Fn::Sub: ${ProjectName}-codestar-github-connection-arn
+                FullRepositoryId: !Ref AppsRepoFullName
+                BranchName: !Ref AppsBranch
+                DetectChanges: 'false'   # Triggers ()  path filter  webhook 
+                OutputArtifactFormat: CODE_ZIP
+              OutputArtifacts:
+                - Name: SourceArtifact
+              RunOrder: 1
+
+        # ── Build ───────────────────────────────────────────
+        - Name: Build
+          Actions:
+            - Name: BuildAndDeploy
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: '1'
+              Configuration:
+                ProjectName: !Ref CodeBuildProject
+              InputArtifacts:
+                - Name: SourceArtifact
+              OutputArtifacts:
+                - Name: BuildArtifact
+              RunOrder: 1
+
+Outputs:
+  PipelineName:
+    Value: !Ref Pipeline
+    Export: { Name: !Sub '${ProjectName}-cp-eks-name' }
+
+  CodeBuildRoleArn:
+    Value: !GetAtt CodeBuildRole.Arn
+    Description: |
+      Tier 30 eks-cluster stack  update-stack   :
+      aws cloudformation update-stack --stack-name bookflow-30-eks-cluster
+        --use-previous-template
+        --parameters ParameterKey=CiCdRoleArn,ParameterValue=<this-arn>
+    Export: { Name: !Sub '${ProjectName}-cp-eks-codebuild-role-arn' }
+
+  PipelineRoleArn:
+    Value: !GetAtt PipelineRole.Arn
+    Export: { Name: !Sub '${ProjectName}-cp-eks-pipeline-role-arn' }

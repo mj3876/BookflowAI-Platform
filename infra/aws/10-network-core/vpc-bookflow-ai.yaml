@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 10 · BookFlow AI VPC (10.0.0.0/16) · EKS Pod 전용 · Private only
+Description: BOOKFLOW - Tier 10 - BookFlow AI VPC (10.0.0.0/16) - EKS Pod private only
 
 Parameters:
   ProjectName:
@@ -27,6 +27,7 @@ Resources:
       VpcId: !Ref Vpc
       CidrBlock: 10.0.1.0/24
       AvailabilityZone: !Ref AzA
+      MapPublicIpOnLaunch: true   # temp IGW outbound for EKS node build (replace with NAT later)
       Tags: [{ Key: Name, Value: !Sub '${ProjectName}-bookflow-ai-private-az1' }]
 
   PrivateAz2:
@@ -35,6 +36,7 @@ Resources:
       VpcId: !Ref Vpc
       CidrBlock: 10.0.2.0/24
       AvailabilityZone: !Ref AzC
+      MapPublicIpOnLaunch: true
       Tags: [{ Key: Name, Value: !Sub '${ProjectName}-bookflow-ai-private-az2' }]
 
   RouteTable:
@@ -42,6 +44,26 @@ Resources:
     Properties:
       VpcId: !Ref Vpc
       Tags: [{ Key: Name, Value: !Sub '${ProjectName}-bookflow-ai-private-rt' }]
+
+  # IGW - temp for EKS Nodegroup outbound (replace with NAT later)
+  Igw:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags: [{ Key: Name, Value: !Sub '${ProjectName}-bookflow-ai-igw' }]
+
+  IgwAttach:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref Igw
+
+  RouteToIgw:
+    Type: AWS::EC2::Route
+    DependsOn: IgwAttach
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref Igw
 
   RtAssocAz1:
     Type: AWS::EC2::SubnetRouteTableAssociation
@@ -51,7 +73,7 @@ Resources:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties: { SubnetId: !Ref PrivateAz2, RouteTableId: !Ref RouteTable }
 
-  # ─── Custom NACL (default NACL 사용 안 함) ───
+  # Custom NACL (override default NACL)
   Nacl:
     Type: AWS::EC2::NetworkAcl
     Properties:

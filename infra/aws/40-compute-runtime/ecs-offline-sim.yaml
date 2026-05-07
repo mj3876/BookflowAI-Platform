@@ -1,0 +1,151 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW - Tier 40 - ECS Offline Sim (Fargate - Sales Data VPC Private - Kinesis put-record)
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: bookflow
+  ServiceName:
+    Type: String
+    Default: offline-sim
+  ImageTag:
+    Type: String
+    Default: latest
+    Description: ECR image tag - CICD :latest pull
+  TaskCpu:
+    Type: String
+    Default: '256'
+  TaskMemory:
+    Type: String
+    Default: '512'
+  DesiredCount:
+    Type: Number
+    Default: 1
+
+Resources:
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-ecs-${ServiceName}-exec-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-ecs-${ServiceName}-task-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: KinesisPut
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kinesis:PutRecord
+                  - kinesis:PutRecords
+                  - kinesis:DescribeStream
+                Resource: !ImportValue
+                  Fn::Sub: ${ProjectName}-kinesis-pos-events-arn
+        - PolicyName: SecretsRead
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ProjectName}/*
+
+  TaskSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${ProjectName}-ecs-${ServiceName}-sg
+      GroupDescription: BOOKFLOW ECS offline-sim - egress only
+      VpcId: !ImportValue
+        Fn::Sub: ${ProjectName}-vpc-sales-data-id
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: egress all (Kinesis - ECR - CW)
+      Tags: [{ Key: Name, Value: !Sub '${ProjectName}-ecs-${ServiceName}-sg' }]
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub ${ProjectName}-${ServiceName}
+      Cpu: !Ref TaskCpu
+      Memory: !Ref TaskMemory
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      ContainerDefinitions:
+        - Name: !Ref ServiceName
+          Image: !Sub
+            - ${RegistryUri}/${ProjectName}/${ServiceName}:${ImageTag}
+            - RegistryUri: !ImportValue
+                Fn::Sub: ${ProjectName}-ecr-registry-uri
+          Essential: true
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !ImportValue
+                Fn::Sub: ${ProjectName}-ecs-log-group-name
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: !Ref ServiceName
+          Environment:
+            - Name: KINESIS_STREAM_NAME
+              Value: !ImportValue
+                Fn::Sub: ${ProjectName}-kinesis-pos-events-name
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+
+  Service:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Ref ServiceName
+      Cluster: !ImportValue
+        Fn::Sub: ${ProjectName}-ecs-cluster-name
+      TaskDefinition: !Ref TaskDefinition
+      DesiredCount: !Ref DesiredCount
+      LaunchType: FARGATE
+      DeploymentController: { Type: ECS }
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 100
+        MaximumPercent: 200
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          Subnets:
+            - !ImportValue
+              Fn::Sub: ${ProjectName}-subnet-sales-data-private-az1
+            - !ImportValue
+              Fn::Sub: ${ProjectName}-subnet-sales-data-private-az2
+          SecurityGroups: [!Ref TaskSecurityGroup]
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-${ServiceName}
+        - Key: Project
+          Value: !Ref ProjectName
+      PropagateTags: SERVICE
+
+Outputs:
+  ServiceName:
+    Value: !GetAtt Service.Name
+    Export: { Name: !Sub '${ProjectName}-ecs-${ServiceName}-service-name' }
+  TaskDefinitionArn:
+    Value: !Ref TaskDefinition
+    Export: { Name: !Sub '${ProjectName}-ecs-${ServiceName}-taskdef-arn' }
+  TaskRoleArn:
+    Value: !GetAtt TaskRole.Arn
+    Export: { Name: !Sub '${ProjectName}-ecs-${ServiceName}-task-role-arn' }

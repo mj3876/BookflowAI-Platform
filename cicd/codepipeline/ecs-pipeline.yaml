@@ -1,0 +1,238 @@
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW · CICD · ECS Pipeline (CodePipeline + CodeBuild · 3 ECS Service → ECR → ecs:update-service)
+
+# ────────────────────────────────────────────────────────────────────
+# :
+#   [BookFlowAI-Apps · main · path:ecs-sims/**]
+#     → CodeStar Connection webhook
+#     → CodePipeline V2
+#     → CodeBuild
+#         1. ECR login
+#         2. docker build × 3 (online-sim · offline-sim · inventory-api) → ECR push (tag = commit SHA + latest)
+#         3. aws ecs update-service --force-new-deployment (3 service)
+#     → ECS rolling update (Fargate task replacement)
+#
+#  :
+#   1. Tier 00 codestar-connection · ecr (online-sim · offline-sim · inventory-api repo)
+#   2. Tier 30 ecs-cluster (bookflow-ecs ACTIVE)
+#   3. Tier 40 ecs-online-sim · ecs-offline-sim · ecs-inventory-api (Service  · taskdef  :latest )
+#
+# : 🟡   deploy
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: bookflow
+
+  AppsRepoFullName:
+    Type: String
+    Default: MyosoonHwang/BookFlowAI-Apps
+    Description: GitHub owner/repo
+
+  AppsBranch:
+    Type: String
+    Default: main
+
+  EcsClusterName:
+    Type: String
+    Default: bookflow-ecs
+
+Resources:
+  # ────────────────────────────────────────────────────────────────
+  # 1. CodeBuild IAM Role
+  # ────────────────────────────────────────────────────────────────
+  CodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-cb-ecs-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: codebuild.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: codebuild-ecs-policy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # ECR push (3 service repo)
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:CompleteLayerUpload
+                  - ecr:InitiateLayerUpload
+                  - ecr:PutImage
+                  - ecr:UploadLayerPart
+                  - ecr:BatchGetImage
+                  - ecr:DescribeRepositories
+                  - ecr:DescribeImages
+                Resource: !Sub arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/${ProjectName}/*
+
+              # ECS update-service (force new deployment)
+              - Effect: Allow
+                Action:
+                  - ecs:UpdateService
+                  - ecs:DescribeServices
+                  - ecs:DescribeClusters
+                  - ecs:ListServices
+                Resource: '*'
+
+              # S3 artifacts
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                  - s3:GetBucketLocation
+                Resource:
+                  - !Sub arn:aws:s3:::${ProjectName}-cp-artifacts-${AWS::AccountId}
+                  - !Sub arn:aws:s3:::${ProjectName}-cp-artifacts-${AWS::AccountId}/*
+
+              # CloudWatch Logs
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/${ProjectName}-cb-ecs*
+
+  # ────────────────────────────────────────────────────────────────
+  # 2. CodeBuild Project
+  # ────────────────────────────────────────────────────────────────
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub ${ProjectName}-cb-ecs
+      ServiceRole: !GetAtt CodeBuildRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_MEDIUM
+        Image: aws/codebuild/standard:7.0
+        PrivilegedMode: true   # Docker daemon 
+        EnvironmentVariables:
+          - { Name: AWS_REGION, Value: !Ref AWS::Region }
+          - { Name: AWS_ACCOUNT_ID, Value: !Ref AWS::AccountId }
+          - { Name: ECR_REGISTRY, Value: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com' }
+          - { Name: PROJECT_NAME, Value: !Ref ProjectName }
+          - { Name: ECS_CLUSTER_NAME, Value: !Ref EcsClusterName }
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: ecs-sims/buildspec.yml
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName: !Sub /aws/codebuild/${ProjectName}-cb-ecs
+      TimeoutInMinutes: 30
+
+  # ────────────────────────────────────────────────────────────────
+  # 3. CodePipeline IAM Role
+  # ────────────────────────────────────────────────────────────────
+  PipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-cp-ecs-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: codepipeline.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: codepipeline-ecs-policy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: codestar-connections:UseConnection
+                Resource: !ImportValue
+                  Fn::Sub: ${ProjectName}-codestar-github-connection-arn
+              - Effect: Allow
+                Action:
+                  - codebuild:StartBuild
+                  - codebuild:BatchGetBuilds
+                Resource: !GetAtt CodeBuildProject.Arn
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                  - s3:GetBucketVersioning
+                Resource:
+                  - !Sub arn:aws:s3:::${ProjectName}-cp-artifacts-${AWS::AccountId}
+                  - !Sub arn:aws:s3:::${ProjectName}-cp-artifacts-${AWS::AccountId}/*
+
+  # ────────────────────────────────────────────────────────────────
+  # 4. CodePipeline V2 (path filter ecs-sims/**)
+  # ────────────────────────────────────────────────────────────────
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !Sub ${ProjectName}-cp-ecs
+      RoleArn: !GetAtt PipelineRole.Arn
+      PipelineType: V2
+      ArtifactStore:
+        Type: S3
+        Location: !Sub ${ProjectName}-cp-artifacts-${AWS::AccountId}
+      Triggers:
+        - ProviderType: CodeStarSourceConnection
+          GitConfiguration:
+            SourceActionName: Source
+            Push:
+              - Branches:
+                  Includes: [!Ref AppsBranch]
+                FilePaths:
+                  Includes: ['ecs-sims/**']
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: Source
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: '1'
+              Configuration:
+                ConnectionArn: !ImportValue
+                  Fn::Sub: ${ProjectName}-codestar-github-connection-arn
+                FullRepositoryId: !Ref AppsRepoFullName
+                BranchName: !Ref AppsBranch
+                DetectChanges: 'false'
+                OutputArtifactFormat: CODE_ZIP
+              OutputArtifacts:
+                - Name: SourceArtifact
+              RunOrder: 1
+
+        - Name: Build
+          Actions:
+            - Name: BuildAndDeploy
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: '1'
+              Configuration:
+                ProjectName: !Ref CodeBuildProject
+              InputArtifacts:
+                - Name: SourceArtifact
+              OutputArtifacts:
+                - Name: BuildArtifact
+              RunOrder: 1
+
+Outputs:
+  PipelineName:
+    Value: !Ref Pipeline
+    Export: { Name: !Sub '${ProjectName}-cp-ecs-name' }
+
+  CodeBuildRoleArn:
+    Value: !GetAtt CodeBuildRole.Arn
+    Export: { Name: !Sub '${ProjectName}-cp-ecs-codebuild-role-arn' }
+
+  PipelineRoleArn:
+    Value: !GetAtt PipelineRole.Arn
+    Export: { Name: !Sub '${ProjectName}-cp-ecs-pipeline-role-arn' }

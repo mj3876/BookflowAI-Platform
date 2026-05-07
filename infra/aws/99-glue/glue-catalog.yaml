@@ -1,0 +1,354 @@
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW - Tier 99-glue - Glue Database + 6 Jobs (Flex) + IAM + Connection (BigQuery) + Data Quality
+Parameters:
+  ProjectName:
+    Type: String
+    Default: bookflow
+  GlueDatabaseName:
+    Type: String
+    Default: bookflow_mart
+  GlueVersion:
+    Type: String
+    Default: '4.0'
+    Description: Glue 4.0 (Spark 3.3 · Python 3.10)
+
+Resources:
+  # ─── Glue Database (Mart  ) ───
+  Database:
+    Type: AWS::Glue::Database
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Name: !Ref GlueDatabaseName
+        Description: BOOKFLOW Mart Database (Glue ETL   )
+        LocationUri: !Sub
+          - s3://${BucketName}/
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-mart-name
+
+  # ─── Glue Service Role (S3 + Secrets + CW Logs + Glue Catalog) ───
+  GlueServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-glue-service-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: glue.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole
+      Policies:
+        - PolicyName: S3RawMartAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub
+                    - arn:aws:s3:::${BucketName}
+                    - BucketName: !ImportValue
+                        Fn::Sub: ${ProjectName}-s3-raw-name
+                  - !Sub
+                    - arn:aws:s3:::${BucketName}/*
+                    - BucketName: !ImportValue
+                        Fn::Sub: ${ProjectName}-s3-raw-name
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub
+                    - arn:aws:s3:::${BucketName}
+                    - BucketName: !ImportValue
+                        Fn::Sub: ${ProjectName}-s3-mart-name
+                  - !Sub
+                    - arn:aws:s3:::${BucketName}/*
+                    - BucketName: !ImportValue
+                        Fn::Sub: ${ProjectName}-s3-mart-name
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub
+                    - arn:aws:s3:::${BucketName}
+                    - BucketName: !ImportValue
+                        Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+                  - !Sub
+                    - arn:aws:s3:::${BucketName}/*
+                    - BucketName: !ImportValue
+                        Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        - PolicyName: SecretsRead
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource:
+                  - !ImportValue
+                    Fn::Sub: ${ProjectName}-secrets-glue-gcp-arn
+                  - !ImportValue
+                    Fn::Sub: ${ProjectName}-secrets-rds-master-arn
+
+  # ─── Glue Connection (BigQuery JDBC · GCP SA key from Secrets) ───
+  #   features_build job  BigQuery  historical   
+  BigQueryConnection:
+    Type: AWS::Glue::Connection
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      ConnectionInput:
+        Name: !Sub ${ProjectName}-bigquery
+        ConnectionType: JDBC
+        Description: BigQuery JDBC connection (GCP SA key from Secrets Manager)
+        ConnectionProperties:
+          JDBC_CONNECTION_URL: jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=PLACEHOLDER;OAuthType=0;OAuthServiceAcctEmail=PLACEHOLDER;OAuthPvtKeyPath=/tmp/sa-key.json
+          JDBC_DRIVER_CLASS_NAME: com.simba.googlebigquery.jdbc.Driver
+          USERNAME: placeholder
+          PASSWORD: placeholder
+
+  # ─── Glue Jobs × 6 (Flex execution ·  ) ───
+  #     yaml 
+
+  # 1. raw_pos_mart
+  RawPosMartJob:
+    Type: AWS::Glue::Job
+    Properties:
+      Name: !Sub ${ProjectName}-raw-pos-mart
+      Role: !GetAtt GlueServiceRole.Arn
+      GlueVersion: !Ref GlueVersion
+      Command:
+        Name: glueetl
+        ScriptLocation: !Sub
+          - s3://${BucketName}/scripts/raw_pos_mart.py
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        PythonVersion: '3'
+      ExecutionProperty:
+        MaxConcurrentRuns: 1
+      ExecutionClass: FLEX
+      MaxRetries: 0
+      Timeout: 60
+      DefaultArguments:
+        '--TempDir': !Sub
+          - s3://${BucketName}/tmp/
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        '--enable-metrics': 'true'
+        '--enable-continuous-cloudwatch-log': 'true'
+        '--job-bookmark-option': job-bookmark-enable
+        '--RAW_BUCKET': !ImportValue
+          Fn::Sub: ${ProjectName}-s3-raw-name
+        '--MART_BUCKET': !ImportValue
+          Fn::Sub: ${ProjectName}-s3-mart-name
+        '--catalog_database': !Ref Database
+      WorkerType: G.1X
+      NumberOfWorkers: 2
+
+  # 2. raw_sns_mart
+  RawSnsMartJob:
+    Type: AWS::Glue::Job
+    Properties:
+      Name: !Sub ${ProjectName}-raw-sns-mart
+      Role: !GetAtt GlueServiceRole.Arn
+      GlueVersion: !Ref GlueVersion
+      Command:
+        Name: glueetl
+        ScriptLocation: !Sub
+          - s3://${BucketName}/scripts/raw_sns_mart.py
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        PythonVersion: '3'
+      ExecutionProperty: { MaxConcurrentRuns: 1 }
+      ExecutionClass: FLEX
+      MaxRetries: 0
+      Timeout: 60
+      DefaultArguments:
+        '--TempDir': !Sub
+          - s3://${BucketName}/tmp/
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        '--enable-metrics': 'true'
+        '--enable-continuous-cloudwatch-log': 'true'
+        '--job-bookmark-option': job-bookmark-enable
+        '--RAW_BUCKET': !ImportValue
+          Fn::Sub: ${ProjectName}-s3-raw-name
+        '--MART_BUCKET': !ImportValue
+          Fn::Sub: ${ProjectName}-s3-mart-name
+        '--catalog_database': !Ref Database
+      WorkerType: G.1X
+      NumberOfWorkers: 2
+
+  # 3. raw_aladin_mart
+  RawAladinMartJob:
+    Type: AWS::Glue::Job
+    Properties:
+      Name: !Sub ${ProjectName}-raw-aladin-mart
+      Role: !GetAtt GlueServiceRole.Arn
+      GlueVersion: !Ref GlueVersion
+      Command:
+        Name: glueetl
+        ScriptLocation: !Sub
+          - s3://${BucketName}/scripts/raw_aladin_mart.py
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        PythonVersion: '3'
+      ExecutionProperty: { MaxConcurrentRuns: 1 }
+      ExecutionClass: FLEX
+      MaxRetries: 0
+      Timeout: 60
+      DefaultArguments:
+        '--TempDir': !Sub
+          - s3://${BucketName}/tmp/
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        '--enable-metrics': 'true'
+        '--enable-continuous-cloudwatch-log': 'true'
+        '--job-bookmark-option': job-bookmark-enable
+        '--RAW_BUCKET': !ImportValue
+          Fn::Sub: ${ProjectName}-s3-raw-name
+        '--MART_BUCKET': !ImportValue
+          Fn::Sub: ${ProjectName}-s3-mart-name
+        '--catalog_database': !Ref Database
+      WorkerType: G.1X
+      NumberOfWorkers: 2
+
+  # 4. raw_event_mart
+  RawEventMartJob:
+    Type: AWS::Glue::Job
+    Properties:
+      Name: !Sub ${ProjectName}-raw-event-mart
+      Role: !GetAtt GlueServiceRole.Arn
+      GlueVersion: !Ref GlueVersion
+      Command:
+        Name: glueetl
+        ScriptLocation: !Sub
+          - s3://${BucketName}/scripts/raw_event_mart.py
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        PythonVersion: '3'
+      ExecutionProperty: { MaxConcurrentRuns: 1 }
+      ExecutionClass: FLEX
+      MaxRetries: 0
+      Timeout: 60
+      DefaultArguments:
+        '--TempDir': !Sub
+          - s3://${BucketName}/tmp/
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        '--enable-metrics': 'true'
+        '--enable-continuous-cloudwatch-log': 'true'
+        '--job-bookmark-option': job-bookmark-enable
+        '--RAW_BUCKET': !ImportValue
+          Fn::Sub: ${ProjectName}-s3-raw-name
+        '--MART_BUCKET': !ImportValue
+          Fn::Sub: ${ProjectName}-s3-mart-name
+        '--catalog_database': !Ref Database
+      WorkerType: G.1X
+      NumberOfWorkers: 2
+
+  # 5. sales_daily_agg (  )
+  SalesDailyAggJob:
+    Type: AWS::Glue::Job
+    Properties:
+      Name: !Sub ${ProjectName}-sales-daily-agg
+      Role: !GetAtt GlueServiceRole.Arn
+      GlueVersion: !Ref GlueVersion
+      Command:
+        Name: glueetl
+        ScriptLocation: !Sub
+          - s3://${BucketName}/scripts/sales_daily_agg.py
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        PythonVersion: '3'
+      ExecutionProperty: { MaxConcurrentRuns: 1 }
+      ExecutionClass: FLEX
+      MaxRetries: 0
+      Timeout: 60
+      DefaultArguments:
+        '--TempDir': !Sub
+          - s3://${BucketName}/tmp/
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        '--enable-metrics': 'true'
+        '--enable-continuous-cloudwatch-log': 'true'
+        '--job-bookmark-option': job-bookmark-enable
+        '--MART_BUCKET': !ImportValue
+          Fn::Sub: ${ProjectName}-s3-mart-name
+        '--catalog_database': !Ref Database
+      WorkerType: G.1X
+      NumberOfWorkers: 2
+
+  # 6. features_build (forecast  feature )
+  FeaturesBuildJob:
+    Type: AWS::Glue::Job
+    Properties:
+      Name: !Sub ${ProjectName}-features-build
+      Role: !GetAtt GlueServiceRole.Arn
+      GlueVersion: !Ref GlueVersion
+      Command:
+        Name: glueetl
+        ScriptLocation: !Sub
+          - s3://${BucketName}/scripts/features_build.py
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        PythonVersion: '3'
+      ExecutionProperty: { MaxConcurrentRuns: 1 }
+      ExecutionClass: FLEX
+      MaxRetries: 0
+      Timeout: 60
+      Connections:
+        Connections: [!Ref BigQueryConnection]
+      DefaultArguments:
+        '--TempDir': !Sub
+          - s3://${BucketName}/tmp/
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        '--enable-metrics': 'true'
+        '--enable-continuous-cloudwatch-log': 'true'
+        '--job-bookmark-option': job-bookmark-enable
+        '--MART_BUCKET': !ImportValue
+          Fn::Sub: ${ProjectName}-s3-mart-name
+        '--catalog_database': !Ref Database
+        '--bigquery_secret_arn': !ImportValue
+          Fn::Sub: ${ProjectName}-secrets-glue-gcp-arn
+      WorkerType: G.1X
+      NumberOfWorkers: 4
+
+Outputs:
+  GlueDatabaseName:
+    Value: !Ref Database
+    Export: { Name: !Sub '${ProjectName}-glue-database-name' }
+  GlueServiceRoleArn:
+    Value: !GetAtt GlueServiceRole.Arn
+    Export: { Name: !Sub '${ProjectName}-glue-service-role-arn' }
+  GlueServiceRoleName:
+    Value: !Ref GlueServiceRole
+    Export: { Name: !Sub '${ProjectName}-glue-service-role-name' }
+  RawPosMartJobName:
+    Value: !Ref RawPosMartJob
+    Export: { Name: !Sub '${ProjectName}-glue-job-raw-pos-mart' }
+  RawSnsMartJobName:
+    Value: !Ref RawSnsMartJob
+    Export: { Name: !Sub '${ProjectName}-glue-job-raw-sns-mart' }
+  RawAladinMartJobName:
+    Value: !Ref RawAladinMartJob
+    Export: { Name: !Sub '${ProjectName}-glue-job-raw-aladin-mart' }
+  RawEventMartJobName:
+    Value: !Ref RawEventMartJob
+    Export: { Name: !Sub '${ProjectName}-glue-job-raw-event-mart' }
+  SalesDailyAggJobName:
+    Value: !Ref SalesDailyAggJob
+    Export: { Name: !Sub '${ProjectName}-glue-job-sales-daily-agg' }
+  FeaturesBuildJobName:
+    Value: !Ref FeaturesBuildJob
+    Export: { Name: !Sub '${ProjectName}-glue-job-features-build' }
+  BigQueryConnectionName:
+    Value: !Ref BigQueryConnection
+    Export: { Name: !Sub '${ProjectName}-glue-connection-bigquery' }

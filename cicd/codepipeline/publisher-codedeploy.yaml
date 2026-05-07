@@ -1,0 +1,349 @@
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW - Publisher EC2 Blue/Green CodePipeline and CodeDeploy
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: bookflow
+  GitHubFullRepositoryId:
+    Type: String
+    Default: MyosoonHwang/BookFlowAI-Apps
+    Description: GitHub owner/repository for the application source.
+  GitHubBranchName:
+    Type: String
+    Default: main
+    Description: Trigger branch ( pipeline   · PR merge  )
+  PublisherPath:
+    Type: String
+    Default: publisher/**
+
+Resources:
+  PublisherCodeDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-publisher-codedeploy-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codedeploy.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole
+      Policies:
+        # Blue/Green COPY_AUTO_SCALING_GROUP  ASG  /   (AWSCodeDeployRole  )
+        - PolicyName: BlueGreenAsgOperations
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - autoscaling:CreateAutoScalingGroup
+                  - autoscaling:UpdateAutoScalingGroup
+                  - autoscaling:DeleteAutoScalingGroup
+                  - autoscaling:CreateOrUpdateTags
+                  - autoscaling:DeleteTags
+                  - autoscaling:AttachInstances
+                  - autoscaling:DetachInstances
+                  - autoscaling:EnableMetricsCollection
+                  - autoscaling:DisableMetricsCollection
+                  - autoscaling:SuspendProcesses
+                  - autoscaling:ResumeProcesses
+                  - autoscaling:PutLifecycleHook
+                  - autoscaling:DeleteLifecycleHook
+                  - autoscaling:CompleteLifecycleAction
+                  - autoscaling:RecordLifecycleActionHeartbeat
+                  - autoscaling:UpdateAutoScalingGroup
+                  - ec2:CreateTags
+                  - ec2:RunInstances
+                  - ec2:DescribeAccountAttributes
+                  - ec2:TerminateInstances
+                Resource: '*'
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/${ProjectName}-publisher-role
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-publisher-codedeploy-role
+        - Key: Project
+          Value: !Ref ProjectName
+
+  PublisherCodeDeployApp:
+    Type: AWS::CodeDeploy::Application
+    Properties:
+      ApplicationName: !Sub ${ProjectName}-publisher
+      ComputePlatform: Server
+
+  PublisherDeploymentGroup:
+    Type: AWS::CodeDeploy::DeploymentGroup
+    Properties:
+      ApplicationName: !Ref PublisherCodeDeployApp
+      DeploymentGroupName: !Sub ${ProjectName}-publisher-bg
+      ServiceRoleArn: !GetAtt PublisherCodeDeployRole.Arn
+      AutoScalingGroups:
+        - Fn::ImportValue:
+            Fn::Sub: ${ProjectName}-publisher-asg-name
+      DeploymentConfigName: CodeDeployDefault.AllAtOnce
+      DeploymentStyle:
+        DeploymentType: BLUE_GREEN
+        DeploymentOption: WITH_TRAFFIC_CONTROL
+      BlueGreenDeploymentConfiguration:
+        DeploymentReadyOption:
+          ActionOnTimeout: CONTINUE_DEPLOYMENT
+        GreenFleetProvisioningOption:
+          Action: COPY_AUTO_SCALING_GROUP
+        TerminateBlueInstancesOnDeploymentSuccess:
+          Action: TERMINATE
+          TerminationWaitTimeInMinutes: 5
+      LoadBalancerInfo:
+        # EC2 ASG Blue/Green: TargetGroupInfoList ( TG · CodeDeploy  Green ASG   TG  attach  swap)
+        TargetGroupInfoList:
+          - Name: !Sub ${ProjectName}-publisher-blue-tg
+      AutoRollbackConfiguration:
+        Enabled: true
+        Events:
+          - DEPLOYMENT_FAILURE
+          - DEPLOYMENT_STOP_ON_ALARM
+          - DEPLOYMENT_STOP_ON_REQUEST
+
+  PublisherCodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-publisher-codebuild-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: PublisherPackageBuild
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/${ProjectName}-publisher-package*
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/${ProjectName}-publisher-package*:*
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                Resource: !Sub
+                  - arn:aws:s3:::${BucketName}/*
+                  - BucketName:
+                      Fn::ImportValue:
+                        Fn::Sub: ${ProjectName}-s3-cp-artifacts-name
+              - Effect: Allow
+                Action:
+                  - s3:GetBucketLocation
+                  - s3:ListBucket
+                Resource: !Sub
+                  - arn:aws:s3:::${BucketName}
+                  - BucketName:
+                      Fn::ImportValue:
+                        Fn::Sub: ${ProjectName}-s3-cp-artifacts-name
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-publisher-codebuild-role
+        - Key: Project
+          Value: !Ref ProjectName
+
+  PublisherPackageProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub ${ProjectName}-publisher-package
+      Description: Package publisher/ as CodeDeploy root artifact.
+      ServiceRole: !GetAtt PublisherCodeBuildRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:5.0
+        PrivilegedMode: false
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            build:
+              commands:
+                - test -f publisher/appspec.yml
+                - test -d publisher/scripts
+                - test -d publisher/src
+                - mkdir -p dist
+                - cp -a publisher/. dist/
+                - sed -i 's/\r$//' dist/scripts/*.sh
+                - chmod +x dist/scripts/*.sh
+          artifacts:
+            base-directory: dist
+            files:
+              - appspec.yml
+              - scripts/**/*
+              - src/**/*
+            discard-paths: no
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-publisher-package
+        - Key: Project
+          Value: !Ref ProjectName
+
+  PublisherCodePipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-publisher-codepipeline-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: PublisherPipeline
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: codestar-connections:UseConnection
+                Resource:
+                  Fn::ImportValue:
+                    Fn::Sub: ${ProjectName}-codestar-github-connection-arn
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:GetBucketVersioning
+                  - s3:ListBucket
+                  - s3:PutObject
+                Resource:
+                  - !Sub
+                    - arn:aws:s3:::${BucketName}
+                    - BucketName:
+                        Fn::ImportValue:
+                          Fn::Sub: ${ProjectName}-s3-cp-artifacts-name
+                  - !Sub
+                    - arn:aws:s3:::${BucketName}/*
+                    - BucketName:
+                        Fn::ImportValue:
+                          Fn::Sub: ${ProjectName}-s3-cp-artifacts-name
+              - Effect: Allow
+                Action:
+                  - codebuild:BatchGetBuilds
+                  - codebuild:StartBuild
+                Resource: !GetAtt PublisherPackageProject.Arn
+              - Effect: Allow
+                Action:
+                  - codedeploy:CreateDeployment
+                  - codedeploy:GetApplication
+                  - codedeploy:GetApplicationRevision
+                  - codedeploy:GetDeployment
+                  - codedeploy:GetDeploymentConfig
+                  - codedeploy:GetDeploymentGroup
+                  - codedeploy:RegisterApplicationRevision
+                Resource:
+                  - !Sub arn:aws:codedeploy:${AWS::Region}:${AWS::AccountId}:application:${ProjectName}-publisher
+                  - !Sub arn:aws:codedeploy:${AWS::Region}:${AWS::AccountId}:deploymentgroup:${ProjectName}-publisher/${ProjectName}-publisher-bg
+                  - !Sub arn:aws:codedeploy:${AWS::Region}:${AWS::AccountId}:deploymentconfig:CodeDeployDefault.AllAtOnce
+                  - !Sub arn:aws:codedeploy:${AWS::Region}:${AWS::AccountId}:deployment:*
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-publisher-codepipeline-role
+        - Key: Project
+          Value: !Ref ProjectName
+
+  PublisherPipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !Sub ${ProjectName}-publisher-bg
+      PipelineType: V2
+      RoleArn: !GetAtt PublisherCodePipelineRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location:
+          Fn::ImportValue:
+            Fn::Sub: ${ProjectName}-s3-cp-artifacts-name
+      Triggers:
+        - ProviderType: CodeStarSourceConnection
+          GitConfiguration:
+            SourceActionName: Source
+            Push:
+              - Branches:
+                  Includes:
+                    - !Ref GitHubBranchName
+                FilePaths:
+                  Includes:
+                    - !Ref PublisherPath
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: Source
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: '1'
+              Configuration:
+                ConnectionArn:
+                  Fn::ImportValue:
+                    Fn::Sub: ${ProjectName}-codestar-github-connection-arn
+                FullRepositoryId: !Ref GitHubFullRepositoryId
+                BranchName: !Ref GitHubBranchName
+                DetectChanges: false
+                OutputArtifactFormat: CODE_ZIP
+              OutputArtifacts:
+                - Name: SourceOutput
+              RunOrder: 1
+        - Name: Package
+          Actions:
+            - Name: PackagePublisher
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: '1'
+              Configuration:
+                ProjectName: !Ref PublisherPackageProject
+              InputArtifacts:
+                - Name: SourceOutput
+              OutputArtifacts:
+                - Name: DeployArtifact
+              RunOrder: 1
+        - Name: Deploy
+          Actions:
+            - Name: BlueGreenDeploy
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CodeDeploy
+                Version: '1'
+              Configuration:
+                ApplicationName: !Ref PublisherCodeDeployApp
+                DeploymentGroupName: !Ref PublisherDeploymentGroup
+              InputArtifacts:
+                - Name: DeployArtifact
+              RunOrder: 1
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-publisher-bg
+        - Key: Project
+          Value: !Ref ProjectName
+
+Outputs:
+  PublisherCodeDeployApplicationName:
+    Value: !Ref PublisherCodeDeployApp
+    Export: { Name: !Sub '${ProjectName}-publisher-codedeploy-app-name' }
+  PublisherDeploymentGroupName:
+    Value: !Ref PublisherDeploymentGroup
+    Export: { Name: !Sub '${ProjectName}-publisher-deployment-group-name' }
+  PublisherPipelineName:
+    Value: !Ref PublisherPipeline
+    Export: { Name: !Sub '${ProjectName}-publisher-codepipeline-name' }

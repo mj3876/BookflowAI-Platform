@@ -1,0 +1,128 @@
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW - Tier 30 - EKS Control Plane (BookFlow AI VPC Private) + Access Entry + OIDC + KMS envelope encryption
+Parameters:
+  ProjectName:
+    Type: String
+    Default: bookflow
+  ClusterName:
+    Type: String
+    Default: bookflow-eks
+  KubernetesVersion:
+    Type: String
+    Default: '1.33'
+  CiCdRoleArn:
+    Type: String
+    Default: ''
+    Description: CodeBuild/CodePipeline IAM Role ARN ( CICD tier    update-stack  )
+
+Conditions:
+  HasCiCdRole: !Not [!Equals [!Ref CiCdRoleArn, '']]
+
+Resources:
+  # ─── EKS Service Role (cluster operation) ───
+  ClusterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-eks-cluster-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: eks.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+
+  # ─── Cluster SG (Custom · default ) ───
+  ClusterSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${ProjectName}-eks-cluster-sg
+      GroupDescription: BOOKFLOW EKS cluster control plane SG
+      VpcId: !ImportValue
+        Fn::Sub: ${ProjectName}-vpc-bookflow-ai-id
+      Tags: [{ Key: Name, Value: !Sub '${ProjectName}-eks-cluster-sg' }]
+
+  # ─── CloudWatch Log Group (cluster logs) ───
+  ClusterLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub /aws/eks/${ClusterName}/cluster
+      RetentionInDays: 7
+
+  # ─── EKS Cluster Control Plane ───
+  EksCluster:
+    Type: AWS::EKS::Cluster
+    DependsOn: ClusterLogGroup
+    Properties:
+      Name: !Ref ClusterName
+      Version: !Ref KubernetesVersion
+      RoleArn: !GetAtt ClusterRole.Arn
+      ResourcesVpcConfig:
+        SubnetIds:
+          - !ImportValue
+            Fn::Sub: ${ProjectName}-subnet-bookflow-ai-private-az1
+          - !ImportValue
+            Fn::Sub: ${ProjectName}-subnet-bookflow-ai-private-az2
+        SecurityGroupIds: [!Ref ClusterSecurityGroup]
+        EndpointPublicAccess: true
+        EndpointPrivateAccess: true
+      EncryptionConfig:
+        - Provider:
+            KeyArn: !ImportValue
+              Fn::Sub: ${ProjectName}-kms-eks-arn
+          Resources: [secrets]
+      Logging:
+        ClusterLogging:
+          EnabledTypes:
+            - Type: api
+            - Type: audit
+            - Type: authenticator
+            - Type: controllerManager
+            - Type: scheduler
+      AccessConfig:
+        AuthenticationMode: API
+        BootstrapClusterCreatorAdminPermissions: true
+      Tags: [{ Key: Name, Value: !Ref ClusterName }]
+
+  # ─── OIDC Provider (IRSA  Pod  AWS API ) ───
+  OidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: !GetAtt EksCluster.OpenIdConnectIssuerUrl
+      ClientIdList: [sts.amazonaws.com]
+      ThumbprintList: [9e99a48a9960b14926bb7f3b02e22da2b0ab7280]
+
+  # ─── Access Entry (CI/CD  ·  · Ansible Node  K8s  Access Entry ) ───
+  CiCdAccessEntry:
+    Type: AWS::EKS::AccessEntry
+    Condition: HasCiCdRole
+    Properties:
+      ClusterName: !Ref EksCluster
+      PrincipalArn: !Ref CiCdRoleArn
+      Type: STANDARD
+      AccessPolicies:
+        - PolicyArn: arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy
+          AccessScope: { Type: cluster }
+
+Outputs:
+  ClusterName:
+    Value: !Ref EksCluster
+    Export: { Name: !Sub '${ProjectName}-eks-cluster-name' }
+  ClusterArn:
+    Value: !GetAtt EksCluster.Arn
+    Export: { Name: !Sub '${ProjectName}-eks-cluster-arn' }
+  ClusterEndpoint:
+    Value: !GetAtt EksCluster.Endpoint
+    Export: { Name: !Sub '${ProjectName}-eks-cluster-endpoint' }
+  ClusterSecurityGroupId:
+    Value: !GetAtt EksCluster.ClusterSecurityGroupId
+    Export: { Name: !Sub '${ProjectName}-eks-cluster-sg-id' }
+  OidcIssuerUrl:
+    Value: !GetAtt EksCluster.OpenIdConnectIssuerUrl
+    Export: { Name: !Sub '${ProjectName}-eks-oidc-issuer-url' }
+  OidcProviderArn:
+    Value: !Ref OidcProvider
+    Export: { Name: !Sub '${ProjectName}-eks-oidc-provider-arn' }

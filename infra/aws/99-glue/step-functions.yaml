@@ -1,0 +1,177 @@
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW - Tier 99-glue - ETL3 Step Functions State Machine (orchestrates 6 Glue Jobs)
+Parameters:
+  ProjectName:
+    Type: String
+    Default: bookflow
+
+Resources:
+  # ─── Step Functions IAM Role ───
+  StateMachineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-sfn-etl3-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: states.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: GlueJobInvoke
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - glue:StartJobRun
+                  - glue:GetJobRun
+                  - glue:GetJobRuns
+                  - glue:BatchStopJobRun
+                Resource: !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:job/${ProjectName}-*
+        - PolicyName: CwLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogDelivery
+                  - logs:GetLogDelivery
+                  - logs:UpdateLogDelivery
+                  - logs:DeleteLogDelivery
+                  - logs:ListLogDeliveries
+                  - logs:PutResourcePolicy
+                  - logs:DescribeResourcePolicies
+                  - logs:DescribeLogGroups
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - logs:PutLogEvents
+                  - logs:CreateLogStream
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/vendedlogs/states/${ProjectName}-*
+
+  # ─── CloudWatch Log Group ───
+  StateMachineLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub /aws/vendedlogs/states/${ProjectName}-etl3
+      RetentionInDays: 7
+
+  # ─── ETL3 State Machine (Parallel raw → agg → features) ───
+  Etl3StateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    DependsOn: StateMachineRole
+    Properties:
+      StateMachineName: !Sub ${ProjectName}-etl3
+      RoleArn: !GetAtt StateMachineRole.Arn
+      StateMachineType: STANDARD
+      LoggingConfiguration:
+        Level: ALL
+        IncludeExecutionData: true
+        Destinations:
+          - CloudWatchLogsLogGroup:
+              LogGroupArn: !GetAtt StateMachineLogGroup.Arn
+      DefinitionString: !Sub
+        - |
+          {
+            "Comment": "BOOKFLOW ETL3 · raw_*_mart parallel → sales_daily_agg → features_build",
+            "StartAt": "ParallelRawMart",
+            "States": {
+              "ParallelRawMart": {
+                "Type": "Parallel",
+                "Branches": [
+                  {
+                    "StartAt": "RawPosMart",
+                    "States": {
+                      "RawPosMart": {
+                        "Type": "Task",
+                        "Resource": "arn:aws:states:::glue:startJobRun.sync",
+                        "Parameters": { "JobName": "${PosJob}" },
+                        "End": true,
+                        "Retry": [{ "ErrorEquals": ["States.ALL"], "IntervalSeconds": 30, "MaxAttempts": 2, "BackoffRate": 2.0 }]
+                      }
+                    }
+                  },
+                  {
+                    "StartAt": "RawSnsMart",
+                    "States": {
+                      "RawSnsMart": {
+                        "Type": "Task",
+                        "Resource": "arn:aws:states:::glue:startJobRun.sync",
+                        "Parameters": { "JobName": "${SnsJob}" },
+                        "End": true,
+                        "Retry": [{ "ErrorEquals": ["States.ALL"], "IntervalSeconds": 30, "MaxAttempts": 2, "BackoffRate": 2.0 }]
+                      }
+                    }
+                  },
+                  {
+                    "StartAt": "RawAladinMart",
+                    "States": {
+                      "RawAladinMart": {
+                        "Type": "Task",
+                        "Resource": "arn:aws:states:::glue:startJobRun.sync",
+                        "Parameters": { "JobName": "${AladinJob}" },
+                        "End": true,
+                        "Retry": [{ "ErrorEquals": ["States.ALL"], "IntervalSeconds": 30, "MaxAttempts": 2, "BackoffRate": 2.0 }]
+                      }
+                    }
+                  },
+                  {
+                    "StartAt": "RawEventMart",
+                    "States": {
+                      "RawEventMart": {
+                        "Type": "Task",
+                        "Resource": "arn:aws:states:::glue:startJobRun.sync",
+                        "Parameters": { "JobName": "${EventJob}" },
+                        "End": true,
+                        "Retry": [{ "ErrorEquals": ["States.ALL"], "IntervalSeconds": 30, "MaxAttempts": 2, "BackoffRate": 2.0 }]
+                      }
+                    }
+                  }
+                ],
+                "Next": "SalesDailyAgg",
+                "Catch": [{ "ErrorEquals": ["States.ALL"], "Next": "Failed" }]
+              },
+              "SalesDailyAgg": {
+                "Type": "Task",
+                "Resource": "arn:aws:states:::glue:startJobRun.sync",
+                "Parameters": { "JobName": "${AggJob}" },
+                "Next": "FeaturesBuild",
+                "Retry": [{ "ErrorEquals": ["States.ALL"], "IntervalSeconds": 30, "MaxAttempts": 2, "BackoffRate": 2.0 }],
+                "Catch": [{ "ErrorEquals": ["States.ALL"], "Next": "Failed" }]
+              },
+              "FeaturesBuild": {
+                "Type": "Task",
+                "Resource": "arn:aws:states:::glue:startJobRun.sync",
+                "Parameters": { "JobName": "${FeaturesJob}" },
+                "Next": "Done",
+                "Retry": [{ "ErrorEquals": ["States.ALL"], "IntervalSeconds": 30, "MaxAttempts": 2, "BackoffRate": 2.0 }],
+                "Catch": [{ "ErrorEquals": ["States.ALL"], "Next": "Failed" }]
+              },
+              "Done": { "Type": "Succeed" },
+              "Failed": { "Type": "Fail", "Cause": "ETL3 pipeline failure", "Error": "Etl3Failed" }
+            }
+          }
+        - PosJob: !ImportValue
+            Fn::Sub: ${ProjectName}-glue-job-raw-pos-mart
+          SnsJob: !ImportValue
+            Fn::Sub: ${ProjectName}-glue-job-raw-sns-mart
+          AladinJob: !ImportValue
+            Fn::Sub: ${ProjectName}-glue-job-raw-aladin-mart
+          EventJob: !ImportValue
+            Fn::Sub: ${ProjectName}-glue-job-raw-event-mart
+          AggJob: !ImportValue
+            Fn::Sub: ${ProjectName}-glue-job-sales-daily-agg
+          FeaturesJob: !ImportValue
+            Fn::Sub: ${ProjectName}-glue-job-features-build
+      Tags: [{ Key: Name, Value: !Sub '${ProjectName}-etl3' }]
+
+Outputs:
+  Etl3StateMachineArn:
+    Value: !Ref Etl3StateMachine
+    Export: { Name: !Sub '${ProjectName}-sfn-etl3-arn' }
+  Etl3StateMachineName:
+    Value: !GetAtt Etl3StateMachine.Name
+    Export: { Name: !Sub '${ProjectName}-sfn-etl3-name' }

@@ -1,4 +1,5 @@
 // modules/keyvault.bicep
+// Key Vault — RBAC 모드, Function / Logic App / 보안 관리자 권한 부여
 
 param location string
 param prefix string
@@ -7,8 +8,10 @@ param functionIdentityPrincipalId string
 param logicappIdentityPrincipalId string
 param securityAdminObjectId string
 
-var keyVaultAdministratorRoleId = '00482a5a-887f-4fb3-b363-3b7fe8e74483'
-var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
+// Key Vault Secrets User role ID (built-in)
+var kvSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
+// Key Vault Administrator role ID (built-in)
+var kvAdminRoleId = '00482a5a-887f-4fb3-b363-3b7fe8e74483'
 
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: 'kv-${prefix}'
@@ -26,46 +29,43 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
     networkAcls: {
       defaultAction: 'Allow'
       bypass: 'AzureServices'
-      ipRules: []
-      virtualNetworkRules: []
     }
   }
 }
 
-// Security Administrator → Key Vault Administrator
-resource roleAssignAdmin 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(keyVault.id, securityAdminObjectId, keyVaultAdministratorRoleId)
+// Function App — Key Vault Secrets User
+resource funcSecretsRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(keyVault.id, functionIdentityPrincipalId, kvSecretsUserRoleId)
   scope: keyVault
   properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultAdministratorRoleId)
-    principalId: securityAdminObjectId
-    principalType: 'User'
-  }
-}
-
-// Function App 관리 ID → Key Vault Secrets User
-resource roleAssignFunction 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(keyVault.id, functionIdentityPrincipalId, keyVaultSecretsUserRoleId)
-  scope: keyVault
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', kvSecretsUserRoleId)
     principalId: functionIdentityPrincipalId
     principalType: 'ServicePrincipal'
   }
 }
 
-// Logic Apps 관리 ID → Key Vault Secrets User
-resource roleAssignLogicApp 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(keyVault.id, logicappIdentityPrincipalId, keyVaultSecretsUserRoleId)
+// Logic App — Key Vault Secrets User
+resource laSecretsRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(keyVault.id, logicappIdentityPrincipalId, kvSecretsUserRoleId)
   scope: keyVault
   properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', kvSecretsUserRoleId)
     principalId: logicappIdentityPrincipalId
     principalType: 'ServicePrincipal'
   }
 }
 
-// 진단 설정
+// 보안 관리자 — Key Vault Administrator
+resource adminRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(keyVault.id, securityAdminObjectId, kvAdminRoleId)
+  scope: keyVault
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', kvAdminRoleId)
+    principalId: securityAdminObjectId
+    principalType: 'User'
+  }
+}
+
 resource kvDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
   name: 'diag-${prefix}-kv'
   scope: keyVault
@@ -74,10 +74,6 @@ resource kvDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview
     logs: [
       {
         categoryGroup: 'audit'
-        enabled: true
-      }
-      {
-        categoryGroup: 'allLogs'
         enabled: true
       }
     ]

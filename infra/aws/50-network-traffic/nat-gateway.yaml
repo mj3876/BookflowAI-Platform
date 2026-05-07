@@ -1,0 +1,63 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW - Tier 50 - NAT Gateway (Egress VPC Public, single AZ default; EnableAz2=true for multi-AZ HA)
+Parameters:
+  ProjectName:
+    Type: String
+    Default: bookflow
+  EnableAz2:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: Enable a second NAT Gateway in AZ2 for multi-AZ HA. Doubles cost (~$0.045/hr extra). Default false (single AZ, demo/dev).
+
+Conditions:
+  HasAz2: !Equals [!Ref EnableAz2, 'true']
+
+Resources:
+  NatEipAz1:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags: [{ Key: Name, Value: !Sub '${ProjectName}-nat-eip-az1' }]
+
+  NatGatewayAz1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEipAz1.AllocationId
+      SubnetId: !ImportValue
+        Fn::Sub: ${ProjectName}-subnet-egress-public-az1
+      ConnectivityType: public
+      Tags: [{ Key: Name, Value: !Sub '${ProjectName}-nat-az1' }]
+
+  NatEipAz2:
+    Type: AWS::EC2::EIP
+    Condition: HasAz2
+    Properties:
+      Domain: vpc
+      Tags: [{ Key: Name, Value: !Sub '${ProjectName}-nat-eip-az2' }]
+
+  NatGatewayAz2:
+    Type: AWS::EC2::NatGateway
+    Condition: HasAz2
+    Properties:
+      AllocationId: !GetAtt NatEipAz2.AllocationId
+      SubnetId: !ImportValue
+        Fn::Sub: ${ProjectName}-subnet-egress-public-az2
+      ConnectivityType: public
+      Tags: [{ Key: Name, Value: !Sub '${ProjectName}-nat-az2' }]
+
+Outputs:
+  NatGatewayAz1Id:
+    Value: !Ref NatGatewayAz1
+    Export: { Name: !Sub '${ProjectName}-nat-az1-id' }
+  NatEipAz1Address:
+    Value: !Ref NatEipAz1
+    Export: { Name: !Sub '${ProjectName}-nat-eip-az1' }
+  NatGatewayAz2Id:
+    Condition: HasAz2
+    Value: !Ref NatGatewayAz2
+    Export: { Name: !Sub '${ProjectName}-nat-az2-id' }
+  NatEipAz2Address:
+    Condition: HasAz2
+    Value: !Ref NatEipAz2
+    Export: { Name: !Sub '${ProjectName}-nat-eip-az2' }

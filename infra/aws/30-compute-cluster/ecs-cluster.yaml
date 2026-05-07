@@ -1,0 +1,44 @@
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW - Tier 30 - ECS Cluster + Fargate Capacity Provider + Container Insights
+Parameters:
+  ProjectName:
+    Type: String
+    Default: bookflow
+  ClusterName:
+    Type: String
+    Default: bookflow-ecs
+
+Resources:
+  EcsCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Ref ClusterName
+      CapacityProviders: [FARGATE, FARGATE_SPOT]
+      DefaultCapacityProviderStrategy:
+        - CapacityProvider: FARGATE
+          Weight: 1
+          Base: 1
+      ClusterSettings:
+        - Name: containerInsights
+          Value: enabled
+      Tags: [{ Key: Name, Value: !Ref ClusterName }]
+
+  # Task   LogGroup ( ECS Service   Group  stream)
+  EcsLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub /aws/ecs/${ClusterName}
+      RetentionInDays: 7
+
+Outputs:
+  ClusterName:
+    Value: !Ref EcsCluster
+    Export: { Name: !Sub '${ProjectName}-ecs-cluster-name' }
+  ClusterArn:
+    Value: !GetAtt EcsCluster.Arn
+    Export: { Name: !Sub '${ProjectName}-ecs-cluster-arn' }
+  EcsLogGroupName:
+    Value: !Ref EcsLogGroup
+    Export: { Name: !Sub '${ProjectName}-ecs-log-group-name' }

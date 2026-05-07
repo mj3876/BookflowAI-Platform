@@ -1,55 +1,55 @@
-#!/bin/bash
+﻿#!/bin/bash
 # scripts/cleanup-selective.sh
-# 선택적 삭제 — 재배포 가능한 리소스만 제거
+#   —    
 #
-# 보존 (절대 삭제 안 함):
-#   - Entra ID 앱/그룹  : BookFlow-Internal, BF-* 그룹
-#   - Public IP 2개     : pip-bookflow-vpngw-active/standby
+#  (   ):
+#   - Entra ID /  : BookFlow-Internal, BF-* 
+#   - Public IP 2     : pip-bookflow-vpngw-active/standby
 #
-# 삭제 순서 (의존성 역순):
+#   ( ):
 #   VPN Connection → Local NW GW → VPN Gateway
 #   → Logic Apps → Event Grid → Function App → App Svc Plan → Storage
-#   → Key Vault → Log Analytics → VNet → NSG → 관리 ID
+#   → Key Vault → Log Analytics → VNet → NSG →  ID
 
 set -e
 export MSYS_NO_PATHCONV=1
 
 RESOURCE_GROUP="rg-bookflow"
-PREFIX="bookflow"
+PREFIX="bookflow01"
 
 echo "========================================"
-echo " BOOKFLOW 선택적 리소스 삭제"
+echo " BOOKFLOW   "
 echo "========================================"
 echo ""
-echo "보존:"
-echo "  ✓ Entra ID 앱  : BookFlow-Internal"
-echo "  ✓ Entra ID 그룹: BF-HeadQuarter / BF-Logistics / BF-Branch / BF-Admin"
+echo ":"
+echo "  ✓ Entra ID   : BookFlow-Internal"
+echo "  ✓ Entra ID : BF-HeadQuarter / BF-Logistics / BF-Branch / BF-Admin"
 echo "  ✓ Public IP    : pip-${PREFIX}-vpngw-active"
 echo "  ✓ Public IP    : pip-${PREFIX}-vpngw-standby"
 echo ""
-echo "삭제 대상:"
+echo " :"
 echo "  VPN Connection, Local NW GW, VPN Gateway"
 echo "  Logic Apps x2, Event Grid, Function App"
 echo "  App Svc Plan, Storage Account"
-echo "  Key Vault (soft-delete → 재배포 시 자동 복구)"
-echo "  Log Analytics, VNet, NSG x2, 관리 ID x2"
+echo "  Key Vault (soft-delete →    )"
+echo "  Log Analytics, VNet, NSG x2,  ID x2"
 echo ""
-echo "계속하려면 Enter, 중단하려면 Ctrl+C"
+echo " Enter,  Ctrl+C"
 read
 
 echo ""
-echo "[0] 구독 확인"
+echo "[0]  "
 az account show --output table
 echo ""
-echo "계속하려면 Enter, 중단하려면 Ctrl+C"
+echo " Enter,  Ctrl+C"
 read
 
-# 리소스가 존재하는지 확인하는 헬퍼
+#    
 _exists() { [ -n "$1" ] && [ "$1" != "None" ]; }
 
 # ── 1. VPN Connection ─────────────────────────────────────
 echo ""
-echo "[1] VPN Connection 삭제"
+echo "[1] VPN Connection "
 VAL=$(az network vpn-connection show \
   --resource-group "$RESOURCE_GROUP" \
   --name "conn-${PREFIX}-aws-active" \
@@ -58,14 +58,14 @@ if _exists "$VAL"; then
   az network vpn-connection delete \
     --resource-group "$RESOURCE_GROUP" \
     --name "conn-${PREFIX}-aws-active"
-  echo "  ✓ 삭제: conn-${PREFIX}-aws-active"
+  echo "  ✓ : conn-${PREFIX}-aws-active"
 else
-  echo "  스킵: conn-${PREFIX}-aws-active 없음"
+  echo "  : conn-${PREFIX}-aws-active "
 fi
 
 # ── 2. Local Network Gateway ──────────────────────────────
 echo ""
-echo "[2] Local Network Gateway 삭제"
+echo "[2] Local Network Gateway "
 VAL=$(az network local-gateway show \
   --resource-group "$RESOURCE_GROUP" \
   --name "lng-${PREFIX}-aws-active" \
@@ -74,41 +74,41 @@ if _exists "$VAL"; then
   az network local-gateway delete \
     --resource-group "$RESOURCE_GROUP" \
     --name "lng-${PREFIX}-aws-active"
-  echo "  ✓ 삭제: lng-${PREFIX}-aws-active"
+  echo "  ✓ : lng-${PREFIX}-aws-active"
 else
-  echo "  스킵: lng-${PREFIX}-aws-active 없음"
+  echo "  : lng-${PREFIX}-aws-active "
 fi
 
-# ── 3. VPN Gateway (PIP 유지) ─────────────────────────────
+# ── 3. VPN Gateway (PIP ) ─────────────────────────────
 echo ""
-echo "[3] VPN Gateway 삭제 (PIP 보존)"
+echo "[3] VPN Gateway  (PIP )"
 VAL=$(az network vnet-gateway show \
   --resource-group "$RESOURCE_GROUP" \
   --name "vpngw-${PREFIX}" \
   --query name --output tsv 2>/dev/null || echo "")
 if _exists "$VAL"; then
-  echo "  삭제 중 (10~20분 소요)..."
+  echo "    (10~20 )..."
   az network vnet-gateway delete \
     --resource-group "$RESOURCE_GROUP" \
     --name "vpngw-${PREFIX}"
-  echo "  ✓ 삭제: vpngw-${PREFIX}"
+  echo "  ✓ : vpngw-${PREFIX}"
 else
-  echo "  스킵: vpngw-${PREFIX} 없음"
+  echo "  : vpngw-${PREFIX} "
 fi
 
 echo ""
-echo "  [PIP 보존 확인]"
+echo "  [PIP  ]"
 for PIP in "pip-${PREFIX}-vpngw-active" "pip-${PREFIX}-vpngw-standby"; do
   IP=$(az network public-ip show \
     --resource-group "$RESOURCE_GROUP" \
     --name "$PIP" \
-    --query ipAddress --output tsv 2>/dev/null || echo "없음")
-  echo "  ✓ 보존: $PIP = $IP"
+    --query ipAddress --output tsv 2>/dev/null || echo "")
+  echo "  ✓ : $PIP = $IP"
 done
 
 # ── 4. Logic Apps ─────────────────────────────────────────
 echo ""
-echo "[4] Logic Apps 삭제"
+echo "[4] Logic Apps "
 for LA in "la-${PREFIX}-notification" "la-${PREFIX}-secret-rotation"; do
   VAL=$(az logic workflow show \
     --resource-group "$RESOURCE_GROUP" \
@@ -119,15 +119,15 @@ for LA in "la-${PREFIX}-notification" "la-${PREFIX}-secret-rotation"; do
       --resource-group "$RESOURCE_GROUP" \
       --name "$LA" \
       --yes
-    echo "  ✓ 삭제: $LA"
+    echo "  ✓ : $LA"
   else
-    echo "  스킵: $LA 없음"
+    echo "  : $LA "
   fi
 done
 
 # ── 5. Event Grid System Topic ────────────────────────────
 echo ""
-echo "[5] Event Grid 삭제"
+echo "[5] Event Grid "
 VAL=$(az eventgrid system-topic show \
   --resource-group "$RESOURCE_GROUP" \
   --name "egt-${PREFIX}-keyvault" \
@@ -137,14 +137,14 @@ if _exists "$VAL"; then
     --resource-group "$RESOURCE_GROUP" \
     --name "egt-${PREFIX}-keyvault" \
     --yes
-  echo "  ✓ 삭제: egt-${PREFIX}-keyvault"
+  echo "  ✓ : egt-${PREFIX}-keyvault"
 else
-  echo "  스킵: egt-${PREFIX}-keyvault 없음"
+  echo "  : egt-${PREFIX}-keyvault "
 fi
 
 # ── 6. Function App ───────────────────────────────────────
 echo ""
-echo "[6] Function App 삭제"
+echo "[6] Function App "
 VAL=$(az functionapp show \
   --resource-group "$RESOURCE_GROUP" \
   --name "func-${PREFIX}-sync" \
@@ -153,14 +153,14 @@ if _exists "$VAL"; then
   az functionapp delete \
     --resource-group "$RESOURCE_GROUP" \
     --name "func-${PREFIX}-sync"
-  echo "  ✓ 삭제: func-${PREFIX}-sync"
+  echo "  ✓ : func-${PREFIX}-sync"
 else
-  echo "  스킵: func-${PREFIX}-sync 없음"
+  echo "  : func-${PREFIX}-sync "
 fi
 
 # ── 7. App Service Plan ───────────────────────────────────
 echo ""
-echo "[7] App Service Plan 삭제"
+echo "[7] App Service Plan "
 VAL=$(az appservice plan show \
   --resource-group "$RESOURCE_GROUP" \
   --name "asp-${PREFIX}" \
@@ -170,14 +170,14 @@ if _exists "$VAL"; then
     --resource-group "$RESOURCE_GROUP" \
     --name "asp-${PREFIX}" \
     --yes
-  echo "  ✓ 삭제: asp-${PREFIX}"
+  echo "  ✓ : asp-${PREFIX}"
 else
-  echo "  스킵: asp-${PREFIX} 없음"
+  echo "  : asp-${PREFIX} "
 fi
 
 # ── 8. Storage Account ────────────────────────────────────
 echo ""
-echo "[8] Storage Account 삭제"
+echo "[8] Storage Account "
 ST_NAME="st${PREFIX//-/}func"
 VAL=$(az storage account show \
   --resource-group "$RESOURCE_GROUP" \
@@ -188,14 +188,14 @@ if _exists "$VAL"; then
     --resource-group "$RESOURCE_GROUP" \
     --name "$ST_NAME" \
     --yes
-  echo "  ✓ 삭제: $ST_NAME"
+  echo "  ✓ : $ST_NAME"
 else
-  echo "  스킵: $ST_NAME 없음"
+  echo "  : $ST_NAME "
 fi
 
-# ── 9. Key Vault (soft-delete 전환) ───────────────────────
+# ── 9. Key Vault (soft-delete ) ───────────────────────
 echo ""
-echo "[9] Key Vault 삭제 (soft-delete — 시크릿 보존, 재배포 시 자동 복구)"
+echo "[9] Key Vault  (soft-delete —  ,    )"
 VAL=$(az keyvault show \
   --resource-group "$RESOURCE_GROUP" \
   --name "kv-${PREFIX}" \
@@ -204,14 +204,14 @@ if _exists "$VAL"; then
   az keyvault delete \
     --resource-group "$RESOURCE_GROUP" \
     --name "kv-${PREFIX}"
-  echo "  ✓ soft-delete 전환: kv-${PREFIX} (90일 유지, 시크릿 보존)"
+  echo "  ✓ soft-delete : kv-${PREFIX} (90 ,  )"
 else
-  echo "  스킵: kv-${PREFIX} 없음 (이미 soft-delete 상태일 수 있음)"
+  echo "  : kv-${PREFIX}  ( soft-delete   )"
 fi
 
 # ── 10. Log Analytics ─────────────────────────────────────
 echo ""
-echo "[10] Log Analytics Workspace 삭제"
+echo "[10] Log Analytics Workspace "
 VAL=$(az monitor log-analytics workspace show \
   --resource-group "$RESOURCE_GROUP" \
   --workspace-name "law-${PREFIX}" \
@@ -222,14 +222,14 @@ if _exists "$VAL"; then
     --workspace-name "law-${PREFIX}" \
     --force \
     --yes
-  echo "  ✓ 삭제: law-${PREFIX}"
+  echo "  ✓ : law-${PREFIX}"
 else
-  echo "  스킵: law-${PREFIX} 없음"
+  echo "  : law-${PREFIX} "
 fi
 
 # ── 11. VNet ──────────────────────────────────────────────
 echo ""
-echo "[11] VNet 삭제"
+echo "[11] VNet "
 VAL=$(az network vnet show \
   --resource-group "$RESOURCE_GROUP" \
   --name "vnet-${PREFIX}" \
@@ -238,14 +238,14 @@ if _exists "$VAL"; then
   az network vnet delete \
     --resource-group "$RESOURCE_GROUP" \
     --name "vnet-${PREFIX}"
-  echo "  ✓ 삭제: vnet-${PREFIX}"
+  echo "  ✓ : vnet-${PREFIX}"
 else
-  echo "  스킵: vnet-${PREFIX} 없음"
+  echo "  : vnet-${PREFIX} "
 fi
 
 # ── 12. NSG ───────────────────────────────────────────────
 echo ""
-echo "[12] NSG 삭제"
+echo "[12] NSG "
 for NSG in "nsg-${PREFIX}-services" "nsg-${PREFIX}-function"; do
   VAL=$(az network nsg show \
     --resource-group "$RESOURCE_GROUP" \
@@ -255,15 +255,15 @@ for NSG in "nsg-${PREFIX}-services" "nsg-${PREFIX}-function"; do
     az network nsg delete \
       --resource-group "$RESOURCE_GROUP" \
       --name "$NSG"
-    echo "  ✓ 삭제: $NSG"
+    echo "  ✓ : $NSG"
   else
-    echo "  스킵: $NSG 없음"
+    echo "  : $NSG "
   fi
 done
 
-# ── 13. 관리 ID ───────────────────────────────────────────
+# ── 13.  ID ───────────────────────────────────────────
 echo ""
-echo "[13] 관리 ID 삭제"
+echo "[13]  ID "
 for ID_NAME in "id-${PREFIX}-function" "id-${PREFIX}-logicapp"; do
   VAL=$(az identity show \
     --resource-group "$RESOURCE_GROUP" \
@@ -273,17 +273,17 @@ for ID_NAME in "id-${PREFIX}-function" "id-${PREFIX}-logicapp"; do
     az identity delete \
       --resource-group "$RESOURCE_GROUP" \
       --name "$ID_NAME"
-    echo "  ✓ 삭제: $ID_NAME"
+    echo "  ✓ : $ID_NAME"
   else
-    echo "  스킵: $ID_NAME 없음"
+    echo "  : $ID_NAME "
   fi
 done
 
-# ── 14. ARM 배포 이력 삭제 ───────────────────────────────
-# deploy-all.sh의 check_deployed()는 이력 기반으로 스킵 여부를 판단함.
-# 이력이 남아있으면 재배포 시 모든 스택이 "이미 완료"로 스킵되므로 반드시 제거.
+# ── 14. ARM    ───────────────────────────────
+# deploy-all.sh check_deployed()     .
+#       " "   .
 echo ""
-echo "[14] ARM 배포 이력 초기화"
+echo "[14] ARM   "
 for DEPLOY in identity-deploy nsg-deploy monitor-deploy vnet-deploy \
               keyvault-deploy function-deploy eventgrid-deploy \
               logicapp-deploy vpn-deploy; do
@@ -297,49 +297,49 @@ for DEPLOY in identity-deploy nsg-deploy monitor-deploy vnet-deploy \
       --resource-group "$RESOURCE_GROUP" \
       --name "$DEPLOY" \
       --no-wait
-    echo "  ✓ 이력 삭제: $DEPLOY"
+    echo "  ✓  : $DEPLOY"
   else
-    echo "  스킵: $DEPLOY 이력 없음"
+    echo "  : $DEPLOY  "
   fi
 done
 
-# ── 최종 확인 ─────────────────────────────────────────────
+# ──   ─────────────────────────────────────────────
 echo ""
 echo "════════════════════════════════════════"
-echo " 최종 확인"
+echo "  "
 echo "════════════════════════════════════════"
 
 echo ""
-echo "[확인 1] 리소스 그룹 내 남은 리소스"
+echo "[ 1]     "
 az resource list \
   --resource-group "$RESOURCE_GROUP" \
   --query "[].{type:type, name:name}" \
   --output table
 
 echo ""
-echo "[확인 2] PIP 보존"
+echo "[ 2] PIP "
 for PIP in "pip-${PREFIX}-vpngw-active" "pip-${PREFIX}-vpngw-standby"; do
   IP=$(az network public-ip show \
     --resource-group "$RESOURCE_GROUP" \
     --name "$PIP" \
-    --query ipAddress --output tsv 2>/dev/null || echo "❌ 없음")
+    --query ipAddress --output tsv 2>/dev/null || echo "❌ ")
   echo "  $PIP = $IP"
 done
 
 echo ""
-echo "[확인 3] Entra ID 앱 보존"
+echo "[ 3] Entra ID  "
 APP_ID=$(az ad app list \
   --display-name "BookFlow-Internal" \
-  --query "[0].appId" --output tsv 2>/dev/null || echo "❌ 없음")
+  --query "[0].appId" --output tsv 2>/dev/null || echo "❌ ")
 echo "  BookFlow-Internal App ID = $APP_ID"
 
 echo ""
 echo "========================================"
-echo " 선택적 삭제 완료"
+echo "   "
 echo "========================================"
 echo ""
-echo "재배포 시:"
+echo " :"
 echo "  bash scripts/deploy-all.sh"
-echo "    → Key Vault 자동 복구 (시크릿 보존)"
-echo "  VPN 재연결 시:"
-echo "    bash scripts/deploy-vpn.sh  (같은 PIP 재사용 → IP 변경 없음)"
+echo "    → Key Vault   ( )"
+echo "  VPN  :"
+echo "    bash scripts/deploy-vpn.sh  ( PIP  → IP  )"

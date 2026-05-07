@@ -1,20 +1,16 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Description: >
-  BOOKFLOW · Tier 00 · ACM
-  Client VPN server cert skeleton (실 cert는 easy-rsa로 생성 후 aws acm import-certificate 수동 1회)
-  이 yaml은 "어떤 cert를 쓸지" ARN을 Parameter Store에 저장하는 역할만.
-
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW - Tier 00 - ACM Client VPN server cert skeleton (easy-rsa generated, imported via aws acm import-certificate; ARN stored in Parameter Store)
 Parameters:
   ProjectName:
     Type: String
     Default: bookflow
   ClientVpnServerCertArn:
     Type: String
-    Description: easy-rsa로 생성 후 aws acm import-certificate 해서 받은 ARN
-    Default: ''  # 초기엔 비워둠. Day 0에 cert 준비 후 aws ssm put-parameter 로 업데이트
+    Description: easy-rsa   aws acm import-certificate   ARN
+    Default: ''  #  . Day 0 cert   aws ssm put-parameter  
   ClientVpnClientCaCertArn:
     Type: String
-    Description: Client 쪽 CA 인증서 ARN
+    Description: Client  CA  ARN
     Default: ''
 
 Conditions:
@@ -22,7 +18,7 @@ Conditions:
   HasClientCaCert: !Not [!Equals [!Ref ClientVpnClientCaCertArn, '']]
 
 Resources:
-  # Parameter Store에 cert ARN 저장 (다른 stack이 참조)
+  # Parameter Store cert ARN  ( stack )
   ServerCertArnParam:
     Type: AWS::SSM::Parameter
     Condition: HasServerCert
@@ -30,7 +26,7 @@ Resources:
       Name: !Sub /${ProjectName}/acm/client-vpn-server-cert-arn
       Type: String
       Value: !Ref ClientVpnServerCertArn
-      Description: Client VPN 서버 인증서 ARN (easy-rsa 생성 · ACM import)
+      Description: Client VPN   ARN (easy-rsa  · ACM import)
 
   ClientCaCertArnParam:
     Type: AWS::SSM::Parameter
@@ -39,7 +35,7 @@ Resources:
       Name: !Sub /${ProjectName}/acm/client-vpn-client-ca-cert-arn
       Type: String
       Value: !Ref ClientVpnClientCaCertArn
-      Description: Client VPN 클라이언트 CA 인증서 ARN
+      Description: Client VPN  CA  ARN
 
 Outputs:
   ServerCertArn:
@@ -56,6 +52,6 @@ Outputs:
 
   SetupInstructions:
     Value: >
-      easy-rsa로 server.crt + ca.crt 생성 후
+      easy-rsa server.crt + ca.crt  
       'aws acm import-certificate --certificate file://server.crt --private-key file://server.key --certificate-chain file://ca.crt'
-      실행. 받은 ARN을 이 stack에 Parameter로 재-deploy.
+      .  ARN  stack Parameter -deploy.

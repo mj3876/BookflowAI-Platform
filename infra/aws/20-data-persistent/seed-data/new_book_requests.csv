@@ -1,0 +1,21 @@
+id,publisher_id,isbn13,title,author,genre,expected_pub_date,estimated_initial_sales,marketing_plan,similar_books,target_segments,status,created_at,fetched_at,approved_at
+1,409,9796971874823,Forthcoming title 1,TBD,self-help,2026-05-25,1022,Standard launch + SNS push.,[],"[""20s-female"", ""metro""]",NEW,2026-04-12T18:01:35+09:00,,
+2,72,9796127652971,Forthcoming title 2,TBD,fiction,2026-06-19,1784,Standard launch + SNS push.,[],"[""20s-female"", ""metro""]",NEW,2026-04-11T18:01:35+09:00,,
+3,238,9797912430366,Forthcoming title 3,TBD,fiction,2026-06-18,2066,Standard launch + SNS push.,[],"[""20s-female"", ""metro""]",NEW,2026-04-14T18:01:35+09:00,,
+4,638,9793453235698,Forthcoming title 4,TBD,fiction,2026-06-01,4438,Standard launch + SNS push.,[],"[""20s-female"", ""metro""]",NEW,2026-04-09T18:01:35+09:00,,
+5,232,9792549327501,Forthcoming title 5,TBD,self-help,2026-06-13,3688,Standard launch + SNS push.,[],"[""20s-female"", ""metro""]",NEW,2026-04-23T18:01:35+09:00,,
+6,401,9796725577009,Forthcoming title 6,TBD,self-help,2026-06-20,3040,Standard launch + SNS push.,[],"[""20s-female"", ""metro""]",FETCHED,2026-04-14T18:01:35+09:00,2026-04-14T19:01:35+09:00,
+7,311,9793841401768,Forthcoming title 7,TBD,economics,2026-05-08,2046,Standard launch + SNS push.,[],"[""20s-female"", ""metro""]",FETCHED,2026-04-06T18:01:35+09:00,2026-04-06T19:01:35+09:00,
+8,695,9791743617769,Forthcoming title 8,TBD,tech,2026-05-23,1109,Standard launch + SNS push.,[],"[""20s-female"", ""metro""]",FETCHED,2026-04-26T18:01:35+09:00,2026-04-26T19:01:35+09:00,
+9,27,9791610617017,Forthcoming title 9,TBD,tech,2026-06-06,1911,Standard launch + SNS push.,[],"[""20s-female"", ""metro""]",FETCHED,2026-04-24T18:01:35+09:00,2026-04-24T19:01:35+09:00,
+10,610,9798498144646,Forthcoming title 10,TBD,nonfiction,2026-05-21,689,Standard launch + SNS push.,[],"[""20s-female"", ""metro""]",FETCHED,2026-04-20T18:01:35+09:00,2026-04-20T19:01:35+09:00,
+11,816,9791134561121,Forthcoming title 11,TBD,nonfiction,2026-05-21,2981,Standard launch + SNS push.,[],"[""20s-female"", ""metro""]",FORECASTED,2026-04-25T18:01:35+09:00,2026-04-25T19:01:35+09:00,
+12,374,9798316333151,Forthcoming title 12,TBD,self-help,2026-06-15,769,Standard launch + SNS push.,[],"[""20s-female"", ""metro""]",FORECASTED,2026-04-12T18:01:35+09:00,2026-04-12T19:01:35+09:00,
+13,598,9797327497414,Forthcoming title 13,TBD,tech,2026-06-22,1936,Standard launch + SNS push.,[],"[""20s-female"", ""metro""]",FORECASTED,2026-04-02T18:01:35+09:00,2026-04-02T19:01:35+09:00,
+14,358,9799734344366,Forthcoming title 14,TBD,economics,2026-06-23,536,Standard launch + SNS push.,[],"[""20s-female"", ""metro""]",APPROVED,2026-04-17T18:01:35+09:00,2026-04-17T19:01:35+09:00,2026-04-18T18:01:35+09:00
+15,330,9795890475980,Forthcoming title 15,TBD,self-help,2026-06-14,542,Standard launch + SNS push.,[],"[""20s-female"", ""metro""]",APPROVED,2026-04-27T18:01:35+09:00,2026-04-27T19:01:35+09:00,2026-04-28T18:01:35+09:00
+16,321,9791935084366,Forthcoming title 16,TBD,fiction,2026-06-23,4968,Standard launch + SNS push.,[],"[""20s-female"", ""metro""]",APPROVED,2026-04-11T18:01:35+09:00,2026-04-11T19:01:35+09:00,2026-04-12T18:01:35+09:00
+17,49,9797640935785,Forthcoming title 17,TBD,fiction,2026-06-22,2922,Standard launch + SNS push.,[],"[""20s-female"", ""metro""]",APPROVED,2026-04-05T18:01:35+09:00,2026-04-05T19:01:35+09:00,2026-04-06T18:01:35+09:00
+18,105,9791407606111,Forthcoming title 18,TBD,nonfiction,2026-06-12,602,Standard launch + SNS push.,[],"[""20s-female"", ""metro""]",APPROVED,2026-04-17T18:01:35+09:00,2026-04-17T19:01:35+09:00,2026-04-18T18:01:35+09:00
+19,179,9798728981429,Forthcoming title 19,TBD,fiction,2026-05-26,4690,Standard launch + SNS push.,[],"[""20s-female"", ""metro""]",REJECTED,2026-04-12T18:01:35+09:00,2026-04-12T19:01:35+09:00,2026-04-13T18:01:35+09:00
+20,476,9795406153385,Forthcoming title 20,TBD,tech,2026-05-28,2331,Standard launch + SNS push.,[],"[""20s-female"", ""metro""]",REJECTED,2026-04-22T18:01:35+09:00,2026-04-22T19:01:35+09:00,2026-04-23T18:01:35+09:00

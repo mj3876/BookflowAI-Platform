@@ -81,10 +81,10 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
           name: 'KEY_VAULT_URI'
           value: keyVaultUri
         }
-        // VPN 연결 후 실제 값으로 교체 예정
+        // VPN 연결 완료 후 Key Vault 참조로 교체 예정 (미설정 시 앱 시작 실패 방지)
         {
           name: 'AWS_API_GATEWAY_URL'
-          value: '@Microsoft.KeyVault(SecretUri=${keyVaultUri}secrets/aws-api-gateway-url/)'
+          value: 'placeholder'
         }
       ]
     }

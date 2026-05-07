@@ -1,6 +1,41 @@
-# Glue 스크립트 S3 sync + Job 검증 playbook
-# 라이프사이클: —
-# BOOKFLOW V6.2
+﻿---
+# cicd/ansible/playbooks/glue-deploy.yml
+# Glue  S3 sync + Job StartJobRun
+#  : Ansible CN (/opt/bookflow) · localhost 
+# Glue  : /opt/bookflow-apps/glue-jobs (Apps repo clone · ansible-node UserData)
+# : BookFlowAI-Apps GHA SSM Send-Command → ansible-playbook glue-deploy.yml -e github_sha=<sha>
 
-# TODO: 팀원이 실제 스펙 정의
-# 참고: docs/ARCHITECTURE.md · docs/DEPLOYMENT.md
+- name: Glue scripts redeploy
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    region: ap-northeast-1
+    glue_scripts_root: /opt/bookflow-apps/glue-jobs
+    glue_jobs:
+      - raw-pos-mart
+      - raw-sns-mart
+      - raw-aladin-mart
+      - raw-event-mart
+      - sales-daily-agg
+      - features-build
+
+  pre_tasks:
+    - name: AWS account ID 
+      command: aws sts get-caller-identity --query Account --output text
+      register: account_result
+      changed_when: false
+
+    - name: S3   
+      set_fact:
+        s3_bucket: "bookflow-glue-scripts-{{ account_result.stdout | trim }}"
+
+    - name:  
+      debug:
+        msg:
+          - "S3 bucket : {{ s3_bucket }}"
+          - "scripts   : {{ glue_scripts_root }}"
+          - "sha       : {{ github_sha | default('not-set') }}"
+
+  roles:
+    - role: /opt/bookflow/cicd/ansible/roles/glue-scripts

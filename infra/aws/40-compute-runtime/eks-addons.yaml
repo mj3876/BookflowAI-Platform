@@ -1,0 +1,91 @@
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW - Tier 40 - EKS Core Addons (vpc-cni, kube-proxy, coredns, ebs-csi-driver, pod-identity-agent)
+Parameters:
+  ProjectName:
+    Type: String
+    Default: bookflow
+
+Resources:
+  # ─── VPC CNI (Pod  ·  ) ───
+  VpcCniAddon:
+    Type: AWS::EKS::Addon
+    Properties:
+      ClusterName: !ImportValue
+        Fn::Sub: ${ProjectName}-eks-cluster-name
+      AddonName: vpc-cni
+      ResolveConflicts: OVERWRITE
+
+  # ─── kube-proxy ───
+  KubeProxyAddon:
+    Type: AWS::EKS::Addon
+    Properties:
+      ClusterName: !ImportValue
+        Fn::Sub: ${ProjectName}-eks-cluster-name
+      AddonName: kube-proxy
+      ResolveConflicts: OVERWRITE
+
+  # ─── CoreDNS (Node Group  ) ───
+  CoreDnsAddon:
+    Type: AWS::EKS::Addon
+    DependsOn: VpcCniAddon
+    Properties:
+      ClusterName: !ImportValue
+        Fn::Sub: ${ProjectName}-eks-cluster-name
+      AddonName: coredns
+      ResolveConflicts: OVERWRITE
+
+  # ─── EBS CSI Driver IRSA Role (PV/PVC  ) ───
+  EbsCsiDriverRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-ebs-csi-driver-role
+      AssumeRolePolicyDocument: !Sub
+        - |
+          {
+            "Version": "2012-10-17",
+            "Statement": [{
+              "Effect": "Allow",
+              "Principal": {"Federated": "${IdP}"},
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "${OidcHost}:sub": "system:serviceaccount:kube-system:ebs-csi-controller-sa",
+                  "${OidcHost}:aud": "sts.amazonaws.com"
+                }
+              }
+            }]
+          }
+        - IdP: !ImportValue
+            Fn::Sub: ${ProjectName}-eks-oidc-provider-arn
+          OidcHost: !Select
+            - 1
+            - !Split
+              - 'https://'
+              - !ImportValue
+                Fn::Sub: ${ProjectName}-eks-oidc-issuer-url
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy
+
+  # ─── EBS CSI Driver (PVC ) ───
+  EbsCsiAddon:
+    Type: AWS::EKS::Addon
+    Properties:
+      ClusterName: !ImportValue
+        Fn::Sub: ${ProjectName}-eks-cluster-name
+      AddonName: aws-ebs-csi-driver
+      ResolveConflicts: OVERWRITE
+      ServiceAccountRoleArn: !GetAtt EbsCsiDriverRole.Arn
+
+  # ─── Pod Identity Agent (IRSA  ·   · ) ───
+  PodIdentityAddon:
+    Type: AWS::EKS::Addon
+    Properties:
+      ClusterName: !ImportValue
+        Fn::Sub: ${ProjectName}-eks-cluster-name
+      AddonName: eks-pod-identity-agent
+      ResolveConflicts: OVERWRITE
+
+Outputs:
+  EbsCsiDriverRoleArn:
+    Value: !GetAtt EbsCsiDriverRole.Arn
+    Export: { Name: !Sub '${ProjectName}-ebs-csi-driver-role-arn' }

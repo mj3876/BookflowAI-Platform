@@ -1,0 +1,99 @@
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW - Tier 40 - EKS Managed Node Group (EC2 t3.medium x2 ON_DEMAND, BookFlow AI VPC Private)
+Parameters:
+  ProjectName:
+    Type: String
+    Default: bookflow
+  NodegroupName:
+    Type: String
+    Default: bookflow-eks-ng
+  InstanceType:
+    Type: String
+    Default: t3.medium
+    Description: t3.small () · t3.medium () · t3.large ()
+  CapacityType:
+    Type: String
+    Default: ON_DEMAND
+    AllowedValues: [ON_DEMAND, SPOT]
+  DesiredSize:
+    Type: Number
+    Default: 1
+    MinValue: 1
+    MaxValue: 10
+    Description:  phase 1  default ·   2 autoscale (Cluster Autoscaler  )
+  MinSize:
+    Type: Number
+    Default: 1
+  MaxSize:
+    Type: Number
+    Default: 2
+  DiskSize:
+    Type: Number
+    Default: 20
+    Description: gp3 · GiB
+  AmiType:
+    Type: String
+    Default: AL2023_x86_64_STANDARD
+    AllowedValues: [AL2023_x86_64_STANDARD, BOTTLEROCKET_x86_64, AL2_x86_64]
+
+Resources:
+  # ─── Worker Node IAM Role (ECR pull · CNI · CW · SSM) ───
+  WorkerNodeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-eks-worker-node-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+
+  # ─── Managed Node Group (BookFlow AI VPC Private · 2 AZ) ───
+  Nodegroup:
+    Type: AWS::EKS::Nodegroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      ClusterName: !ImportValue
+        Fn::Sub: ${ProjectName}-eks-cluster-name
+      NodegroupName: !Ref NodegroupName
+      NodeRole: !GetAtt WorkerNodeRole.Arn
+      Subnets:
+        - !ImportValue
+          Fn::Sub: ${ProjectName}-subnet-bookflow-ai-private-az1
+        - !ImportValue
+          Fn::Sub: ${ProjectName}-subnet-bookflow-ai-private-az2
+      InstanceTypes: [!Ref InstanceType]
+      CapacityType: !Ref CapacityType
+      AmiType: !Ref AmiType
+      DiskSize: !Ref DiskSize
+      ScalingConfig:
+        MinSize: !Ref MinSize
+        DesiredSize: !Ref DesiredSize
+        MaxSize: !Ref MaxSize
+      UpdateConfig:
+        MaxUnavailable: 1
+      Labels:
+        nodegroup: !Ref NodegroupName
+        env: dev
+      Tags:
+        Name: !Sub ${ProjectName}-eks-worker
+        Project: !Ref ProjectName
+
+Outputs:
+  NodegroupName:
+    Value: !Ref Nodegroup
+    Export: { Name: !Sub '${ProjectName}-eks-nodegroup-name' }
+  NodegroupArn:
+    Value: !GetAtt Nodegroup.Arn
+    Export: { Name: !Sub '${ProjectName}-eks-nodegroup-arn' }
+  WorkerNodeRoleArn:
+    Value: !GetAtt WorkerNodeRole.Arn
+    Export: { Name: !Sub '${ProjectName}-eks-worker-node-role-arn' }

@@ -1,0 +1,86 @@
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW - Tier 30 - External Secrets Operator IRSA Role (auth-pod and other Pods sync from Secrets Manager to K8s Secret)
+Parameters:
+  ProjectName:
+    Type: String
+    Default: bookflow
+  ServiceAccountNamespace:
+    Type: String
+    Default: external-secrets
+    Description: ESO Helm chart  ServiceAccount  namespace
+  ServiceAccountName:
+    Type: String
+    Default: external-secrets
+    Description: ESO ServiceAccount 
+
+Resources:
+  # ─── IRSA Role (ESO Operator Pod  SA annotation  assume) ───
+  EsoRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-eso-role
+      AssumeRolePolicyDocument: !Sub
+        - |
+          {
+            "Version": "2012-10-17",
+            "Statement": [{
+              "Effect": "Allow",
+              "Principal": {"Federated": "${IdP}"},
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "${OidcHost}:sub": "system:serviceaccount:${Ns}:${Sa}",
+                  "${OidcHost}:aud": "sts.amazonaws.com"
+                }
+              }
+            }]
+          }
+        - IdP: !ImportValue
+            Fn::Sub: ${ProjectName}-eks-oidc-provider-arn
+          OidcHost: !Select
+            - 1
+            - !Split
+              - 'https://'
+              - !ImportValue
+                Fn::Sub: ${ProjectName}-eks-oidc-issuer-url
+          Ns: !Ref ServiceAccountNamespace
+          Sa: !Ref ServiceAccountName
+      Policies:
+        - PolicyName: SecretsManagerRead
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                  - secretsmanager:ListSecrets
+                Resource: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ProjectName}/*
+        - PolicyName: SsmParameterRead
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${ProjectName}/*
+        - PolicyName: KmsDecrypt
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:DescribeKey
+                Resource: !ImportValue
+                  Fn::Sub: ${ProjectName}-kms-eks-arn
+
+Outputs:
+  EsoRoleArn:
+    Value: !GetAtt EsoRole.Arn
+    Export: { Name: !Sub '${ProjectName}-eso-role-arn' }
+  EsoRoleName:
+    Value: !Ref EsoRole
+    Export: { Name: !Sub '${ProjectName}-eso-role-name' }

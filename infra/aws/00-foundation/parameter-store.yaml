@@ -1,6 +1,5 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 00 · SSM Parameter Store (Standard tier 무료 공통 설정)
-
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW - Tier 00 - SSM Parameter Store (Standard tier baseline parameters)
 Parameters:
   ProjectName:
     Type: String
@@ -11,7 +10,7 @@ Parameters:
     AllowedValues: [dev, stage, prod]
 
 Resources:
-  # ─── 네트워크 ───
+  # ───  ───
   RegionParam:
     Type: AWS::SSM::Parameter
     Properties:
@@ -26,7 +25,7 @@ Resources:
       Type: String
       Value: !Ref Environment
 
-  # ─── VPC CIDR 블록 (4 VPC) ───
+  # ─── VPC CIDR  (4 VPC) ───
   VpcCidrBookflowAi:
     Type: AWS::SSM::Parameter
     Properties:
@@ -62,7 +61,7 @@ Resources:
       Type: String
       Value: 10.4.0.0/16
 
-  # ─── TGW BGP ASN (AWS 측) ───
+  # ─── TGW BGP ASN (AWS ) ───
   TgwBgpAsn:
     Type: AWS::SSM::Parameter
     Properties:
@@ -70,14 +69,14 @@ Resources:
       Type: String
       Value: '64512'
 
-  # ─── Azure/GCP Customer Gateway IPs (초기 placeholder · Phase 2에서 실제 IP 주입) ───
+  # ─── Azure/GCP Customer Gateway IPs ( placeholder · Phase 2  IP ) ───
   AzureVpnGatewayIp:
     Type: AWS::SSM::Parameter
     Properties:
       Name: !Sub /${ProjectName}/network/azure-vpn-gateway-ip
       Type: String
       Value: 0.0.0.0
-      Description: Azure VPN Gateway Public IP (Phase 2에 민지가 aws ssm put-parameter로 업데이트)
+      Description: Azure VPN Gateway Public IP (Phase 2  aws ssm put-parameter )
 
   GcpHaVpnIp:
     Type: AWS::SSM::Parameter
@@ -85,9 +84,9 @@ Resources:
       Name: !Sub /${ProjectName}/network/gcp-ha-vpn-ip
       Type: String
       Value: 0.0.0.0
-      Description: GCP HA VPN Peer IP (Phase 2에 우혁이 업데이트)
+      Description: GCP HA VPN Peer IP (Phase 2  )
 
-  # ─── EKS 클러스터 이름 ───
+  # ─── EKS   ───
   EksClusterName:
     Type: AWS::SSM::Parameter
     Properties:
@@ -95,7 +94,7 @@ Resources:
       Type: String
       Value: !Sub ${ProjectName}
 
-  # ─── ECS 클러스터 이름 ───
+  # ─── ECS   ───
   EcsClusterName:
     Type: AWS::SSM::Parameter
     Properties:
@@ -103,14 +102,14 @@ Resources:
       Type: String
       Value: !Sub ${ProjectName}
 
-  # ─── GCP Project (영헌·민지가 참조 · Phase 2에 우혁이 제공) ───
+  # ─── GCP Project (·  · Phase 2  ) ───
   GcpProjectId:
     Type: AWS::SSM::Parameter
     Properties:
       Name: !Sub /${ProjectName}/gcp/project-id
       Type: String
       Value: REPLACE_WITH_GCP_PROJECT
-      Description: GCP Project ID (Phase 2에 우혁이 업데이트)
+      Description: GCP Project ID (Phase 2  )
 
   # ─── Azure Tenant ID ───
   AzureTenantId:
@@ -119,7 +118,7 @@ Resources:
       Name: !Sub /${ProjectName}/azure/tenant-id
       Type: String
       Value: REPLACE_WITH_TENANT_ID
-      Description: Azure Entra ID tenant (Phase 2에 민지가 업데이트)
+      Description: Azure Entra ID tenant (Phase 2  )
 
 Outputs:
   ParameterPathPrefix:

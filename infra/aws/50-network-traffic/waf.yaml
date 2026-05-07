@@ -1,6 +1,105 @@
-# AWS WAF Web ACL × 1 · External ALB에만 부착 · prorated hourly
-# 라이프사이클: 📆 Phase 기반
-# BOOKFLOW V6.2
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW - Tier 50 - WAFv2 WebACL (Regional) + External ALB Association + AWS Managed Rules + Rate Limit
+Parameters:
+  ProjectName:
+    Type: String
+    Default: bookflow
+  RateLimitPer5Min:
+    Type: Number
+    Default: 2000
+    Description: IP  5    (  BLOCK)
 
-# TODO: 팀원이 실제 스펙 정의
-# 참고: docs/ARCHITECTURE.md · docs/DEPLOYMENT.md
+Resources:
+  # ─── WAFv2 WebACL (Regional · ALB ) ───
+  WebAcl:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: !Sub ${ProjectName}-external-waf
+      Scope: REGIONAL
+      DefaultAction: { Allow: {} }
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: !Sub ${ProjectName}-external-waf
+      Rules:
+        # 1. Rate Limit (IP  · DDoS )
+        - Name: RateLimit
+          Priority: 1
+          Action: { Block: {} }
+          Statement:
+            RateBasedStatement:
+              Limit: !Ref RateLimitPer5Min
+              AggregateKeyType: IP
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: RateLimit
+        # 2. AWS Managed · Common Rule Set (OWASP Top 10  )
+        - Name: AwsCommonRules
+          Priority: 10
+          OverrideAction: { None: {} }
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesCommonRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: AwsCommonRules
+        # 3. AWS Managed · Known Bad Inputs (  ·  )
+        - Name: AwsKnownBadInputs
+          Priority: 20
+          OverrideAction: { None: {} }
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesKnownBadInputsRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: AwsKnownBadInputs
+        # 4. AWS Managed · IP Reputation List (Amazon  )
+        - Name: AwsIpReputation
+          Priority: 30
+          OverrideAction: { None: {} }
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesAmazonIpReputationList
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: AwsIpReputation
+      Tags: [{ Key: Name, Value: !Sub '${ProjectName}-external-waf' }]
+
+  # ─── ALB Association (External ALB  WebACL ) ───
+  WebAclAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    Properties:
+      ResourceArn: !ImportValue
+        Fn::Sub: ${ProjectName}-alb-external-arn
+      WebACLArn: !GetAtt WebAcl.Arn
+
+  # ─── CloudWatch Log Group (WAF  ·   ) ───
+  WafLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub aws-waf-logs-${ProjectName}-external
+      RetentionInDays: 7
+
+  WafLoggingConfig:
+    Type: AWS::WAFv2::LoggingConfiguration
+    Properties:
+      ResourceArn: !GetAtt WebAcl.Arn
+      LogDestinationConfigs:
+        - !GetAtt WafLogGroup.Arn
+
+Outputs:
+  WebAclArn:
+    Value: !GetAtt WebAcl.Arn
+    Export: { Name: !Sub '${ProjectName}-waf-external-arn' }
+  WebAclId:
+    Value: !GetAtt WebAcl.Id
+    Export: { Name: !Sub '${ProjectName}-waf-external-id' }

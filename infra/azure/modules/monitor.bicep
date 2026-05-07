@@ -1,11 +1,11 @@
 // modules/monitor.bicep
-// Log Analytics Workspace 와 진단 설정
+// Log Analytics Workspace
 
 param location string
 param prefix string
 param logRetentionDays int
 
-resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
+resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
   name: 'law-${prefix}'
   location: location
   properties: {
@@ -16,11 +16,9 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
     features: {
       enableLogAccessUsingOnlyResourcePermissions: true
     }
-    publicNetworkAccessForIngestion: 'Enabled'
-    publicNetworkAccessForQuery: 'Enabled'
   }
 }
 
-// ── 출력값 ───────────────────────────────────────────────
-output workspaceId string = logAnalytics.id
-output workspaceName string = logAnalytics.name
+output workspaceId string = logAnalyticsWorkspace.id
+output workspaceName string = logAnalyticsWorkspace.name
+output workspaceCustomerId string = logAnalyticsWorkspace.properties.customerId

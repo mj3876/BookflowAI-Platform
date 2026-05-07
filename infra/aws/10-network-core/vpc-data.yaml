@@ -1,6 +1,5 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 10 · Data VPC (10.3.0.0/16) · RDS + Redis 전용 · Private + DB subnet
-
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW - Tier 10 - Data VPC (10.3.0.0/16) - RDS + Redis isolated; Private + DB subnet
 Parameters:
   ProjectName:
     Type: String
@@ -78,7 +77,7 @@ Resources:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties: { SubnetId: !Ref DbAz2, RouteTableId: !Ref DbRouteTable }
 
-  # ─── Custom NACL (Private + DB 4 subnet 공통) ───
+  # ─── Custom NACL (Private + DB 4 subnet ) ───
   Nacl:
     Type: AWS::EC2::NetworkAcl
     Properties:

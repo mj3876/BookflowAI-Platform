@@ -11,6 +11,9 @@ _tmp_*
 *.tmp
 tmp/
 
+# ─── Local-only 임시 검증 task (일회성 · git push 안 함) ───
+scripts/aws/tasks/cicd_verify.py
+
 # ─── 개인별 설정 override ───
 scripts/aws/config/aws.local.ps1
 scripts/azure/config/azure.local.ps1
@@ -80,3 +83,26 @@ build/
 .coverage
 htmlcov/
 *.log
+
+# Terraform security / local artifacts
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+crash.log
+crash.*.log
+*.tfbackup
+*.tfplan.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraform.tfstate.lock.info
+terraform.log
+terraform-provider-*.log
+
+# Temporary PDF processing images
+tmp_pdf_images/
+
+scripts/gcp/data/
+# Local-only generated CSVs (regenerated from BOOKFLOW/01_데이터스키마/*.parquet)
+infra/aws/20-data-persistent/seed-data/parquet_csv/

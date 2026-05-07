@@ -1,6 +1,5 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 20 · ElastiCache Redis (Data VPC DB subnet · 구축 Single-node · 시나리오만 Replication Group)
-
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW - Tier 20 - ElastiCache Redis (Data VPC DB subnet; Single-node for dev, Replication Group for prod)
 Parameters:
   ProjectName:
     Type: String
@@ -12,7 +11,7 @@ Parameters:
     Type: String
     Default: 'false'
     AllowedValues: ['true', 'false']
-    Description: 구축 false (Single-node cluster) · 시나리오만 true 로 ReplicationGroup 전환
+    Description:  false (Single-node cluster) ·  true  ReplicationGroup 
 
 Conditions:
   Replicated: !Equals [!Ref EnableReplication, 'true']
@@ -51,7 +50,7 @@ Resources:
           Description: BookFlow AI VPC (EKS Pod)
       Tags: [{ Key: Name, Value: !Sub '${ProjectName}-redis-sg' }]
 
-  # ─── Single-node (구축 phase · 저렴) ───
+  # ─── Single-node ( phase · ) ───
   RedisSingle:
     Type: AWS::ElastiCache::CacheCluster
     Condition: SingleNode
@@ -69,7 +68,7 @@ Resources:
       Port: 6379
       Tags: [{ Key: Name, Value: !Sub '${ProjectName}-redis' }]
 
-  # ─── Replication Group (시나리오 phase · Multi-AZ + replica) ───
+  # ─── Replication Group ( phase · Multi-AZ + replica) ───
   RedisReplicated:
     Type: AWS::ElastiCache::ReplicationGroup
     Condition: Replicated
@@ -77,7 +76,7 @@ Resources:
     UpdateReplacePolicy: Delete
     Properties:
       ReplicationGroupId: !Sub ${ProjectName}-redis-rg
-      ReplicationGroupDescription: BOOKFLOW Redis · 시나리오 Multi-AZ
+      ReplicationGroupDescription: BOOKFLOW Redis ·  Multi-AZ
       Engine: redis
       EngineVersion: '7.1'
       CacheNodeType: !Ref CacheNodeType

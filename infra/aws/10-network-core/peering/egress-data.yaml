@@ -1,8 +1,5 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Description: >
-  BOOKFLOW · Tier 10 · VPC Peering · Egress ↔ Data
-  재고조회 API ECS (Egress) → RDS (Data) 조회
-
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: "BOOKFLOW - Tier 10 - VPC Peering: Egress <-> Data. inventory API ECS (Egress) -> RDS (Data) read access"
 Parameters:
   ProjectName:
     Type: String

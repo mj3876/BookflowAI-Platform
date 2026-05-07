@@ -1,6 +1,98 @@
-# Glue scripts redeploy · git push → OIDC → SSM Run Command → CN → Ansible
-# 라이프사이클: 🔒 영구 (GHA)
-# BOOKFLOW V6.2
+# .github/workflows/glue-redeploy.yml
+# 흐름: glue-jobs/** push → OIDC → SSM Send-Command → Ansible CN → S3 sync + Glue StartJobRun
+# 라이프사이클: 🔒 영구 (V6.2 Slide 23)
 
-# TODO: 팀원이 실제 스펙 정의
-# 참고: docs/ARCHITECTURE.md · docs/DEPLOYMENT.md
+name: glue-redeploy
+
+on:
+  push:
+    branches: [main]
+    paths: ['glue-jobs/**']
+
+permissions:
+  id-token: write   # OIDC 필수
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-1
+
+jobs:
+  deploy:
+    name: Glue scripts → S3 sync + StartJobRun
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. OIDC 인증 ───────────────────────────────────────
+      - name: OIDC → bookflow-gha-glue-role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/bookflow-gha-glue-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      # ── 2. Ansible CN 인스턴스 ID 조회 ─────────────────────
+      - name: Ansible CN 인스턴스 ID 조회
+        id: get-instance
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters \
+              "Name=tag:Name,Values=bookflow-ansible-node" \
+              "Name=instance-state-name,Values=running" \
+            --region "${{ env.AWS_REGION }}" \
+            --query "Reservations[0].Instances[0].InstanceId" \
+            --output text)
+
+          if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ]; then
+            echo "::error::Ansible CN(bookflow-ansible-node) 없음 또는 stopped 상태"
+            exit 1
+          fi
+
+          echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
+          echo "Ansible CN: $INSTANCE_ID"
+
+      # ── 3. SSM Send-Command (git pull + Ansible playbook) ──
+      - name: SSM Send-Command
+        id: send-command
+        run: |
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "${{ steps.get-instance.outputs.instance_id }}" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "{\"commands\":[
+              \"set -e\",
+              \"cd /opt/bookflow && git pull origin main\",
+              \"ansible-playbook cicd/ansible/playbooks/glue-deploy.yml --roles-path cicd/ansible/roles -e github_sha=${{ github.sha }}\"
+            ]}" \
+            --timeout-seconds 600 \
+            --region "${{ env.AWS_REGION }}" \
+            --query "Command.CommandId" \
+            --output text)
+
+          echo "command_id=$COMMAND_ID" >> "$GITHUB_OUTPUT"
+          echo "SSM Command ID: $COMMAND_ID"
+
+      # ── 4. 완료 대기 (최대 10분) ───────────────────────────
+      - name: SSM 명령 완료 대기
+        run: |
+          aws ssm wait command-executed \
+            --command-id "${{ steps.send-command.outputs.command_id }}" \
+            --instance-id "${{ steps.get-instance.outputs.instance_id }}" \
+            --region "${{ env.AWS_REGION }}"
+
+      # ── 5. 결과 출력 (성공/실패 모두) ───────────────────────
+      - name: SSM 실행 결과 출력
+        if: always()
+        run: |
+          RESULT=$(aws ssm get-command-invocation \
+            --command-id "${{ steps.send-command.outputs.command_id }}" \
+            --instance-id "${{ steps.get-instance.outputs.instance_id }}" \
+            --region "${{ env.AWS_REGION }}" \
+            --output json)
+
+          STATUS=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['Status'])")
+          STDOUT=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['StandardOutputContent'])")
+          STDERR=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['StandardErrorContent'])")
+
+          echo "=== Status: $STATUS ==="
+          echo "$STDOUT"
+          [ -n "$STDERR" ] && echo "=== Stderr ===" && echo "$STDERR"
+
+          [ "$STATUS" = "Success" ] || exit 1

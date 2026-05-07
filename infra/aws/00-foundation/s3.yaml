@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 00 · S3 Buckets (6개 · raw·mart·audit·tf-state·cp-artifacts·glue-scripts)
+Description: BOOKFLOW - Tier 00 - S3 Buckets (raw, mart, tf-state, cp-artifacts, glue-scripts, audit optional)
 
 Parameters:
   ProjectName:
@@ -7,14 +7,20 @@ Parameters:
     Default: bookflow
   AccountSuffix:
     Type: String
-    Description: Bucket 이름 유니크성 위해 account suffix (예. last 4 digits)
+    Description: Optional suffix for bucket name uniqueness (e.g. last 4 digits of account)
     Default: ''
+  EnableAuditBucket:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: Enable audit bucket (CloudTrail + ObjectLock GOVERNANCE 90d) - set true only when using cloudtrail/cloudwatch
 
 Conditions:
   HasSuffix: !Not [!Equals [!Ref AccountSuffix, '']]
+  WithAuditBucket: !Equals [!Ref EnableAuditBucket, 'true']
 
 Resources:
-  # ─── Raw 데이터 (POS · SNS · 알라딘 · 공공데이터 · historical) ───
+  # Raw data (POS, SNS, Aladin, public API, historical)
   RawBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
@@ -41,7 +47,7 @@ Resources:
               - StorageClass: GLACIER
                 TransitionInDays: 90
 
-  # ─── Mart (Glue ETL 결과) ───
+  # Mart (Glue ETL output)
   MartBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
@@ -60,10 +66,17 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
+      # EventBridge 알림 활성화: Glue 가 Parquet 파일을 쓸 때마다 EventBridge 로 이벤트 전송
+      # sam-template.yaml 의 MartToGcsFn S3EventBridge Rule 이 이 이벤트를 수신
+      # S3 → EventBridge → mart-to-gcs Lambda → GCS staging → BigQuery
+      NotificationConfiguration:
+        EventBridgeConfiguration:
+          EventBridgeEnabled: true
 
-  # ─── Audit (CloudTrail 로그 · 감사 의무) ───
+  # Audit bucket (CloudTrail logs - only when EnableAuditBucket=true)
   AuditBucket:
     Type: AWS::S3::Bucket
+    Condition: WithAuditBucket
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
@@ -86,12 +99,24 @@ Resources:
         ObjectLockEnabled: Enabled
         Rule:
           DefaultRetention:
-            Mode: COMPLIANCE
+            # GOVERNANCE: admin can delete before expiry (COMPLIANCE blocks even root for 90d)
+            Mode: GOVERNANCE
             Days: 90
+      LifecycleConfiguration:
+        Rules:
+          # Auto-delete after ObjectLock expiry (91d) to avoid stray resources
+          - Id: ExpireAuditAfterRetention
+            Status: Enabled
+            ExpirationInDays: 91
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 91
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
 
-  # CloudTrail이 audit bucket에 쓸 수 있게 Bucket Policy
+  # Bucket policy to allow CloudTrail writes to audit bucket
   AuditBucketPolicy:
     Type: AWS::S3::BucketPolicy
+    Condition: WithAuditBucket
     Properties:
       Bucket: !Ref AuditBucket
       PolicyDocument:
@@ -113,7 +138,7 @@ Resources:
               StringEquals:
                 s3:x-amz-acl: bucket-owner-full-control
 
-  # ─── TF State (GCP Terraform backend가 아닌, 혹시 AWS에서도 쓸 때용) ───
+  # TF State (for AWS-side Terraform backend if needed)
   TfStateBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
@@ -133,7 +158,7 @@ Resources:
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
 
-  # ─── CodePipeline Artifacts ───
+  # CodePipeline Artifacts
   CpArtifactsBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
@@ -158,7 +183,7 @@ Resources:
             Status: Enabled
             ExpirationInDays: 30
 
-  # ─── Glue Scripts (Ansible이 sync) ───
+  # Glue Scripts (synced by Ansible)
   GlueScriptsBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
@@ -198,10 +223,12 @@ Outputs:
       Name: !Sub ${ProjectName}-s3-mart-arn
 
   AuditBucketName:
+    Condition: WithAuditBucket
     Value: !Ref AuditBucket
     Export:
       Name: !Sub ${ProjectName}-s3-audit-name
   AuditBucketArn:
+    Condition: WithAuditBucket
     Value: !GetAtt AuditBucket.Arn
     Export:
       Name: !Sub ${ProjectName}-s3-audit-arn

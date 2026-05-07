@@ -1,9 +1,5 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Description: >
-  BOOKFLOW · Tier 10 · Route 53 Private Hosted Zone
-  vpn.bookflow.internal · Client VPN endpoint + 내부 service discovery
-  모든 VPC와 association (BookFlow AI · Sales Data · Egress · Data · Ansible)
-
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: "BOOKFLOW - Tier 10 - Route 53 Private Hosted Zone vpn.bookflow.internal (Client VPN endpoint + service discovery; associated with all 5 VPCs: BookFlow AI, Sales Data, Egress, Data, Ansible)"
 Parameters:
   ProjectName:
     Type: String

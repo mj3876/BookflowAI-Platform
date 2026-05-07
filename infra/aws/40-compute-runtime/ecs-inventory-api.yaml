@@ -1,0 +1,179 @@
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW - Tier 40 - ECS Inventory API (Fargate - Egress VPC Public - External ALB target - RDS read)
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: bookflow
+  ServiceName:
+    Type: String
+    Default: inventory-api
+  ImageTag:
+    Type: String
+    Default: latest
+    Description: ECR image tag - CICD :latest pull
+  ContainerPort:
+    Type: Number
+    Default: 8080
+  TaskCpu:
+    Type: String
+    Default: '256'
+  TaskMemory:
+    Type: String
+    Default: '512'
+  DesiredCount:
+    Type: Number
+    Default: 1
+  TargetGroupArn:
+    Type: String
+    Default: ''
+    Description: Tier 50 External ALB Target Group ARN -  LoadBalancer  (CFN  ) -  update-stack  
+
+Conditions:
+  HasTargetGroup: !Not [!Equals [!Ref TargetGroupArn, '']]
+
+Resources:
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-ecs-${ServiceName}-exec-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-ecs-${ServiceName}-task-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: SecretsRead
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ProjectName}/*
+
+  # ─── SG (egress all - ingress 8080 from Egress VPC CIDR - ALB  VPC) ───
+  TaskSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${ProjectName}-ecs-${ServiceName}-sg
+      GroupDescription: BOOKFLOW ECS inventory-api - port 8080 from Egress VPC (External ALB)
+      VpcId: !ImportValue
+        Fn::Sub: ${ProjectName}-vpc-egress-id
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref ContainerPort
+          ToPort: !Ref ContainerPort
+          CidrIp: 10.2.0.0/16
+          Description: from Egress VPC (External ALB)
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: egress all (RDS via peering - ECR - CW - Secrets)
+      Tags: [{ Key: Name, Value: !Sub '${ProjectName}-ecs-${ServiceName}-sg' }]
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub ${ProjectName}-${ServiceName}
+      Cpu: !Ref TaskCpu
+      Memory: !Ref TaskMemory
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      ContainerDefinitions:
+        - Name: !Ref ServiceName
+          Image: !Sub
+            - ${RegistryUri}/${ProjectName}/${ServiceName}:${ImageTag}
+            - RegistryUri: !ImportValue
+                Fn::Sub: ${ProjectName}-ecr-registry-uri
+          Essential: true
+          PortMappings:
+            - ContainerPort: !Ref ContainerPort
+              Protocol: tcp
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !ImportValue
+                Fn::Sub: ${ProjectName}-ecs-log-group-name
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: !Ref ServiceName
+          Environment:
+            - Name: PORT
+              Value: !Ref ContainerPort
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+            - Name: RDS_ENDPOINT
+              Value: !ImportValue
+                Fn::Sub: ${ProjectName}-rds-endpoint
+            - Name: RDS_DBNAME
+              Value: !ImportValue
+                Fn::Sub: ${ProjectName}-rds-dbname
+            - Name: RDS_SECRET_ARN
+              Value: !ImportValue
+                Fn::Sub: ${ProjectName}-secrets-rds-master-arn
+
+  # ─── ECS Service - LoadBalancer  TargetGroup    ───
+  Service:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Ref ServiceName
+      Cluster: !ImportValue
+        Fn::Sub: ${ProjectName}-ecs-cluster-name
+      TaskDefinition: !Ref TaskDefinition
+      DesiredCount: !Ref DesiredCount
+      LaunchType: FARGATE
+      DeploymentController: { Type: ECS }
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 100
+        MaximumPercent: 200
+      HealthCheckGracePeriodSeconds: !If [HasTargetGroup, 60, !Ref AWS::NoValue]
+      LoadBalancers: !If
+        - HasTargetGroup
+        - - ContainerName: !Ref ServiceName
+            ContainerPort: !Ref ContainerPort
+            TargetGroupArn: !Ref TargetGroupArn
+        - !Ref AWS::NoValue
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets:
+            - !ImportValue
+              Fn::Sub: ${ProjectName}-subnet-egress-public-az1
+            - !ImportValue
+              Fn::Sub: ${ProjectName}-subnet-egress-public-az2
+          SecurityGroups: [!Ref TaskSecurityGroup]
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-${ServiceName}
+        - Key: Project
+          Value: !Ref ProjectName
+      PropagateTags: SERVICE
+
+Outputs:
+  ServiceName:
+    Value: !GetAtt Service.Name
+    Export: { Name: !Sub '${ProjectName}-ecs-${ServiceName}-service-name' }
+  TaskDefinitionArn:
+    Value: !Ref TaskDefinition
+    Export: { Name: !Sub '${ProjectName}-ecs-${ServiceName}-taskdef-arn' }
+  TaskSecurityGroupId:
+    Value: !Ref TaskSecurityGroup
+    Export: { Name: !Sub '${ProjectName}-ecs-${ServiceName}-sg-id' }
+  ContainerPort:
+    Value: !Ref ContainerPort
+    Export: { Name: !Sub '${ProjectName}-ecs-${ServiceName}-port' }

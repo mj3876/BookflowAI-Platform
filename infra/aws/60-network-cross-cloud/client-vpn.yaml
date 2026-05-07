@@ -1,0 +1,113 @@
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW - Tier 60 - Client VPN Endpoint (3 user access, BookFlow AI VPC subnet, ACM mutual auth)
+Parameters:
+  ProjectName:
+    Type: String
+    Default: bookflow
+  ClientCidrBlock:
+    Type: String
+    Default: 172.20.0.0/22
+    Description: Client VPN  IP  · Azure VNet 172.16.0.0/16 + AWS VPC 10.x + GCP VPC 192.168.x  
+  Route53HostedZoneId:
+    Type: String
+    Default: ''
+    Description: Private Hosted Zone ID (vpn.bookflow.internal ·  CNAME )
+
+Conditions:
+  HasHostedZone: !Not [!Equals [!Ref Route53HostedZoneId, '']]
+
+Resources:
+  # ─── Client VPN SG (egress only · ENI  VPC subnet  ) ───
+  ClientVpnSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${ProjectName}-client-vpn-sg
+      GroupDescription: BOOKFLOW Client VPN ENI - egress all (to Internal ALB / Pods)
+      VpcId: !ImportValue
+        Fn::Sub: ${ProjectName}-vpc-bookflow-ai-id
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: egress all
+      Tags: [{ Key: Name, Value: !Sub '${ProjectName}-client-vpn-sg' }]
+
+  # ─── CloudWatch Log Group (connection log) ───
+  ClientVpnLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub /aws/clientvpn/${ProjectName}
+      RetentionInDays: 7
+
+  ClientVpnLogStream:
+    Type: AWS::Logs::LogStream
+    Properties:
+      LogGroupName: !Ref ClientVpnLogGroup
+      LogStreamName: connections
+
+  # ─── Client VPN Endpoint ───
+  ClientVpnEndpoint:
+    Type: AWS::EC2::ClientVpnEndpoint
+    Properties:
+      Description: BOOKFLOW Client VPN (3  access)
+      ClientCidrBlock: !Ref ClientCidrBlock
+      ServerCertificateArn: !ImportValue
+        Fn::Sub: ${ProjectName}-acm-client-vpn-server-arn
+      AuthenticationOptions:
+        - Type: certificate-authentication
+          MutualAuthentication:
+            ClientRootCertificateChainArn: !ImportValue
+              Fn::Sub: ${ProjectName}-acm-client-vpn-client-ca-arn
+      ConnectionLogOptions:
+        Enabled: true
+        CloudwatchLogGroup: !Ref ClientVpnLogGroup
+        CloudwatchLogStream: !Ref ClientVpnLogStream
+      DnsServers:
+        - 10.0.0.2
+      TransportProtocol: udp
+      VpnPort: 443
+      SplitTunnel: true
+      SecurityGroupIds: [!Ref ClientVpnSecurityGroup]
+      VpcId: !ImportValue
+        Fn::Sub: ${ProjectName}-vpc-bookflow-ai-id
+      SessionTimeoutHours: 8
+      TagSpecifications:
+        - ResourceType: client-vpn-endpoint
+          Tags: [{ Key: Name, Value: !Sub '${ProjectName}-client-vpn' }]
+
+  # ─── Subnet Association (BookFlow AI Private AZ1) ───
+  ClientVpnAssocAz1:
+    Type: AWS::EC2::ClientVpnTargetNetworkAssociation
+    Properties:
+      ClientVpnEndpointId: !Ref ClientVpnEndpoint
+      SubnetId: !ImportValue
+        Fn::Sub: ${ProjectName}-subnet-bookflow-ai-private-az1
+
+  # ─── Authorization Rule ( user  BookFlow AI VPC CIDR  ) ───
+  ClientVpnAuthRule:
+    Type: AWS::EC2::ClientVpnAuthorizationRule
+    Properties:
+      ClientVpnEndpointId: !Ref ClientVpnEndpoint
+      TargetNetworkCidr: 10.0.0.0/16
+      AuthorizeAllGroups: true
+      Description: Allow all users to BookFlow AI VPC
+
+  # ─── Route 53 CNAME ( · vpn.bookflow.internal  stable endpoint) ───
+  VpnDnsRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: HasHostedZone
+    Properties:
+      HostedZoneId: !Ref Route53HostedZoneId
+      Name: client.vpn.bookflow.internal
+      Type: CNAME
+      TTL: '300'
+      ResourceRecords: [!Ref ClientVpnEndpoint]
+
+Outputs:
+  ClientVpnEndpointId:
+    Value: !Ref ClientVpnEndpoint
+    Export: { Name: !Sub '${ProjectName}-client-vpn-endpoint-id' }
+  ClientVpnSgId:
+    Value: !Ref ClientVpnSecurityGroup
+    Export: { Name: !Sub '${ProjectName}-client-vpn-sg-id' }

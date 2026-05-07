@@ -7,6 +7,11 @@ param prefix string
 param gatewaySubnetId string
 param vpnBgpAsn int
 
+// AWS APIPA (169.254.x.x/30) BGP peering 을 위한 customBgpIpAddresses.
+// 빈 배열이면 default (VNet subnet IP). AWS-Azure VPN 시 AWS 의 inside CIDR 의 customer side IP 를 명시.
+// 예: '169.254.21.6' (AWS Tunnel 1 inside CIDR 169.254.21.4/30 의 customer side)
+param customBgpIpAddresses array = []
+
 // ── 퍼블릭 IP (Active) ────────────────────────────────────
 resource pipActive 'Microsoft.Network/publicIPAddresses@2023-05-01' = {
   name: 'pip-${prefix}-vpngw-active'
@@ -48,10 +53,18 @@ resource vpnGateway 'Microsoft.Network/virtualNetworkGateways@2023-05-01' = {
       tier: 'VpnGw1AZ'
     }
 
-    // BGP 활성화
+    // BGP 활성화 · AWS APIPA peering 시 customBgpIpAddresses 명시 (없으면 VNet subnet default)
     enableBgp: true
-    bgpSettings: {
+    bgpSettings: empty(customBgpIpAddresses) ? {
       asn: vpnBgpAsn
+    } : {
+      asn: vpnBgpAsn
+      bgpPeeringAddresses: [
+        {
+          ipconfigurationId: '${resourceId('Microsoft.Network/virtualNetworkGateways', 'vpngw-${prefix}')}/ipConfigurations/ipconfig-active'
+          customBgpIpAddresses: customBgpIpAddresses
+        }
+      ]
     }
 
     // Active/Standby 구성

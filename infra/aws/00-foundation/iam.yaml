@@ -1,10 +1,5 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Description: >
-  BOOKFLOW · Tier 00 Foundation · IAM
-  GitHub Actions OIDC Provider + GHA 전용 Role만 중앙 관리.
-  각 서비스별 IAM Role (CodePipeline service · CodeBuild service · Ansible CN · EKS Cluster · ECS Task 등)은
-  해당 리소스 stack에서 자체 선언 (분산 관리).
-
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW - Tier 00 Foundation - IAM (GitHub Actions OIDC Provider + execution Roles for CodePipeline, CodeBuild, Ansible CN, EKS Cluster, ECS Task; one-shot stack, never destroyed)
 Parameters:
   ProjectName:
     Type: String
@@ -17,7 +12,7 @@ Parameters:
     Default: BookFlowAI-Platform
 
 Resources:
-  # ─── GitHub Actions OIDC Provider (영구 · 한번만 생성) ───
+  # ─── GitHub Actions OIDC Provider ( ·  ) ───
   GitHubOidcProvider:
     Type: AWS::IAM::OIDCProvider
     Properties:
@@ -28,8 +23,8 @@ Resources:
         - 6938fd4d98bab03faadb97b34396831e3780aea1
         - 1c58a3a8518e8759bf075b76b750d4f2df264fcd
 
-  # CFN deploy는 로컬에서 `aws configure`된 IAM User credential로 수행 (GHA 불필요)
-  # GHA는 오직 Ansible trigger (SSM SendCommand) 용도만
+  # CFN deploy  `aws configure` IAM User credential  (GHA )
+  # GHA  Ansible trigger (SSM SendCommand) 
 
   # ─── GHA Glue Redeploy Role (SSM Run Command + S3 sync) ───
   GhaGlueRedeployRole:
@@ -58,7 +53,7 @@ Resources:
                   - ec2:DescribeInstances
                 Resource: '*'
 
-  # ─── GHA RDS Redeploy Role (동일 패턴) ───
+  # ─── GHA RDS Redeploy Role ( ) ───
   GhaRdsRedeployRole:
     Type: AWS::IAM::Role
     Properties:
@@ -85,13 +80,13 @@ Resources:
                   - ec2:DescribeInstances
                 Resource: '*'
 
-  # ─── [분산 관리] CodePipeline Service Role → cicd/codepipeline/*.yaml 각각에
-  # ─── [분산 관리] CodeBuild Service Role → 동일
-  # ─── [분산 관리] Ansible CN Instance Role → 30-compute-cluster/control-node.yaml
-  # ─── [분산 관리] EKS Cluster Role → 30-compute-cluster/eks-cluster.yaml
-  # ─── [분산 관리] RDS Enhanced Monitoring Role → 10-data-persistent/rds.yaml
-  # ─── [분산 관리] ECS Task Execution Role → 40-compute-runtime/ecs-services.yaml
-  # ─── [분산 관리] Lambda Execution Role → 99-serverless/sam-template.yaml (SAM 자동)
+  # ─── [ ] CodePipeline Service Role → cicd/codepipeline/*.yaml 
+  # ─── [ ] CodeBuild Service Role → 
+  # ─── [ ] Ansible CN Instance Role → 30-compute-cluster/control-node.yaml
+  # ─── [ ] EKS Cluster Role → 30-compute-cluster/eks-cluster.yaml
+  # ─── [ ] RDS Enhanced Monitoring Role → 10-data-persistent/rds.yaml
+  # ─── [ ] ECS Task Execution Role → 40-compute-runtime/ecs-services.yaml
+  # ─── [ ] Lambda Execution Role → 99-serverless/sam-template.yaml (SAM )
 
 Outputs:
   GitHubOidcProviderArn:

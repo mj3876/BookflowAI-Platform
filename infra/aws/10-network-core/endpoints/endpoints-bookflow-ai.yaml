@@ -1,17 +1,12 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Description: >
-  BOOKFLOW · Tier 10 · BookFlow AI VPC Interface Endpoints (7개)
-  ECR api · ECR dkr · Kinesis · SSM · Secrets Manager · CloudWatch Logs · KMS
-  + S3 Gateway Endpoint
-  단일 AZ (AZ1) · 학프 간소화
-
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: "BOOKFLOW - Tier 10 - BookFlow AI VPC Interface Endpoints (7): ECR api, ECR dkr, Kinesis, SSM, Secrets Manager, CloudWatch Logs, KMS + S3 Gateway Endpoint (single AZ AZ1 for cost optimization)"
 Parameters:
   ProjectName:
     Type: String
     Default: bookflow
 
 Resources:
-  # Security Group · Endpoint ENI가 VPC 내부에서 받는 트래픽 허용
+  # Security Group · Endpoint ENI VPC    
   EndpointSg:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -101,7 +96,7 @@ Resources:
         - !ImportValue { 'Fn::Sub': '${ProjectName}-subnet-bookflow-ai-private-az1' }
       SecurityGroupIds: [!Ref EndpointSg]
 
-  # S3 Gateway Endpoint (무료)
+  # S3 Gateway Endpoint ()
   S3Gateway:
     Type: AWS::EC2::VPCEndpoint
     Properties:

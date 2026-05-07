@@ -1,0 +1,344 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: BOOKFLOW Tier 99-serverless 8 Lambdas + EventBridge cron + Kinesis ESM + API Gateway HTTP
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: bookflow
+  StepFunctionsArn:
+    Type: String
+    Default: ''
+    Description: ETL3 Step Functions State Machine ARN
+  GcsStagingBucket:
+    Type: String
+    Default: ''
+    Description: GCS staging bucket name for mart-to-gcs Lambda
+
+Conditions:
+  HasStepFn: !Not [!Equals [!Ref StepFunctionsArn, '']]
+
+Globals:
+  Function:
+    Runtime: python3.13
+    Timeout: 30
+    MemorySize: 256
+    Tracing: Active
+    Environment:
+      Variables:
+        PROJECT_NAME: !Ref ProjectName
+        REGION: !Ref AWS::Region
+
+Resources:
+  LambdaVpcSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${ProjectName}-lambda-vpc-sg
+      GroupDescription: BOOKFLOW VPC Lambda - egress all (RDS via peering bookflow-ai-data)
+      VpcId: !ImportValue
+        Fn::Sub: ${ProjectName}-vpc-bookflow-ai-id
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: egress all
+      Tags: [{ Key: Name, Value: !Sub '${ProjectName}-lambda-vpc-sg' }]
+
+  # 1. aladin-sync (cron daily 16:50 KST)
+  AladinSyncFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${ProjectName}-aladin-sync
+      CodeUri: lambdas/aladin-sync/
+      Handler: index.lambda_handler
+      Environment:
+        Variables:
+          RAW_BUCKET: !ImportValue
+            Fn::Sub: ${ProjectName}-s3-raw-name
+      Policies:
+        - S3WritePolicy:
+            BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-raw-name
+        - Statement:
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !ImportValue
+                Fn::Sub: ${ProjectName}-secrets-aladin-ttbkey-arn
+      Events:
+        Cron:
+          Type: Schedule
+          Properties:
+            Schedule: 'cron(50 7 * * ? *)'
+            Enabled: true
+            Name: !Sub ${ProjectName}-aladin-sync-cron
+            Description: daily 16:50 KST (07:50 UTC)
+
+  # 2. event-sync (cron daily 16:50 KST)
+  EventSyncFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${ProjectName}-event-sync
+      CodeUri: lambdas/event-sync/
+      Handler: index.lambda_handler
+      Timeout: 120
+      Environment:
+        Variables:
+          RAW_BUCKET: !ImportValue
+            Fn::Sub: ${ProjectName}-s3-raw-name
+      Policies:
+        - S3WritePolicy:
+            BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-raw-name
+        - Statement:
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !ImportValue
+                Fn::Sub: ${ProjectName}-secrets-publicdata-arn
+      Events:
+        Cron:
+          Type: Schedule
+          Properties:
+            Schedule: 'cron(50 7 * * ? *)'
+            Enabled: true
+            Name: !Sub ${ProjectName}-event-sync-cron
+            Description: daily 16:50 KST (07:50 UTC)
+
+  # 3. sns-gen (cron 10min)
+  SnsGenFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${ProjectName}-sns-gen
+      CodeUri: lambdas/sns-gen/
+      Handler: index.lambda_handler
+      Environment:
+        Variables:
+          RAW_BUCKET: !ImportValue
+            Fn::Sub: ${ProjectName}-s3-raw-name
+      Policies:
+        - S3WritePolicy:
+            BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-raw-name
+        - Statement:
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !ImportValue
+                Fn::Sub: ${ProjectName}-secrets-sns-gen-config-arn
+      Events:
+        Cron:
+          Type: Schedule
+          Properties:
+            Schedule: 'rate(10 minutes)'
+            Enabled: true
+            Name: !Sub ${ProjectName}-sns-gen-cron
+
+  # 4. spike-detect (cron 10min, VPC)
+  SpikeDetectFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${ProjectName}-spike-detect
+      CodeUri: lambdas/spike-detect/
+      Handler: index.lambda_handler
+      MemorySize: 512
+      Timeout: 60
+      VpcConfig:
+        SecurityGroupIds: [!Ref LambdaVpcSg]
+        SubnetIds:
+          - !ImportValue
+            Fn::Sub: ${ProjectName}-subnet-bookflow-ai-private-az1
+          - !ImportValue
+            Fn::Sub: ${ProjectName}-subnet-bookflow-ai-private-az2
+      Policies:
+        - VPCAccessPolicy: {}
+        - Statement:
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !ImportValue
+                Fn::Sub: ${ProjectName}-secrets-rds-master-arn
+      Events:
+        Cron:
+          Type: Schedule
+          Properties:
+            Schedule: 'rate(10 minutes)'
+            Enabled: true
+            Name: !Sub ${ProjectName}-spike-detect-cron
+
+  # 5. forecast-trigger (cron daily 18:24 KST)
+  ForecastTriggerFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${ProjectName}-forecast-trigger
+      Handler: index.lambda_handler
+      InlineCode: |
+        import json
+        import os
+        import boto3
+        def lambda_handler(event, context):
+            sfn_arn = os.environ.get('STEP_FN_ARN', '')
+            if sfn_arn:
+                sfn = boto3.client('stepfunctions')
+                resp = sfn.start_execution(stateMachineArn=sfn_arn, input=json.dumps({"trigger": "cron"}))
+                return {"statusCode": 200, "executionArn": resp['executionArn']}
+            return {"statusCode": 200, "body": "STEP_FN_ARN not set"}
+      Environment:
+        Variables:
+          PROJECT_NAME: !Ref ProjectName
+          REGION: !Ref AWS::Region
+          STEP_FN_ARN: !If [HasStepFn, !Ref StepFunctionsArn, '']
+      Policies:
+        - !If
+          - HasStepFn
+          - StepFunctionsExecutionPolicy:
+              StateMachineName: !Select [6, !Split [':', !Ref StepFunctionsArn]]
+          - !Ref AWS::NoValue
+      Events:
+        Cron:
+          Type: Schedule
+          Properties:
+            Schedule: 'cron(24 9 * * ? *)'
+            Enabled: true
+            Name: !Sub ${ProjectName}-forecast-trigger-cron
+            Description: daily 18:24 KST (09:24 UTC)
+
+  # 6. secret-forwarder (API Gateway)
+  SecretForwarderFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${ProjectName}-secret-forwarder
+      Handler: index.lambda_handler
+      InlineCode: |
+        import json
+        def lambda_handler(event, context):
+            return {"statusCode": 200, "body": json.dumps({"status": "placeholder"})}
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:CreateSecret
+                - secretsmanager:UpdateSecret
+                - secretsmanager:PutSecretValue
+                - secretsmanager:GetSecretValue
+              Resource: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ProjectName}/auth/*
+            - Effect: Allow
+              Action: kms:Decrypt
+              Resource: !ImportValue
+                Fn::Sub: ${ProjectName}-kms-eks-arn
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            Path: /secret
+            Method: post
+            ApiId: !Ref SecretForwarderApi
+
+  SecretForwarderApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: '$default'
+      Tags: { Name: !Sub '${ProjectName}-secret-forwarder-api' }
+
+  # 7. pos-ingestor (Kinesis ESM, VPC)
+  PosIngestorFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${ProjectName}-pos-ingestor
+      CodeUri: lambdas/pos-ingestor/
+      Handler: index.lambda_handler
+      MemorySize: 512
+      Timeout: 60
+      ReservedConcurrentExecutions: 5
+      VpcConfig:
+        SecurityGroupIds: [!Ref LambdaVpcSg]
+        SubnetIds:
+          - !ImportValue
+            Fn::Sub: ${ProjectName}-subnet-bookflow-ai-private-az1
+          - !ImportValue
+            Fn::Sub: ${ProjectName}-subnet-bookflow-ai-private-az2
+      Policies:
+        - VPCAccessPolicy: {}
+        - KinesisStreamReadPolicy:
+            StreamName: !ImportValue
+              Fn::Sub: ${ProjectName}-kinesis-pos-events-name
+        - Statement:
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !ImportValue
+                Fn::Sub: ${ProjectName}-secrets-rds-master-arn
+      Events:
+        Stream:
+          Type: Kinesis
+          Properties:
+            Stream: !ImportValue
+              Fn::Sub: ${ProjectName}-kinesis-pos-events-arn
+            BatchSize: 100
+            StartingPosition: LATEST
+            MaximumBatchingWindowInSeconds: 5
+            FunctionResponseTypes: [ReportBatchItemFailures]
+
+  # 8. mart-to-gcs (S3 EventBridge -> GCS staging)
+  MartToGcsFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${ProjectName}-mart-to-gcs
+      CodeUri: lambdas/mart-to-gcs/
+      Handler: index.lambda_handler
+      MemorySize: 512
+      Timeout: 120
+      Environment:
+        Variables:
+          GCS_STAGING_BUCKET: !Ref GcsStagingBucket
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-mart-name
+        - Statement:
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !ImportValue
+                Fn::Sub: ${ProjectName}-secrets-gcp-sa-key-arn
+      Events:
+        S3EventBridge:
+          Type: EventBridgeRule
+          Properties:
+            Pattern:
+              source:
+                - aws.s3
+              detail-type:
+                - Object Created
+              detail:
+                bucket:
+                  name:
+                    - !Sub '${ProjectName}-mart-${AWS::AccountId}'
+                object:
+                  key:
+                    - prefix: mart/
+
+Outputs:
+  AladinSyncArn:
+    Value: !GetAtt AladinSyncFn.Arn
+    Export: { Name: !Sub '${ProjectName}-lambda-aladin-sync-arn' }
+  EventSyncArn:
+    Value: !GetAtt EventSyncFn.Arn
+    Export: { Name: !Sub '${ProjectName}-lambda-event-sync-arn' }
+  SnsGenArn:
+    Value: !GetAtt SnsGenFn.Arn
+    Export: { Name: !Sub '${ProjectName}-lambda-sns-gen-arn' }
+  SpikeDetectArn:
+    Value: !GetAtt SpikeDetectFn.Arn
+    Export: { Name: !Sub '${ProjectName}-lambda-spike-detect-arn' }
+  ForecastTriggerArn:
+    Value: !GetAtt ForecastTriggerFn.Arn
+    Export: { Name: !Sub '${ProjectName}-lambda-forecast-trigger-arn' }
+  SecretForwarderArn:
+    Value: !GetAtt SecretForwarderFn.Arn
+    Export: { Name: !Sub '${ProjectName}-lambda-secret-forwarder-arn' }
+  SecretForwarderApiUrl:
+    Value: !Sub 'https://${SecretForwarderApi}.execute-api.${AWS::Region}.amazonaws.com'
+    Export: { Name: !Sub '${ProjectName}-secret-forwarder-api-url' }
+  PosIngestorArn:
+    Value: !GetAtt PosIngestorFn.Arn
+    Export: { Name: !Sub '${ProjectName}-lambda-pos-ingestor-arn' }
+  MartToGcsArn:
+    Value: !GetAtt MartToGcsFn.Arn
+    Export: { Name: !Sub '${ProjectName}-lambda-mart-to-gcs-arn' }
+  LambdaVpcSgId:
+    Value: !Ref LambdaVpcSg
+    Export: { Name: !Sub '${ProjectName}-lambda-vpc-sg-id' }

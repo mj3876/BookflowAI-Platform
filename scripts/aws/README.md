@@ -1,258 +1,130 @@
-# AWS 배포 스크립트 (영헌 담당)
+# BOOKFLOW AWS deploy CLI
 
-> BOOKFLOW AWS 인프라 배포 스크립트 모음. **Windows PowerShell (.ps1)** 환경.
-> 모든 스크립트는 `scripts/aws/_lib/common.ps1` 을 dot-source 해서 공용 함수 사용.
+> Python + boto3 기반. PowerShell 5.1 + AWS CLI v2 의 한국 Windows cp949 인코딩 이슈 회피.
 
-## 디렉토리 구조
+## 설치
+
+```bash
+pip install -r scripts/aws/requirements.txt
+aws configure   # access key + secret + region=ap-northeast-1
+```
+
+## 사용법
+
+```bash
+cd "C:\Users\User\Desktop\kyobo project\BookFlowAI-Platform"
+
+# Phase 0 · 영구 자원 (Day 0 1회)
+python scripts/aws/bookflow.py phase0
+python scripts/aws/bookflow.py phase0 --down   # 학기 종료 시
+
+# 매일 base
+python scripts/aws/bookflow.py base-up
+python scripts/aws/bookflow.py base-down
+
+# Tasks (개별)
+python scripts/aws/bookflow.py task data
+python scripts/aws/bookflow.py task msa-pods
+python scripts/aws/bookflow.py task etl-streaming
+python scripts/aws/bookflow.py task publisher
+python scripts/aws/bookflow.py task auth-pod         # env BOOKFLOW_AZURE_VPN_GW_IP
+python scripts/aws/bookflow.py task forecast         # env BOOKFLOW_GCP_VPN_GW_IP
+python scripts/aws/bookflow.py task lambdas
+python scripts/aws/bookflow.py task glue
+python scripts/aws/bookflow.py task client-vpn
+python scripts/aws/bookflow.py task rds-seed
+
+# 통합 (data + msa-pods + etl + publisher)
+python scripts/aws/bookflow.py task --all
+python scripts/aws/bookflow.py task --all --down
+
+# 개별 destroy
+python scripts/aws/bookflow.py task <name> --down
+
+# HA 시나리오
+python scripts/aws/bookflow.py scenario ha
+python scripts/aws/bookflow.py scenario ha --revert
+
+# 모든 자원 + Tier 00 영구까지 (학기 종료)
+python scripts/aws/bookflow.py wipe-all
+
+# 상태 확인
+python scripts/aws/bookflow.py status
+```
+
+## 폴더 구조
 
 ```
 scripts/aws/
-├── config/            공유 설정 (aws.ps1 · aws.local.ps1.example)
-├── _lib/              공용 함수 (common · deploy-stack · destroy-stack · check-stack)
-├── 0-initial/         최초 1회 · 멀티클라우드 통신 검증
-├── 1-daily/           매일 아침/저녁 (base-up · base-down)
-├── 2-tasks/           작업 단위별 add-on (base 위에 쌓기)
-└── utils/             유틸 (cross-cloud exports 등)
+├── bookflow.py              # 메인 CLI entry point
+├── requirements.txt
+├── README.md
+├── lib/
+│   ├── config.py            # account/region/prefix · INFRA_ROOT
+│   ├── log.py               # rich 색상 출력
+│   └── stack.py             # boto3 wrapper · ChangeSet 패턴 deploy
+└── tasks/
+    ├── foundation.py        # phase0 (Tier 00 영구)
+    ├── base.py              # base-up · base-down
+    ├── data.py              # Tier 20 RDS + Redis + Kinesis
+    ├── msa_pods.py          # EKS · IRSA · endpoints · peering
+    ├── etl_streaming.py     # ECS sims
+    ├── publisher.py         # ALB + WAF + Publisher ASG + inventory-api
+    ├── auth_pod.py          # NAT + Azure VPN
+    ├── forecast.py          # GCP VPN
+    ├── lambdas_.py          # SAM · 7 Lambdas
+    ├── glue.py              # Glue Catalog + Step Functions ETL3
+    ├── client_vpn.py        # Client VPN Endpoint
+    ├── rds_seed.py          # Ansible peering (placeholder)
+    ├── full_stack.py        # 통합
+    ├── scenario_ha.py       # HA toggle
+    └── wipe_all.py          # 학기 종료 시
 ```
 
-## 최초 setup (영헌 1회만)
+## 환경 변수
 
-```powershell
-# PowerShell Execution Policy 허용
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+| 이름 | 용도 | 기본값 |
+|------|------|--------|
+| `AWS_REGION` | 리전 | ap-northeast-1 |
+| `BOOKFLOW_PROJECT` | 프로젝트 prefix | bookflow |
+| `BOOKFLOW_AZURE_VPN_GW_IP` | task-auth-pod 활성 IP | — |
+| `BOOKFLOW_AZURE_VPN_PSK` | (선택) | AWS 자동 |
+| `BOOKFLOW_GCP_VPN_GW_IP` | task-forecast 활성 IP | — |
+| `BOOKFLOW_GCP_VPN_PSK` | (선택) | GCP terraform |
 
-# AWS CLI 설치 확인
-aws --version
-
-# AWS 자격 증명 설정 (CFN deploy 로컬 수행용)
-aws configure
-# AWS Access Key ID: ...
-# AWS Secret Access Key: ...
-# Default region name: ap-northeast-1
-# Default output format: json
-
-# 개인 config 생성 (필요 시)
-Copy-Item config\aws.local.ps1.example config\aws.local.ps1
-# 수정: aws.local.ps1
-```
-
-### IAM 역할 구분
-
-| 주체 | 권한 | 용도 |
-|---|---|---|
-| **로컬 `aws configure` IAM User** (영헌) | CFN deploy 권한 필요 | 모든 `aws cloudformation deploy` 실행 주체 |
-| **GhaGlueRedeployRole** (GHA OIDC) | `ssm:SendCommand` 만 | `.github/workflows/glue-redeploy.yml` 에서 assume |
-| **GhaRdsRedeployRole** (GHA OIDC) | `ssm:SendCommand` 만 | `.github/workflows/rds-redeploy.yml` 에서 assume |
-
-→ GHA는 SSM으로 Ansible CN만 트리거. 실제 인프라 변경은 Ansible CN이 수행.
-→ CFN deploy는 로컬 (영헌 PowerShell)에서만 수행. GHA에 CFN 권한 Role 없음.
-
-## 일상 사용법
-
-### 매일 아침 09:00
-```powershell
-cd BookFlowAI-Platform
-.\scripts\aws\1-daily\base-up.ps1
-# → 자동으로 show-cross-cloud-exports.ps1 실행
-# → exports/aws-YYYY-MM-DD.txt 생성
-# → 팀 단톡에 복붙
-```
-
-### 작업 단위별 add-on
-```powershell
-# MSA Pod 개발
-.\scripts\aws\2-tasks\task-msa-pods.ps1
-
-# auth-pod 개발 (+ Azure VPN)
-.\scripts\aws\2-tasks\task-auth-pod.ps1
-
-# ETL1 POS (민지)
-.\scripts\aws\2-tasks\task-etl-streaming.ps1
-```
-
-### 매일 저녁 18:00
-```powershell
-.\scripts\aws\1-daily\base-down.ps1
-# → 전체 역순 destroy (base + 모든 task 포함)
-```
-
-## Stack 배포 순서 (의존성 기반)
-
-CloudFormation Stack은 **Outputs + Import** 관계 때문에 순서가 중요함. 스크립트가 자동 처리.
-
-### Tier 00 Foundation (Day 0 1회 · phase0-foundation.ps1) · 10 stack
+## Tier 의존성
 
 ```
- 1. iam                   ← GHA OIDC + GHA Role 2개 (SSM 트리거 전용)
- 2. kms                   ← CMK × 2 (EKS envelope + CloudTrail)
- 3. parameter-store       ← 공통 설정값 (독립)
- 4. secrets               ← Secrets Manager skeleton (값 주입은 Phase 2)
- 5. acm                   ← Client VPN cert (skeleton · easy-rsa import 필요)
- 6. ecr                   ← 12 repo (Pod 8 + ECS 3 + Publisher 1)
- 7. codestar-connection   ← GitHub OAuth (⚠ Console 수동 Activate 필요)
- 8. s3                    ← 6 bucket (kms Import)
- 9. cloudtrail            ← Trail (s3 + kms Import)
-10. cloudwatch            ← Log Groups (EKS + Lambda 6종 + Alarm SNS)
-```
-※ `route53` (Private Hosted Zone)은 VPC 필요 → **20a-network-core에서 생성**
-※ `codestar-connection` 은 deploy 후 AWS Console에서 GitHub App install 수동 승인 필요 (PENDING → AVAILABLE)
-
-### Tier 10 Network Core (매일 아침 base-up.ps1)
-
-```
-11. vpc-bookflow-ai        ← 독립
-12. vpc-sales-data         ← 독립
-13. vpc-egress             ← 독립 (+ IGW)
-14. vpc-data               ← 독립
-15. vpc-ansible            ← 독립
-16. customer-gateway       ← 독립 (IP placeholder OK)
-17. route53                ← 5 VPC Import (모든 VPC association)
-```
-※ Endpoints · Peering은 base-up 제외 · task가 필요 시 deploy
-
-### Tier 20 Data Persistent (base-up 또는 task에서)
-
-```
-18. rds                    ← vpc-data DB subnet + 00-secrets + 00-kms Import
-19. redis                  ← vpc-data DB subnet Import
-20. kinesis                ← 00-s3 + 00-kms Import · VPC 독립
+00 (영구) ─┬─→ 10 (network) ─┬─→ 20 (data) ─→ 40 (runtime) ─→ 50 (NAT/ALB) ─→ 60 (cross-cloud)
+           │                  └─→ 30 (cluster) ─→ 40
+           ├─→ 99-glue
+           └─→ 99-serverless ─→ 10/20
 ```
 
-### Tier 30 Compute Cluster
+## Day-to-day 운영
 
-```
-21. eks-cluster            ← 00-kms + vpc-bookflow-ai Import
-22. eks-alb-controller     ← eks-cluster Import (OIDC issuer)
-23. ecs-cluster            ← 독립
-24. control-node           ← 00-iam + vpc-ansible Import
-```
+```bash
+# 09:00 아침
+python scripts/aws/bookflow.py base-up
+python scripts/aws/bookflow.py task --all      # 통합 시연 시
 
-### Tier 40 Compute Runtime (task가 필요 시)
-
-```
-25. eks-nodegroup          ← eks-cluster Import
-26. ecs-services           ← ecs-cluster + alb-external Import
-27. publisher-asg          ← vpc-egress + 00-iam Import
+# 18:00 저녁
+python scripts/aws/bookflow.py base-down       # 전체 destroy (Tier 00 제외)
 ```
 
-### Tier 50 Network Traffic (task가 필요 시)
+## 비용
 
-```
-28. nat-gateway            ← vpc-egress public subnet Import
-29. alb-external           ← vpc-egress Import (재고조회)
-30. waf                    ← alb-external Import
-```
+| 단계 | 추가 일 비용 |
+|---|---|
+| Tier 00 영구 | ~$1/일 |
+| base-up | +$1/일 |
+| task-data | +$1.30/일 |
+| task-msa-pods | +$1.20/일 |
+| task-etl-streaming | +$0.40/일 |
+| task-publisher | +$1.70/일 |
+| task-auth-pod | +$1.50/일 |
+| task-forecast | +$1.20/일 |
+| task-client-vpn | +$1.50/일 |
+| task-lambdas / task-glue | ~$0 (free tier) |
 
-### Tier 60 Network Cross-Cloud (Phase 3 시나리오 테스트)
-
-```
-31. tgw                    ← VPC Attach × 5
-32. vpn-site-to-site       ← tgw + customer-gateway Import
-33. client-vpn             ← vpc + acm + route53 Import
-```
-
-### Tier 99 Serverless / Glue
-
-```
-34. 99-serverless (SAM)    ← 00-s3 + 00-secrets + 00-kms Import
-35. 99-glue-catalog        ← 00-s3 + 00-iam Import
-```
-
----
-
-## 스크립트 매트릭스
-
-| 스크립트 | Tier | 언제 | 올리는 것 |
-|---|---|---|---|
-| `0-initial/full-cross-cloud-test.ps1` | 최초 1회 · 통합테스트 | Phase 1 검증 / Phase 3 통합테스트 | 전체 + Azure·GCP VPN + TGW |
-| `1-daily/base-up.ps1` | 매일 아침 | 매일 09:00 | 00-foundation + 10-data + 20a-network-core + 30-cluster |
-| `1-daily/base-down.ps1` | 매일 저녁 | 매일 18:00 | 전체 역순 destroy |
-| `2-tasks/task-rds-seed.ps1` | 작업 | RDS 시드 작업 시 | (base 가정) + Ansible CN 트리거 |
-| `2-tasks/task-msa-pods.ps1` | 작업 | MSA Pod 개발 | (base) + 40-eks-nodegroup |
-| `2-tasks/task-auth-pod.ps1` | 작업 | auth-pod 개발 | (base + msa-pods) + 20b-nat + 20c-vpn-azure |
-| `2-tasks/task-etl-streaming.ps1` | 작업 | ETL1 POS | (base) + 40-ecs-services (POS sim) + 99-sl(pos-ingestor) |
-| `2-tasks/task-etl-batch.ps1` | 작업 | ETL2+3 | (base) + 99-sl (aladin·event·sns·spike) + 99-glue |
-| `2-tasks/task-forecast.ps1` | 작업 | forecast-svc · Vertex 학습 | (base) + 20c-vpn-gcp + 99-sl(forecast-trigger) |
-| `2-tasks/task-publisher.ps1` | 작업 | Publisher 앱 | (base) + 20b-alb-external + 20b-waf + 40-publisher-asg |
-| `utils/show-cross-cloud-exports.ps1` | 유틸 | base-up 후 자동 | — (조회만) |
-
-## 작업 단위별 매핑 (V4 WBS)
-
-| WBS | 작업 | 담당 | 스크립트 |
-|---|---|---|---|
-| 4 | RDS 시드 | 영헌 | `task-rds-seed` |
-| 5 | Vertex 최초 학습 | 우혁 | `task-forecast` |
-| 6 | ETL1 POS | 민지 | `task-etl-streaming` |
-| 7 | ETL2 외부 | 민지 | `task-etl-batch` |
-| 8 | ETL3 Raw→Mart | 민지 | `task-etl-batch` |
-| 9 | DW 일상 AI | 우혁 | `task-forecast` |
-| 10.1 | EKS 기초 | 영헌 | `task-msa-pods` |
-| 10.2 | auth-pod | 영헌 | `task-auth-pod` |
-| 10.3~8 | Pod 개발 | 영헌 | `task-msa-pods` |
-| 10.9 | dashboard-bff | 영헌 | `task-msa-pods` (Internal ALB 자동) |
-| Publisher | - | - | `task-publisher` |
-| 11 | 통합 테스트 | 전원 | `0-initial/full-cross-cloud-test` |
-
-## Cross-cloud Exports
-
-매일 아침 `base-up.ps1` 실행 후 자동으로 `show-cross-cloud-exports.ps1`이 실행됨.
-
-출력 내용:
-- AWS Customer Gateway Public IP (Azure/GCP VPN 설정용)
-- AWS Site-to-Site VPN Public IP × 2
-- AWS TGW ID · BGP ASN
-- 4 VPC CIDR blocks
-
-출력물은 `exports/aws-YYYY-MM-DD.txt` 에 저장 (`.gitignore`로 GitHub 제외).
-영헌이 팀 단톡/Slack에 복붙해서 민지(Azure) · 우혁(GCP)에게 공유.
-
-## Config 설명
-
-### `config/aws.ps1` (공유 · git)
-공통 설정값. 팀 전체 동일.
-```powershell
-$env:AWS_REGION      = "ap-northeast-1"
-$env:STACK_PREFIX    = "bookflow"
-$env:ACCOUNT_ID      = "111122223333"
-$env:GITHUB_REPO     = "MyosoonHwang/BookFlowAI-Platform"
-```
-
-### `config/aws.local.ps1` (개인 · gitignored)
-개인별 override. 필요 시 `aws.local.ps1.example` 복사해서 사용.
-```powershell
-# 예: 다른 AWS profile 쓰고 싶을 때
-$env:AWS_PROFILE = "bookflow-personal"
-```
-
-## 트러블슈팅
-
-### Execution Policy 오류
-```
-.\scripts\aws\1-daily\base-up.ps1 cannot be loaded because running scripts is disabled
-```
-→ `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser` 1회 실행
-
-### AWS 자격 증명 오류
-```
-Unable to locate credentials
-```
-→ `aws configure` 실행 또는 `config/aws.local.ps1` 에서 `$env:AWS_PROFILE` 설정
-
-### Stack이 이미 존재
-CFN은 idempotent. 이미 있으면 `UPDATE_COMPLETE` 또는 `No updates are to be performed`. 정상.
-
-### 의존성 순서 오류 (Import 실패)
-순서대로 deploy해야 함. 예: `30-eks-cluster`가 `00-kms` Output 을 Import하려면 `00-kms`가 먼저 배포돼야 함.
-→ `base-up.ps1` 사용하면 올바른 순서로 자동 deploy.
-
-## 새 스크립트 추가 가이드
-
-1. 적절한 디렉토리 선택:
-   - 1회만 쓸 거면 `0-initial/`
-   - 매일 쓸 거면 `1-daily/`
-   - 특정 작업 시에만 쓸 거면 `2-tasks/`
-   - 유틸리티면 `utils/`
-2. 파일명 규칙: `task-XXX.ps1` · `base-XXX.ps1` 등 일관성 유지
-3. 상단에 `. $PSScriptRoot\..\_lib\common.ps1` 로 common 로드
-4. `deploy_stack` 함수 사용 (수동 `aws cloudformation deploy` 호출 지양)
-5. README 이 파일에 매트릭스 업데이트
+총 통합 시 ~$10/일 · 25 영업일 운영 시 ~$200/월 (비용산정 V1 일치)

@@ -1,6 +1,5 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 10 · Ansible VPC (10.4.0.0/16) · Ansible Control Node 전용 · Private only
-
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW - Tier 10 - Ansible VPC (10.4.0.0/16) - Public subnet (Ansible Node, outbound) + Private subnet x2
 Parameters:
   ProjectName:
     Type: String
@@ -21,6 +20,29 @@ Resources:
       EnableDnsHostnames: true
       Tags: [{ Key: Name, Value: !Sub '${ProjectName}-vpc-ansible' }]
 
+  # ─── Internet Gateway (Ansible Node bootstrap · cloud-init apt/pip/git ) ───
+  Igw:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags: [{ Key: Name, Value: !Sub '${ProjectName}-ansible-igw' }]
+
+  IgwAttach:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref Igw
+
+  # ─── Public Subnet (Ansible Node  ·  outbound · SG  ingress ) ───
+  PublicAz1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.4.0.0/24
+      AvailabilityZone: !Ref AzA
+      MapPublicIpOnLaunch: true
+      Tags: [{ Key: Name, Value: !Sub '${ProjectName}-ansible-public-az1' }]
+
+  # ─── Private Subnets (   ·  Ansible Node  Public ) ───
   PrivateAz1:
     Type: AWS::EC2::Subnet
     Properties:
@@ -37,21 +59,41 @@ Resources:
       AvailabilityZone: !Ref AzC
       Tags: [{ Key: Name, Value: !Sub '${ProjectName}-ansible-private-az2' }]
 
-  RouteTable:
+  # ─── Public Route Table (default → IGW) ───
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags: [{ Key: Name, Value: !Sub '${ProjectName}-ansible-public-rt' }]
+
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: IgwAttach
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref Igw
+
+  PublicRtAssocAz1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref PublicAz1, RouteTableId: !Ref PublicRouteTable }
+
+  # ─── Private Route Table (  ·  Peering  ) ───
+  PrivateRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref Vpc
       Tags: [{ Key: Name, Value: !Sub '${ProjectName}-ansible-private-rt' }]
 
-  RtAssocAz1:
+  PrivateRtAssocAz1:
     Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties: { SubnetId: !Ref PrivateAz1, RouteTableId: !Ref RouteTable }
+    Properties: { SubnetId: !Ref PrivateAz1, RouteTableId: !Ref PrivateRouteTable }
 
-  RtAssocAz2:
+  PrivateRtAssocAz2:
     Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties: { SubnetId: !Ref PrivateAz2, RouteTableId: !Ref RouteTable }
+    Properties: { SubnetId: !Ref PrivateAz2, RouteTableId: !Ref PrivateRouteTable }
 
-  # ─── Custom NACL ───
+  # ─── Custom NACL (3 subnet  · allow all · stateful  SG) ───
   Nacl:
     Type: AWS::EC2::NetworkAcl
     Properties:
@@ -66,11 +108,15 @@ Resources:
     Type: AWS::EC2::NetworkAclEntry
     Properties: { NetworkAclId: !Ref Nacl, RuleNumber: 100, Protocol: -1, RuleAction: allow, Egress: true, CidrBlock: 0.0.0.0/0 }
 
-  NaclAssocAz1:
+  NaclAssocPublicAz1:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties: { SubnetId: !Ref PublicAz1, NetworkAclId: !Ref Nacl }
+
+  NaclAssocPrivateAz1:
     Type: AWS::EC2::SubnetNetworkAclAssociation
     Properties: { SubnetId: !Ref PrivateAz1, NetworkAclId: !Ref Nacl }
 
-  NaclAssocAz2:
+  NaclAssocPrivateAz2:
     Type: AWS::EC2::SubnetNetworkAclAssociation
     Properties: { SubnetId: !Ref PrivateAz2, NetworkAclId: !Ref Nacl }
 
@@ -81,12 +127,21 @@ Outputs:
   Cidr:
     Value: !GetAtt Vpc.CidrBlock
     Export: { Name: !Sub '${ProjectName}-vpc-ansible-cidr' }
+  IgwId:
+    Value: !Ref Igw
+    Export: { Name: !Sub '${ProjectName}-ansible-igw-id' }
+  PublicAz1Id:
+    Value: !Ref PublicAz1
+    Export: { Name: !Sub '${ProjectName}-subnet-ansible-public-az1' }
   PrivateAz1Id:
     Value: !Ref PrivateAz1
     Export: { Name: !Sub '${ProjectName}-subnet-ansible-private-az1' }
   PrivateAz2Id:
     Value: !Ref PrivateAz2
     Export: { Name: !Sub '${ProjectName}-subnet-ansible-private-az2' }
-  RouteTableId:
-    Value: !Ref RouteTable
+  PublicRouteTableId:
+    Value: !Ref PublicRouteTable
+    Export: { Name: !Sub '${ProjectName}-rt-ansible-public' }
+  PrivateRouteTableId:
+    Value: !Ref PrivateRouteTable
     Export: { Name: !Sub '${ProjectName}-rt-ansible-private' }

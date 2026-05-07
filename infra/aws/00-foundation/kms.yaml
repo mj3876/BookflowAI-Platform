@@ -1,13 +1,12 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 00 · KMS CMK 2개 (EKS envelope · CloudTrail)
-
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW - Tier 00 - KMS CMKs x2 (EKS envelope encryption + CloudTrail log encryption)
 Parameters:
   ProjectName:
     Type: String
     Default: bookflow
 
 Resources:
-  # ─── EKS envelope encryption용 CMK ───
+  # ─── EKS envelope encryption CMK ───
   EksKey:
     Type: AWS::KMS::Key
     Properties:
@@ -29,7 +28,7 @@ Resources:
       AliasName: !Sub alias/${ProjectName}-eks
       TargetKeyId: !Ref EksKey
 
-  # ─── CloudTrail 로그 암호화용 CMK ───
+  # ─── CloudTrail   CMK ───
   CloudTrailKey:
     Type: AWS::KMS::Key
     Properties:

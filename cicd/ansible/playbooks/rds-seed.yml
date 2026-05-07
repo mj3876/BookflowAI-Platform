@@ -1,6 +1,144 @@
-# RDS 초기 시드 데이터 INSERT playbook
-# 라이프사이클: —
-# BOOKFLOW V6.2
+---
+# rds-seed playbook
+# Bulk-load seed CSVs (warehouses, locations, books, authors, publishers, users,
+#                      inventory, sales_realtime, forecast_cache, pending_orders, ...)
+# Order matters - FK constraints (warehouses -> locations -> inventory etc.)
+# Idempotent strategy: TRUNCATE then COPY (dev/test) OR INSERT ON CONFLICT (prod)
 
-# TODO: 팀원이 실제 스펙 정의
-# 참고: docs/ARCHITECTURE.md · docs/DEPLOYMENT.md
+- name: BookFlow RDS seed apply
+  hosts: localhost
+  gather_facts: false
+  vars:
+    aws_region: ap-northeast-1
+    project_name: bookflow
+    rds_secret_id: bookflow/rds/master-password
+    db_port: 5432
+    db_name: bookflow
+    seed_dir: "{{ playbook_dir }}/../../../infra/aws/20-data-persistent/seed-data"
+    # FK-respecting load order
+    seed_tables:
+      - warehouses
+      - publishers
+      - authors
+      - books
+      - locations
+      - users
+      - inventory
+      - reservations
+      - forecast_cache
+      - pending_orders
+      - order_approvals
+      - returns
+      - new_book_requests
+      - spike_events
+      - notifications_log
+      - sales_realtime
+      - inventory_snapshot_daily
+      - kpi_daily
+      - audit_log
+
+  tasks:
+    - name: Resolve RDS connection
+      ansible.builtin.import_role:
+        name: postgres-schema
+
+    - name: Truncate target tables (reverse FK order)
+      community.postgresql.postgresql_query:
+        login_host: "{{ db_host }}"
+        login_port: "{{ db_port }}"
+        login_user: "{{ db_master_user }}"
+        login_password: "{{ db_master_password }}"
+        db: "{{ db_name }}"
+        query: >-
+          TRUNCATE TABLE {{ seed_tables | reverse | join(', ') }}
+          RESTART IDENTITY CASCADE
+        autocommit: true
+      no_log: true
+
+    - name: Stat each seed CSV (skip missing tables)
+      ansible.builtin.stat:
+        path: "{{ seed_dir }}/{{ item }}.csv"
+      loop: "{{ seed_tables }}"
+      register: csv_stats
+      loop_control:
+        label: "{{ item }}"
+
+    # RDS 는 server-side COPY 불가 (postgresql_copy 모듈은 서버 파일 가정).
+    # psql 클라이언트의 \copy 메타커맨드를 통해 client-side stream 적재.
+    - name: Bulk \copy each seed CSV via psql
+      ansible.builtin.shell: |
+        export PGPASSWORD={{ db_master_password | quote }}
+        psql -h {{ db_host }} -p {{ db_port }} -U {{ db_master_user }} -d {{ db_name }} \
+          -v ON_ERROR_STOP=1 \
+          -c "\copy {{ item.item }} FROM '{{ seed_dir }}/{{ item.item }}.csv' WITH (FORMAT csv, HEADER true, DELIMITER ',');"
+      loop: "{{ csv_stats.results }}"
+      when: item.stat.exists
+      loop_control:
+        label: "{{ item.item }}"
+      no_log: true
+      changed_when: true
+
+    - name: Update sequences (SERIAL/BIGSERIAL columns) post-seed
+      community.postgresql.postgresql_query:
+        login_host: "{{ db_host }}"
+        login_port: "{{ db_port }}"
+        login_user: "{{ db_master_user }}"
+        login_password: "{{ db_master_password }}"
+        db: "{{ db_name }}"
+        query: |
+          SELECT setval('authors_author_id_seq',          COALESCE((SELECT MAX(author_id)    FROM authors),    1), true);
+          SELECT setval('publishers_publisher_id_seq',    COALESCE((SELECT MAX(publisher_id) FROM publishers), 1), true);
+          SELECT setval('audit_log_log_id_seq',           COALESCE((SELECT MAX(log_id)       FROM audit_log),  1), true);
+          SELECT setval('new_book_requests_id_seq',       COALESCE((SELECT MAX(id)           FROM new_book_requests), 1), true);
+        autocommit: true
+      no_log: true
+
+    # Derived tables (snapshot+kpi) populated via SQL aggregation from
+    # inventory + sales_realtime, since CSVs would be 168k+ rows.
+    - name: Aggregate inventory_snapshot_daily (14d snapshots from current inventory)
+      community.postgresql.postgresql_query:
+        login_host: "{{ db_host }}"
+        login_port: "{{ db_port }}"
+        login_user: "{{ db_master_user }}"
+        login_password: "{{ db_master_password }}"
+        db: "{{ db_name }}"
+        query: |
+          INSERT INTO inventory_snapshot_daily (snapshot_date, isbn13, location_id, on_hand, reserved_qty, available, safety_stock, snapshot_taken_at)
+          SELECT
+              CURRENT_DATE - g.d                                           AS snapshot_date,
+              i.isbn13,
+              i.location_id,
+              GREATEST(i.on_hand     + (random()*40 - 20)::int, 0)         AS on_hand,
+              GREATEST(i.reserved_qty + (random()*4  - 2)::int,  0)        AS reserved_qty,
+              GREATEST(i.on_hand - i.reserved_qty + (random()*30 - 10)::int, 0) AS available,
+              i.safety_stock,
+              NOW() - (g.d::text || ' days')::interval
+          FROM inventory i CROSS JOIN generate_series(0, 13) AS g(d)
+          ON CONFLICT (snapshot_date, isbn13, location_id) DO NOTHING;
+        autocommit: true
+
+    - name: Aggregate kpi_daily from sales_realtime (per date/store/channel)
+      community.postgresql.postgresql_query:
+        login_host: "{{ db_host }}"
+        login_port: "{{ db_port }}"
+        login_user: "{{ db_master_user }}"
+        login_password: "{{ db_master_password }}"
+        db: "{{ db_name }}"
+        query: |
+          WITH agg AS (
+            SELECT event_ts::date AS kpi_date, store_id, channel,
+                   SUM(qty)::int AS qty_sold, SUM(revenue)::bigint AS revenue,
+                   COUNT(*)::int AS tx_count, COUNT(DISTINCT isbn13)::int AS unique_isbn,
+                   (SUM(revenue) / NULLIF(SUM(qty),0))::int AS avg_price
+            FROM sales_realtime GROUP BY 1,2,3
+          ),
+          top_isbn AS (
+            SELECT event_ts::date AS kpi_date, store_id, channel, isbn13,
+                   ROW_NUMBER() OVER (PARTITION BY event_ts::date, store_id, channel ORDER BY SUM(qty) DESC) AS rn
+            FROM sales_realtime GROUP BY 1,2,3,isbn13
+          )
+          INSERT INTO kpi_daily (kpi_date, store_id, category_id, channel, qty_sold, revenue, tx_count, avg_price, unique_isbn_count, top_isbn, synced_from_bq_at)
+          SELECT a.kpi_date, a.store_id, 0, a.channel, a.qty_sold, a.revenue, a.tx_count, a.avg_price, a.unique_isbn, t.isbn13, NOW()
+          FROM agg a LEFT JOIN top_isbn t USING (kpi_date, store_id, channel) WHERE t.rn = 1
+          ON CONFLICT (kpi_date, store_id, category_id, channel) DO NOTHING;
+        autocommit: true

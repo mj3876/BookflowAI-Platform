@@ -1,0 +1,116 @@
+---
+# rds-verify playbook
+# Post-seed integrity check: row counts + FK references + view sanity
+
+- name: BookFlow RDS verify
+  hosts: localhost
+  gather_facts: false
+  vars:
+    aws_region: ap-northeast-1
+    project_name: bookflow
+    rds_secret_id: bookflow/rds/master-password
+    db_port: 5432
+    db_name: bookflow
+    expected_min_rows:
+      books: 1000
+      authors: 100
+      publishers: 30
+      warehouses: 2
+      locations: 12
+      inventory: 1000
+      users: 12
+      forecast_cache: 100
+      pending_orders: 10
+
+  tasks:
+    - name: Resolve RDS connection
+      ansible.builtin.import_role:
+        name: postgres-schema
+
+    - name: Count rows per critical table
+      community.postgresql.postgresql_query:
+        login_host: "{{ db_host }}"
+        login_port: "{{ db_port }}"
+        login_user: "{{ db_master_user }}"
+        login_password: "{{ db_master_password }}"
+        db: "{{ db_name }}"
+        query: "SELECT count(*) AS n FROM {{ item.key }}"
+      loop: "{{ expected_min_rows | dict2items }}"
+      register: row_counts
+      loop_control:
+        label: "{{ item.key }}"
+      no_log: true
+
+    - name: Show row counts
+      ansible.builtin.debug:
+        msg: "{{ item.item.key }}: {{ item.query_result[0].n }} (min {{ item.item.value }})"
+      loop: "{{ row_counts.results }}"
+      loop_control:
+        label: "{{ item.item.key }}"
+
+    - name: Fail if any table below minimum
+      ansible.builtin.fail:
+        msg: "{{ item.item.key }} has {{ item.query_result[0].n }} rows (expected >= {{ item.item.value }})"
+      loop: "{{ row_counts.results }}"
+      when: (item.query_result[0].n | int) < (item.item.value | int)
+      loop_control:
+        label: "{{ item.item.key }}"
+
+    - name: FK integrity - inventory.isbn13 references books
+      community.postgresql.postgresql_query:
+        login_host: "{{ db_host }}"
+        login_port: "{{ db_port }}"
+        login_user: "{{ db_master_user }}"
+        login_password: "{{ db_master_password }}"
+        db: "{{ db_name }}"
+        query: >-
+          SELECT count(*) AS orphans
+          FROM inventory i
+          LEFT JOIN books b ON b.isbn13 = i.isbn13
+          WHERE b.isbn13 IS NULL
+      register: fk_inv_books
+      no_log: true
+
+    - name: Fail on orphan inventory rows
+      ansible.builtin.fail:
+        msg: "{{ fk_inv_books.query_result[0].orphans }} inventory rows reference missing books"
+      when: fk_inv_books.query_result[0].orphans | int > 0
+
+    - name: FK integrity - inventory.location_id references locations
+      community.postgresql.postgresql_query:
+        login_host: "{{ db_host }}"
+        login_port: "{{ db_port }}"
+        login_user: "{{ db_master_user }}"
+        login_password: "{{ db_master_password }}"
+        db: "{{ db_name }}"
+        query: >-
+          SELECT count(*) AS orphans
+          FROM inventory i
+          LEFT JOIN locations l ON l.location_id = i.location_id
+          WHERE l.location_id IS NULL
+      register: fk_inv_loc
+      no_log: true
+
+    - name: Fail on orphan location refs
+      ansible.builtin.fail:
+        msg: "{{ fk_inv_loc.query_result[0].orphans }} inventory rows reference missing locations"
+      when: fk_inv_loc.query_result[0].orphans | int > 0
+
+    - name: View sanity - v_inventory_available returns rows
+      community.postgresql.postgresql_query:
+        login_host: "{{ db_host }}"
+        login_port: "{{ db_port }}"
+        login_user: "{{ db_master_user }}"
+        login_password: "{{ db_master_password }}"
+        db: "{{ db_name }}"
+        query: "SELECT count(*) AS n FROM v_inventory_available"
+      register: view_check
+      no_log: true
+
+    - name: Show view rows
+      ansible.builtin.debug:
+        msg: "v_inventory_available: {{ view_check.query_result[0].n }} rows"
+
+    - name: All checks passed
+      ansible.builtin.debug:
+        msg: "RDS verify OK"

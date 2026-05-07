@@ -1,6 +1,5 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 10 · Egress VPC (10.2.0.0/16) · DMZ · Public only + IGW
-
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW - Tier 10 - Egress VPC (10.2.0.0/16) - DMZ - Public subnets only + IGW
 Parameters:
   ProjectName:
     Type: String
@@ -72,7 +71,7 @@ Resources:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties: { SubnetId: !Ref PublicAz2, RouteTableId: !Ref RouteTable }
 
-  # ─── Custom NACL (Public subnet · 외부 트래픽 허용) ───
+  # ─── Custom NACL (Public subnet ·   ) ───
   Nacl:
     Type: AWS::EC2::NetworkAcl
     Properties:

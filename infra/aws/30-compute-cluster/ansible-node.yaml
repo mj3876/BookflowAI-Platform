@@ -1,0 +1,262 @@
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW - Tier 30 - Ansible Control Node (Ubuntu 24, t3.nano, Ansible VPC Public, SG ingress blocked, SSM Session Manager only, K8s admin entry)
+Parameters:
+  ProjectName:
+    Type: String
+    Default: bookflow
+  InstanceType:
+    Type: String
+    Default: t3.nano
+  UbuntuAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id
+    Description: Ubuntu 24.04 LTS · region   AMI · SSM public parameter
+  GitRepoUrl:
+    Type: String
+    Default: https://github.com/MyosoonHwang/BookFlowAI-Platform.git
+    Description: Platform repo (Ansible playbook · /opt/bookflow)
+  GitAppsRepoUrl:
+    Type: String
+    Default: https://github.com/MyosoonHwang/BookFlowAI-Apps.git
+    Description: Apps repo (glue-jobs scripts · /opt/bookflow-apps)
+
+Resources:
+  # ─── Ansible Node IAM Role (Ansible ops  · K8s  ) ───
+  AnsibleNodeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-ansible-node-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: SecretsRead
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ProjectName}/*
+        - PolicyName: S3GlueScriptsReadWrite
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                  - s3:GetBucketLocation
+                Resource:
+                  - !Sub
+                    - arn:aws:s3:::${BucketName}
+                    - BucketName: !ImportValue
+                        Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+                  - !Sub
+                    - arn:aws:s3:::${BucketName}/*
+                    - BucketName: !ImportValue
+                        Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        - PolicyName: GlueJobOperations
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - glue:StartJobRun
+                  - glue:GetJobRun
+                  - glue:GetJobRuns
+                  - glue:GetJob
+                  - glue:BatchGetJobs
+                Resource: !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:job/${ProjectName}-*
+        - PolicyName: CloudFormationExportsRead
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudformation:ListExports
+                  - cloudformation:DescribeStacks
+                Resource: '*'
+
+  AnsibleNodeInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub ${ProjectName}-ansible-node-profile
+      Roles: [!Ref AnsibleNodeRole]
+
+  # ─── Custom SG (egress all · ingress  · SSM session  ) ───
+  # Public Subnet  SG   inbound  →  Private  
+  AnsibleNodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${ProjectName}-ansible-node-sg
+      GroupDescription: BOOKFLOW Ansible Control Node - egress only, no ingress, SSM only access
+      VpcId: !ImportValue
+        Fn::Sub: ${ProjectName}-vpc-ansible-id
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: egress all (apt, pip, git clone, AWS API, etc.)
+      Tags: [{ Key: Name, Value: !Sub '${ProjectName}-ansible-node-sg' }]
+
+  # ─── EC2 Instance (Ubuntu 24 · cloud-init · Ansible ) ───
+  AnsibleNode:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      ImageId: !Ref UbuntuAmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref AnsibleNodeInstanceProfile
+      SubnetId: !ImportValue
+        Fn::Sub: ${ProjectName}-subnet-ansible-public-az1
+      SecurityGroupIds: [!Ref AnsibleNodeSecurityGroup]
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 16
+            VolumeType: gp3
+            DeleteOnTermination: true
+            Encrypted: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -eux
+          export DEBIAN_FRONTEND=noninteractive
+          LOG=/var/log/bookflow-bootstrap.log
+          exec > >(tee -a ${!LOG}) 2>&1
+
+          # ─── 1. OS update + base packages ───
+          apt-get update
+          apt-get install -y git python3-pip python3-venv curl unzip jq postgresql-client
+
+          # ─── 2. Ansible + Python libs (Glue  · RDS seed/migration) ───
+          pip3 install --break-system-packages \
+            ansible ansible-core \
+            boto3 botocore \
+            psycopg2-binary \
+            requests
+
+          # ─── 3. AWS CLI v2 ───
+          curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscli.zip
+          unzip -q /tmp/awscli.zip -d /tmp
+          /tmp/aws/install
+
+          # ─── 4. Ansible Collections (AWS · PostgreSQL · Glue ) ───
+          ansible-galaxy collection install --force \
+            amazon.aws \
+            community.aws \
+            community.postgresql \
+            community.general
+
+          # ─── 5. Ansible   ───
+          mkdir -p /etc/ansible/inventory
+          mkdir -p /etc/ansible/group_vars
+          mkdir -p /etc/ansible/host_vars
+          mkdir -p /var/log/ansible
+
+          # ─── 6. ansible.cfg (inventory · log · callback) ───
+          cat > /etc/ansible/ansible.cfg <<'EOF'
+          [defaults]
+          inventory = /etc/ansible/inventory
+          host_key_checking = False
+          retry_files_enabled = False
+          roles_path = /opt/bookflow/ansible/roles
+          collections_path = /etc/ansible/collections:/root/.ansible/collections
+          log_path = /var/log/ansible/ansible.log
+          forks = 10
+          stdout_callback = default
+          result_format = yaml
+          bin_ansible_callbacks = True
+          interpreter_python = auto_silent
+          gathering = smart
+          fact_caching = jsonfile
+          fact_caching_connection = /tmp/ansible_facts
+          fact_caching_timeout = 86400
+
+          [inventory]
+          enable_plugins = aws_ec2, host_list, yaml, ini
+
+          [ssh_connection]
+          pipelining = True
+          EOF
+
+          # ─── 7. Localhost Inventory (self-run · Ansible Node  local ) ───
+          cat > /etc/ansible/inventory/localhost.yml <<'EOF'
+          all:
+            hosts:
+              localhost:
+                ansible_connection: local
+                ansible_python_interpreter: /usr/bin/python3
+          EOF
+
+          # ─── 8. AWS Dynamic Inventory (  EC2   ·  ) ───
+          cat > /etc/ansible/inventory/aws_ec2.yml <<EOF
+          plugin: amazon.aws.aws_ec2
+          regions:
+            - ${AWS::Region}
+          filters:
+            tag:Project: bookflow
+          keyed_groups:
+            - key: tags.Role
+              prefix: role
+            - key: placement.region
+              prefix: aws_region
+          hostnames:
+            - tag:Name
+            - private-ip-address
+          EOF
+
+          # ─── 9. Repo clone (Ansible playbook   · ansible/ ) ───
+          mkdir -p /opt/bookflow
+          git clone ${GitRepoUrl} /opt/bookflow || true
+          chown -R ubuntu:ubuntu /opt/bookflow
+
+          # Apps repo clone (glue-jobs · ecs-sims · eks-pods · publisher source)
+          mkdir -p /opt/bookflow-apps
+          git clone ${GitAppsRepoUrl} /opt/bookflow-apps || true
+          chown -R ubuntu:ubuntu /opt/bookflow-apps
+
+          # ─── 10.    ───
+          chmod 664 /var/log/ansible
+          chown -R ubuntu:ubuntu /var/log/ansible
+
+          # ─── 11. ubuntu user   ───
+          cat >> /home/ubuntu/.bashrc <<'EOF'
+          export ANSIBLE_CONFIG=/etc/ansible/ansible.cfg
+          export ANSIBLE_INVENTORY=/etc/ansible/inventory
+          cd /opt/bookflow 2>/dev/null || true
+          EOF
+
+          # ─── 12.   ───
+          ansible --version >> ${!LOG} 2>&1
+          ansible-galaxy collection list >> ${!LOG} 2>&1
+          aws --version >> ${!LOG} 2>&1
+          psql --version >> ${!LOG} 2>&1
+
+          echo "Ansible Node bootstrap complete at $(date)" >> ${!LOG}
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-ansible-node
+        - Key: Role
+          Value: ansible-control
+
+Outputs:
+  InstanceId:
+    Value: !Ref AnsibleNode
+    Export: { Name: !Sub '${ProjectName}-ansible-node-id' }
+  PrivateIp:
+    Value: !GetAtt AnsibleNode.PrivateIp
+    Export: { Name: !Sub '${ProjectName}-ansible-node-ip' }
+  RoleArn:
+    Value: !GetAtt AnsibleNodeRole.Arn
+    Export: { Name: !Sub '${ProjectName}-ansible-node-role-arn' }
+  SecurityGroupId:
+    Value: !Ref AnsibleNodeSecurityGroup
+    Export: { Name: !Sub '${ProjectName}-ansible-node-sg-id' }

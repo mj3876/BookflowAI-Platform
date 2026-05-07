@@ -1,0 +1,20 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environment": { "value": "dev" },
+    "location": { "value": "japanwest" },
+    "prefix": { "value": "bookflow01" },
+    "vnetAddressPrefix": { "value": "172.16.0.0/16" },
+    "gatewaySubnetPrefix": { "value": "172.16.1.0/27" },
+    "servicesSubnetPrefix": { "value": "172.16.2.0/24" },
+    "functionSubnetPrefix": { "value": "172.16.3.0/24" },
+    "vpnBgpAsn": { "value": 65001 },
+    "logRetentionDays": { "value": 90 },
+    "securityAdminObjectId": { "value": "bc2c50b2-2e17-4c3e-b89f-6b1fc72074ad" },
+    "awsTgwActiveIp": { "value": "52.194.91.158" },
+    "awsTgwBgpPeeringIp": { "value": "169.254.21.5" },
+    "vpnPreSharedKey": { "value": "bookflow" },
+    "vpnCustomBgpIpAddresses": { "value": ["169.254.21.6"] }
+  }
+}

@@ -1,0 +1,215 @@
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW - Tier 40 - Publisher ASG (Ubuntu 24, t3.small x2, Egress VPC Public, CodeDeploy Blue/Green target)
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: bookflow
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    Description:  V1  t3.micro -      t3.small   
+  UbuntuAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id
+    Description: Ubuntu 24.04 LTS - region   AMI - SSM public parameter
+  AppPort:
+    Type: Number
+    Default: 80
+  MinSize:
+    Type: Number
+    Default: 2
+  MaxSize:
+    Type: Number
+    Default: 4
+  DesiredCapacity:
+    Type: Number
+    Default: 2
+  TargetGroupArn:
+    Type: String
+    Default: ''
+    Description: Tier 50 External ALB Target Group ARN (Blue) -   (CFN  ) -  update-stack  
+
+Conditions:
+  HasTargetGroup: !Not [!Equals [!Ref TargetGroupArn, '']]
+
+Resources:
+  # ─── Publisher Instance IAM Role (CodeDeploy  + S3 read + SSM + CW agent) ───
+  PublisherRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-publisher-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+      Policies:
+        - PolicyName: CodeDeployArtifactRead
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # CodeDeploy  S3  deployment artifact 
+              - Effect: Allow
+                Action:
+                  - s3:Get*
+                  - s3:List*
+                Resource:
+                  - !Sub
+                    - arn:aws:s3:::${BucketName}
+                    - BucketName: !ImportValue
+                        Fn::Sub: ${ProjectName}-s3-cp-artifacts-name
+                  - !Sub
+                    - arn:aws:s3:::${BucketName}/*
+                    - BucketName: !ImportValue
+                        Fn::Sub: ${ProjectName}-s3-cp-artifacts-name
+        - PolicyName: SecretsRead
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ProjectName}/*
+
+  PublisherInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub ${ProjectName}-publisher-profile
+      Roles: [!Ref PublisherRole]
+
+  # ─── SG (ingress 80/443 from Egress VPC - ALB target) ───
+  PublisherSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${ProjectName}-publisher-sg
+      GroupDescription: BOOKFLOW Publisher ASG - HTTP from Egress VPC (External ALB)
+      VpcId: !ImportValue
+        Fn::Sub: ${ProjectName}-vpc-egress-id
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref AppPort
+          ToPort: !Ref AppPort
+          CidrIp: 10.2.0.0/16
+          Description: from Egress VPC (External ALB)
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: egress all (apt - CodeDeploy agent - S3 - CW - Secrets)
+      Tags: [{ Key: Name, Value: !Sub '${ProjectName}-publisher-sg' }]
+
+  # ─── Launch Template (Ubuntu 24 + codedeploy-agent + app runtime placeholder) ───
+  PublisherLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub ${ProjectName}-publisher-lt
+      LaunchTemplateData:
+        ImageId: !Ref UbuntuAmiId
+        InstanceType: !Ref InstanceType
+        IamInstanceProfile:
+          Name: !Ref PublisherInstanceProfile
+        SecurityGroupIds: [!Ref PublisherSecurityGroup]
+        BlockDeviceMappings:
+          - DeviceName: /dev/sda1
+            Ebs:
+              VolumeSize: 16
+              VolumeType: gp3
+              DeleteOnTermination: true
+              Encrypted: true
+        MetadataOptions:
+          HttpTokens: required
+          HttpEndpoint: enabled
+          HttpPutResponseHopLimit: 2
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub ${ProjectName}-publisher
+              - Key: Project
+                Value: !Ref ProjectName
+              - Key: CodeDeploy
+                Value: !Sub ${ProjectName}-publisher-bg
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            set -eux
+            export DEBIAN_FRONTEND=noninteractive
+            LOG=/var/log/bookflow-publisher-bootstrap.log
+            exec > >(tee -a ${!LOG}) 2>&1
+
+            # ─── 1. OS update + base ───
+            apt-get update
+            apt-get install -y ruby-full wget curl jq nginx
+
+            # ─── 2. CodeDeploy agent (Blue/Green deploy ) ───
+            cd /home/ubuntu
+            wget https://aws-codedeploy-${AWS::Region}.s3.${AWS::Region}.amazonaws.com/latest/install
+            chmod +x ./install
+            ./install auto
+            systemctl enable codedeploy-agent
+            systemctl start codedeploy-agent
+
+            # ─── 3. CloudWatch agent ( - ASG ) ───
+            wget https://amazoncloudwatch-agent-${AWS::Region}.s3.${AWS::Region}.amazonaws.com/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb -O /tmp/cw.deb
+            dpkg -i -E /tmp/cw.deb || true
+
+            # ─── 4. Nginx   (CI/CD    health check ) ───
+            systemctl enable nginx
+            systemctl start nginx
+
+            echo "Publisher bootstrap complete at $(date)" >> ${!LOG}
+
+  # ─── Auto Scaling Group ───
+  PublisherAsg:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      AutoScalingGroupName: !Sub ${ProjectName}-publisher-asg
+      LaunchTemplate:
+        LaunchTemplateId: !Ref PublisherLaunchTemplate
+        Version: !GetAtt PublisherLaunchTemplate.LatestVersionNumber
+      MinSize: !Ref MinSize
+      MaxSize: !Ref MaxSize
+      DesiredCapacity: !Ref DesiredCapacity
+      VPCZoneIdentifier:
+        - !ImportValue
+          Fn::Sub: ${ProjectName}-subnet-egress-public-az1
+        - !ImportValue
+          Fn::Sub: ${ProjectName}-subnet-egress-public-az2
+      TargetGroupARNs: !If
+        - HasTargetGroup
+        - [!Ref TargetGroupArn]
+        - !Ref AWS::NoValue
+      HealthCheckType: !If [HasTargetGroup, ELB, EC2]
+      HealthCheckGracePeriod: 300
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-publisher
+          PropagateAtLaunch: true
+        - Key: Project
+          Value: !Ref ProjectName
+          PropagateAtLaunch: true
+        - Key: CodeDeploy
+          Value: !Sub ${ProjectName}-publisher-bg
+          PropagateAtLaunch: true
+
+Outputs:
+  AsgName:
+    Value: !Ref PublisherAsg
+    Export: { Name: !Sub '${ProjectName}-publisher-asg-name' }
+  LaunchTemplateId:
+    Value: !Ref PublisherLaunchTemplate
+    Export: { Name: !Sub '${ProjectName}-publisher-lt-id' }
+  LaunchTemplateLatestVersion:
+    Value: !GetAtt PublisherLaunchTemplate.LatestVersionNumber
+    Export: { Name: !Sub '${ProjectName}-publisher-lt-version' }
+  PublisherRoleArn:
+    Value: !GetAtt PublisherRole.Arn
+    Export: { Name: !Sub '${ProjectName}-publisher-role-arn' }
+  PublisherSecurityGroupId:
+    Value: !Ref PublisherSecurityGroup
+    Export: { Name: !Sub '${ProjectName}-publisher-sg-id' }

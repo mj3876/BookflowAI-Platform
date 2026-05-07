@@ -1,0 +1,87 @@
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW - Tier 60 - Site-to-Site VPN (Azure + GCP) - TGW Attachment + IPSec Tunnels
+Parameters:
+  ProjectName:
+    Type: String
+    Default: bookflow
+  EnableAzureVpn:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: Azure VPN  (Customer Gateway IP   true)
+  EnableGcpVpn:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: GCP HA VPN  (Customer Gateway IP   true)
+  AzurePresharedKey:
+    Type: String
+    Default: ''
+    NoEcho: true
+    Description: Azure VPN Tunnel Pre-Shared Key (  AWS   ·    )
+  GcpPresharedKey:
+    Type: String
+    Default: ''
+    NoEcho: true
+    Description: GCP HA VPN Tunnel Pre-Shared Key (  AWS   ·  vpn_shared_secret  )
+
+Conditions:
+  WithAzure: !Equals [!Ref EnableAzureVpn, 'true']
+  WithGcp: !Equals [!Ref EnableGcpVpn, 'true']
+  WithAzurePsk: !Not [!Equals [!Ref AzurePresharedKey, '']]
+  WithGcpPsk: !Not [!Equals [!Ref GcpPresharedKey, '']]
+
+Resources:
+  # ─── Azure Site-to-Site VPN Connection ───
+  AzureVpnConnection:
+    Type: AWS::EC2::VPNConnection
+    Condition: WithAzure
+    Properties:
+      Type: ipsec.1
+      CustomerGatewayId: !ImportValue
+        Fn::Sub: ${ProjectName}-cgw-azure-id
+      TransitGatewayId: !ImportValue
+        Fn::Sub: ${ProjectName}-tgw-id
+      StaticRoutesOnly: false
+      VpnTunnelOptionsSpecifications: !If
+        - WithAzurePsk
+        - - PreSharedKey: !Ref AzurePresharedKey
+            TunnelInsideCidr: 169.254.21.4/30
+          - PreSharedKey: !Ref AzurePresharedKey
+            TunnelInsideCidr: 169.254.21.8/30
+        - !Ref AWS::NoValue
+      Tags: [{ Key: Name, Value: !Sub '${ProjectName}-vpn-azure' }]
+
+  # ─── GCP HA VPN Connection ───
+  GcpVpnConnection:
+    Type: AWS::EC2::VPNConnection
+    Condition: WithGcp
+    Properties:
+      Type: ipsec.1
+      CustomerGatewayId: !ImportValue
+        Fn::Sub: ${ProjectName}-cgw-gcp-id
+      TransitGatewayId: !ImportValue
+        Fn::Sub: ${ProjectName}-tgw-id
+      StaticRoutesOnly: false
+      VpnTunnelOptionsSpecifications: !If
+        - WithGcpPsk
+        - - PreSharedKey: !Ref GcpPresharedKey
+            TunnelInsideCidr: 169.254.21.0/30
+          - PreSharedKey: !Ref GcpPresharedKey
+            TunnelInsideCidr: 169.254.22.0/30
+        - !Ref AWS::NoValue
+      Tags: [{ Key: Name, Value: !Sub '${ProjectName}-vpn-gcp' }]
+
+  # VPN Connection  TGW  attach   TGW VPN Attachment 
+  #  attachment id  VpnConnectionId   - CFN   GetAtt 
+  # → RtPropagation/Association  cross_cloud.py  deploy  boto3  
+
+Outputs:
+  AzureVpnConnectionId:
+    Condition: WithAzure
+    Value: !Ref AzureVpnConnection
+    Export: { Name: !Sub '${ProjectName}-vpn-azure-id' }
+  GcpVpnConnectionId:
+    Condition: WithGcp
+    Value: !Ref GcpVpnConnection
+    Export: { Name: !Sub '${ProjectName}-vpn-gcp-id' }

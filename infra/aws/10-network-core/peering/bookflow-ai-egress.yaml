@@ -1,8 +1,5 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Description: >
-  BOOKFLOW · Tier 10 · VPC Peering · BookFlow AI ↔ Egress
-  auth-pod → NAT (Azure Entra OIDC outbound) · Pod → ALB (외부 API 호출 시)
-
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: "BOOKFLOW - Tier 10 - VPC Peering: BookFlow AI <-> Egress. auth-pod -> NAT (Azure Entra OIDC outbound) + Pods -> External ALB (publisher API ingress)"
 Parameters:
   ProjectName:
     Type: String

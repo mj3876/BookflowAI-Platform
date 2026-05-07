@@ -1,6 +1,5 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW · Tier 20 · RDS PostgreSQL (Data VPC DB subnet · 구축 Single-AZ · 시나리오만 Multi-AZ)
-
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW - Tier 20 - RDS PostgreSQL (Data VPC DB subnet; Single-AZ for dev, Multi-AZ for prod)
 Parameters:
   ProjectName:
     Type: String
@@ -15,13 +14,13 @@ Parameters:
     Type: String
     Default: 'false'
     AllowedValues: ['true', 'false']
-    Description: 구축 false (비용 절감) · 시나리오 failover 테스트 때만 true 로 update-stack
+    Description:  false ( ) ·  failover   true  update-stack
   BackupRetentionDays:
     Type: Number
     Default: 0
     MinValue: 0
     MaxValue: 7
-    Description: 매일 destroy · Ansible re-seed 라 자동 백업 불필요 (0 = off)
+    Description:  destroy · Ansible re-seed     (0 = off)
 
 Conditions:
   MultiAz: !Equals [!Ref EnableMultiAz, 'true']
