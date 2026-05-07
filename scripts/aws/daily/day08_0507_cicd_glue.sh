@@ -121,7 +121,7 @@ if [ "${ANSIBLE_INSTANCE_ID}" != "None" ] && [ -n "${ANSIBLE_INSTANCE_ID}" ]; th
       --command-id "${CMD_ID}" \
       --instance-id "${ANSIBLE_INSTANCE_ID}" \
       --query '{Status:Status,Stdout:StandardOutputContent}' \
-      --output json 2>/dev/null | python3 -m json.tool | head -20
+      --output json 2>/dev/null | py -3 -m json.tool | head -20
   fi
 fi
 
@@ -138,7 +138,7 @@ for JOB in raw-pos-mart raw-sns-mart raw-aladin-mart raw-event-mart sales-daily-
   LAST=$(aws glue get-job-runs \
     --job-name "${PROJECT}-${JOB}" \
     --query 'JobRuns[0].{State:JobRunState,Started:StartedOn}' \
-    --output json 2>/dev/null | python3 -c "
+    --output json 2>/dev/null | py -3 -c "
 import sys, json
 try:
     r = json.load(sys.stdin)

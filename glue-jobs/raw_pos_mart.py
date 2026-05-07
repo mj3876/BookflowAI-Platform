@@ -11,12 +11,11 @@ from awsglue.utils import getResolvedOptions
 from pyspark.context import SparkContext
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
-    DoubleType,
     IntegerType,
+    LongType,
     StringType,
     StructField,
     StructType,
-    TimestampType,
 )
 
 args = getResolvedOptions(
@@ -33,14 +32,16 @@ job.init(args["JOB_NAME"], args)
 SOURCE = f"s3://{args['RAW_BUCKET']}/pos-events/"
 TARGET = f"s3://{args['MART_BUCKET']}/pos_events/"
 
+# ECS sim (online-sim / offline-sim) actual output schema
 POS_SCHEMA = StructType([
-    StructField("tx_id",       StringType(),    False),
-    StructField("isbn13",      StringType(),    False),
-    StructField("location_id", IntegerType(),   False),
-    StructField("qty",         IntegerType(),   False),
-    StructField("sale_price",  DoubleType(),    False),
-    StructField("channel",     StringType(),    True),
-    StructField("created_at",  StringType(),    True),
+    StructField("tx_id",       StringType(),  False),
+    StructField("isbn13",      StringType(),  False),
+    StructField("qty",         IntegerType(), False),
+    StructField("unit_price",  IntegerType(), False),
+    StructField("total_price", LongType(),    False),
+    StructField("channel",     StringType(),  True),
+    StructField("location_id", IntegerType(), True),
+    StructField("ts",          StringType(),  True),
 ])
 
 df = (
@@ -52,15 +53,16 @@ df = (
 
 df = (
     df
-    .withColumn("created_at", F.to_timestamp("created_at"))
-    .withColumn("sale_date",  F.to_date("created_at"))
+    .withColumn("ts",        F.to_timestamp("ts"))
+    .withColumn("sale_date", F.to_date("ts"))
+    .withColumn("sale_hour", F.hour("ts"))
     .filter(F.col("tx_id").isNotNull() & F.col("isbn13").isNotNull())
     .dropDuplicates(["tx_id"])
 )
 
 (
     df.write
-    .mode("append")
+    .mode("overwrite")
     .partitionBy("sale_date")
     .parquet(TARGET)
 )

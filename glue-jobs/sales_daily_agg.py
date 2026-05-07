@@ -37,9 +37,9 @@ daily = (
     )
     .agg(
         F.sum("qty").alias("total_qty"),
-        F.sum(F.col("qty") * F.col("sale_price")).alias("total_revenue"),
+        F.sum("total_price").alias("total_revenue"),
         F.count("tx_id").alias("tx_count"),
-        F.max("created_at").alias("last_tx_at"),
+        F.max("ts").alias("last_tx_at"),
     )
     .withColumn("aggregated_at", F.current_timestamp())
 )

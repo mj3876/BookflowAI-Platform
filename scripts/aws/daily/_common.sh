@@ -71,16 +71,16 @@ build_push_image() {
   ok "${image} pushed"
 }
 
-# bookflow.py  
+# bookflow.py  (py -3 overrides shebang, uses Python 3.14 with boto3)
 bookflow() {
-  python "${REPO_ROOT}/scripts/aws/bookflow.py" "$@"
+  py -3 "${REPO_ROOT}/scripts/aws/bookflow.py" "$@"
 }
 
-#   
+#
 check_env() {
   step " "
-  command -v aws   > /dev/null || err "AWS CLI "
-  command -v python > /dev/null || err "Python "
+  command -v aws > /dev/null || err "AWS CLI "
+  command -v py  > /dev/null || err "Python (py launcher) "
 
   local caller
   caller=$(aws sts get-caller-identity --query 'Arn' --output text 2>/dev/null) || \

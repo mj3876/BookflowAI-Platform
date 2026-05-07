@@ -1,8 +1,8 @@
-﻿"""
+"""
 features_build · Glue ETL Job
 Mart 4 (sales_daily · sns_mentions · aladin_books · calendar_events) JOIN
 → Vertex AI  feature vector  → S3 Mart features/
-Step Functions ETL3   
+Step Functions ETL3
 """
 import sys
 
@@ -24,13 +24,58 @@ spark = glue.spark_session
 job   = Job(glue)
 job.init(args["JOB_NAME"], args)
 
+# non-vectorized reader avoids SchemaColumnConvertNotSupportedException
+spark.conf.set("spark.sql.parquet.enableVectorizedReader",        "false")
+spark.conf.set("spark.sql.parquet.datetimeRebaseModeInRead",      "CORRECTED")
+spark.conf.set("spark.sql.parquet.datetimeRebaseModeInWrite",     "CORRECTED")
+spark.conf.set("spark.sql.legacy.parquet.int96RebaseModeInRead",  "CORRECTED")
+spark.conf.set("spark.sql.legacy.parquet.int96RebaseModeInWrite", "CORRECTED")
+
 MART = f"s3://{args['MART_BUCKET']}"
 
-# ──   ──────────────────────────────────────────────────────────────
-sales   = spark.read.parquet(f"{MART}/sales_daily/")
-sns     = spark.read.parquet(f"{MART}/sns_mentions/")
-aladin  = spark.read.parquet(f"{MART}/aladin_books/")
-events  = spark.read.parquet(f"{MART}/calendar_events/")
+# Read with schema inference — no explicit schema avoids [B cannot be cast to Integer errors.
+# Physical Parquet type is read as-is; explicit cast() below converts safely (returns null on
+# failure rather than throwing ClassCastException).
+sales_raw  = spark.read.parquet(f"{MART}/sales_daily/")
+sns_raw    = spark.read.parquet(f"{MART}/sns_mentions/")
+aladin_raw = spark.read.parquet(f"{MART}/aladin_books/")
+events_raw = spark.read.parquet(f"{MART}/calendar_events/")
+
+# Force per-table evaluation so CloudWatch logs show which table fails
+print(f"[features_build] sales_raw  rows={sales_raw.count()}")
+print(f"[features_build] sns_raw    rows={sns_raw.count()}")
+print(f"[features_build] aladin_raw rows={aladin_raw.count()}")
+print(f"[features_build] events_raw rows={events_raw.count()}")
+
+sales = sales_raw.select(
+    F.col("isbn13").cast("string"),
+    F.col("location_id").cast("int"),
+    F.col("channel").cast("string"),
+    F.col("total_qty").cast("long"),
+    F.col("total_revenue").cast("long"),
+    F.col("tx_count").cast("long"),
+    F.col("last_tx_at").cast("string"),
+    F.col("date").cast("date"),
+)
+sns = sns_raw.select(
+    F.col("isbn13").cast("string"),
+    F.col("sentiment").cast("string"),
+    F.col("is_spike_seed").cast("boolean"),
+    F.col("mention_date").cast("date"),
+)
+# raw_aladin_mart.py renames category_name → category; guard against old Parquet files
+_cat_col = "category" if "category" in aladin_raw.columns else "category_name"
+aladin = aladin_raw.select(
+    F.col("isbn13").cast("string"),
+    F.col("price").cast("int"),
+    F.col("rating").cast("double"),
+    F.col(_cat_col).cast("string").alias("category"),
+)
+events = events_raw.select(
+    F.col("event_type").cast("string"),
+    F.col("start_date").cast("date"),
+    F.col("end_date").cast("date"),
+)
 
 # ── SNS   (isbn13 × date) ─────────────────────────────────────────
 sns_daily = (
@@ -46,7 +91,6 @@ sns_daily = (
 
 # ──  /  (date ) ──────────────────────────────────────────
 # event_type: "holiday" (lowercase, from event-sync lambda)
-# start_date is already DateType from raw_event_mart
 holiday = (
     events
     .filter(F.col("event_type") == "holiday")
@@ -68,7 +112,6 @@ book_fair = (
         (F.datediff(F.col("end_date"), F.col("start_date")) + 1).alias("duration_days"),
     )
 )
-#     explosion 
 book_fair_dates = (
     book_fair
     .withColumn("day_offset", F.explode(F.sequence(F.lit(0), F.col("duration_days") - 1)))
@@ -91,16 +134,15 @@ sales_rolling = (
     .withColumn("rolling_14d_revenue", F.sum("total_revenue").over(w14))
 )
 
-# ──    (isbn13  LEFT JOIN) ──────────────────────────────
 aladin_static = aladin.select("isbn13", "price", "rating", "category")
 
 # ──  feature  ─────────────────────────────────────────────────────
 features = (
     sales_rolling
-    .join(sns_daily,     on=["isbn13", "date"], how="left")
-    .join(holiday,       on="date",             how="left")
-    .join(book_fair_dates, on="date",           how="left")
-    .join(aladin_static, on="isbn13",           how="left")
+    .join(sns_daily,       on=["isbn13", "date"], how="left")
+    .join(holiday,         on="date",             how="left")
+    .join(book_fair_dates, on="date",             how="left")
+    .join(aladin_static,   on="isbn13",           how="left")
     .withColumn("is_holiday",   F.coalesce(F.col("is_holiday"),   F.lit(False)))
     .withColumn("is_book_fair", F.coalesce(F.col("is_book_fair"), F.lit(0)))
     .withColumn("season_idx",   F.coalesce(F.col("season_idx"),   F.lit(1.0)))

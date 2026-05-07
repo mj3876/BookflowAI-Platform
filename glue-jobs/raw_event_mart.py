@@ -56,7 +56,7 @@ df = (
 
 (
     df.write
-    .mode("append")
+    .mode("overwrite")
     .partitionBy("event_type")
     .parquet(TARGET)
 )

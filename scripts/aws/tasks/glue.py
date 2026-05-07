@@ -1,5 +1,6 @@
 ﻿"""task-glue · Tier 99-glue (Catalog + 6 Jobs + Step Functions ETL3)."""
-from ..lib import Stack, log
+import boto3
+from ..lib import Stack, log, Config
 
 
 def deploy() -> None:
@@ -13,14 +14,22 @@ def deploy() -> None:
     sf_arn = Stack(tier="99", name="step-functions", template="").outputs().get("Etl3StateMachineArn")
 
     if Stack(tier="99", name="lambdas", template="").exists() and sf_arn:
-        log.info("task-lambdas  deploy  → forecast-trigger  SF ARN ")
-        Stack(tier="99", name="lambdas",
-              template="99-serverless/sam-template.yaml",
-              parameters={"StepFunctionsArn": sf_arn},
-              capabilities=["CAPABILITY_NAMED_IAM", "CAPABILITY_AUTO_EXPAND", "CAPABILITY_IAM"]
-              ).deploy()
+        log.info("task-lambdas · forecast-trigger SF ARN 업데이트 중...")
+        lm = boto3.client("lambda", region_name=Config.REGION)
+        fn_name = f"{Config.PROJECT_NAME}-forecast-trigger"
+        try:
+            cur = lm.get_function_configuration(FunctionName=fn_name)
+            env_vars = cur.get("Environment", {}).get("Variables", {})
+            env_vars["STEP_FN_ARN"] = sf_arn
+            lm.update_function_configuration(
+                FunctionName=fn_name,
+                Environment={"Variables": env_vars},
+            )
+            log.info(f"  forecast-trigger STEP_FN_ARN 설정 완료")
+        except Exception as e:
+            log.info(f"  forecast-trigger 업데이트 스킵: {e}")
     else:
-        log.info("task-lambdas  ·  task-lambdas   SF ARN  ")
+        log.info("task-lambdas 미배포 · SF ARN 업데이트 스킵")
 
     log.step("=== task-glue  ===")
     if sf_arn:

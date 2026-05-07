@@ -303,8 +303,6 @@ Resources:
       ExecutionClass: FLEX
       MaxRetries: 0
       Timeout: 60
-      Connections:
-        Connections: [!Ref BigQueryConnection]
       DefaultArguments:
         '--TempDir': !Sub
           - s3://${BucketName}/tmp/

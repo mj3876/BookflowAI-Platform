@@ -17,6 +17,7 @@ GCS_STAGING_BUCKET="${GCS_STAGING_BUCKET:-${GCP_PROJECT_ID}-bookflow-staging}"
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
 GLUE_BUCKET="${PROJECT}-glue-scripts-${ACCOUNT_ID}"
+APPS_DIR="${REPO_ROOT}/../BookFlowAI-Apps"
 RAW_BUCKET=$(aws cloudformation describe-stacks \
   --stack-name "${PROJECT}-00-s3" \
   --query "Stacks[0].Outputs[?OutputKey=='RawBucketName'].OutputValue" \
@@ -31,29 +32,37 @@ echo " Glue S3 : s3://${GLUE_BUCKET}/scripts/"
 echo " GCS     : gs://${GCS_STAGING_BUCKET}"
 echo "============================================"
 
-# 1. ECR login
+# 1. CFN stacks: ECS sims (endpoints-sales-data · ecs-online-sim · ecs-offline-sim)
 echo ""
-echo "[1/5] ECR login..."
+echo "[1/8] task etl-streaming (CFN stacks)..."
+cd "${REPO_ROOT}"
+py -3 scripts/aws/bookflow.py task etl-streaming
+
+# 2. ECR login
+echo ""
+echo "[2/8] ECR login..."
 aws ecr get-login-password --region "${REGION}" | \
   docker login --username AWS --password-stdin "${ECR_REGISTRY}"
 
-# 2. ECS simulator image build & push
+# 3. ECS simulator image build & push
 echo ""
-echo "[2/5] ECS simulator image build..."
+echo "[3/8] ECS simulator image build..."
 
 for SIM in online-sim offline-sim; do
-  SIM_DIR="${REPO_ROOT}/ecs-sims/${SIM}"
   IMAGE="${ECR_REGISTRY}/${PROJECT}/${SIM}:latest"
 
   echo "  -> ${SIM} build..."
-  docker build -t "${IMAGE}" "${SIM_DIR}"
+  docker build \
+    -t "${IMAGE}" \
+    -f "${APPS_DIR}/ecs-sims/${SIM}/Dockerfile" \
+    "${APPS_DIR}/ecs-sims/"
   docker push "${IMAGE}"
   echo "  OK ${IMAGE} pushed"
 done
 
 # 3. ECS service rolling update
 echo ""
-echo "[3/5] ECS service rolling update..."
+echo "[4/8] ECS service rolling update..."
 
 ECS_CLUSTER=$(aws cloudformation describe-stacks \
   --stack-name "${PROJECT}-30-ecs-cluster" \
@@ -67,16 +76,22 @@ for SIM in online-sim offline-sim; do
     --service "${SIM}" \
     --force-new-deployment \
     --region "${REGION}" \
-    --output json | python3 -c "
+    --output json | py -c "
 import sys, json
 s = json.load(sys.stdin)['service']
 print(f\"  OK {s['serviceName']} -> {s['desiredCount']} tasks\")
 " || echo "  WARN ${SIM} service update failed (service may not be deployed yet)"
 done
 
-# 4. Lambda SAM build + deploy
+# 5. CFN stacks: Glue Catalog + Step Functions
 echo ""
-echo "[4/5] Lambda SAM build + deploy..."
+echo "[5/8] task glue (CFN stacks: glue-catalog + step-functions)..."
+cd "${REPO_ROOT}"
+py -3 scripts/aws/bookflow.py task glue
+
+# 6. Lambda SAM build + deploy
+echo ""
+echo "[6/8] Lambda SAM build + deploy..."
 
 LAMBDA_DIR="${REPO_ROOT}/infra/aws/99-serverless"
 SAM_TEMPLATE="${LAMBDA_DIR}/sam-template.yaml"
@@ -95,23 +110,30 @@ if [ -n "${SF_ARN}" ]; then
   echo "  Step Functions ARN: ${SF_ARN}"
 fi
 
-# sam build: lambdas/*/requirements.txt 패키징 (google-cloud-storage 등 외부 라이브러리 포함)
-echo "  Building Lambda packages..."
-sam build -t sam-template.yaml
+ARTIFACT_BUCKET="${PROJECT}-cp-artifacts-${ACCOUNT_ID}"
+PACKAGED_TPL="/tmp/bookflow-lambdas-packaged.yaml"
 
-# sam deploy: 빌드된 패키지 + GcsStagingBucket 파라미터 전달
-sam deploy \
+echo "  Packaging Lambda artifacts → s3://${ARTIFACT_BUCKET}/lambda-packages/"
+aws cloudformation package \
+  --template-file "${LAMBDA_DIR}/.aws-sam/build/template.yaml" \
+  --s3-bucket "${ARTIFACT_BUCKET}" \
+  --s3-prefix "lambda-packages" \
+  --output-template-file "${PACKAGED_TPL}" \
+  --region "${REGION}"
+
+aws cloudformation deploy \
+  --template-file "${PACKAGED_TPL}" \
   --stack-name "${PROJECT}-99-lambdas" \
   --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND CAPABILITY_IAM \
+  --no-fail-on-empty-changeset \
   --region "${REGION}" \
-  --parameter-overrides ${SAM_PARAMS} \
-  --no-fail-on-empty-changeset
+  --parameter-overrides ${SAM_PARAMS}
 
 echo "  OK Lambda build + deploy complete"
 
 # 5. Glue scripts S3 sync
 echo ""
-echo "[5/5] Glue scripts S3 sync..."
+echo "[7/8] Glue scripts S3 sync..."
 
 GLUE_JOBS_DIR="${REPO_ROOT}/glue-jobs"
 aws s3 sync "${GLUE_JOBS_DIR}/" "s3://${GLUE_BUCKET}/scripts/" \
@@ -124,7 +146,7 @@ echo "  OK Glue scripts synced"
 # 6. Initial data collection (Lambda invoke)
 # cron 대기 없이 배포 직후 즉시 Raw 데이터 수집 → 이후 Glue Job 실행 가능 상태 확보
 echo ""
-echo "[6/6] Initial data collection (Lambda invoke)..."
+echo "[8/8] Initial data collection (Lambda invoke)..."
 
 for FN in aladin-sync event-sync sns-gen; do
   echo "  -> ${PROJECT}-${FN} invoke..."
