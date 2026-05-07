@@ -49,7 +49,7 @@ def lambda_handler(event, context):
     sm         = boto3.client("secretsmanager", region_name=REGION)
     s3         = boto3.client("s3",             region_name=REGION)
     raw_bucket = os.environ["RAW_BUCKET"]
-    secret     = _get_secret(sm, "bookflow/aladin/ttbkey")
+    secret     = _get_secret(sm, "bookflow/external/aladin-ttbkey")
     ttbkey     = secret["ttbkey"]
 
     now       = datetime.now(timezone.utc)

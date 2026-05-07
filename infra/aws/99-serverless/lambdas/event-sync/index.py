@@ -165,8 +165,8 @@ def lambda_handler(event, context):
     sm         = boto3.client("secretsmanager", region_name=REGION)
     s3         = boto3.client("s3",             region_name=REGION)
     raw_bucket = os.environ["RAW_BUCKET"]
-    secret     = _get_secret(sm, "bookflow/publicdata")
-    service_key = secret["service_key"]
+    secret     = _get_secret(sm, "bookflow/external/publicdata-apikey")
+    service_key = secret["apikey"]
 
     now       = datetime.now(timezone.utc)
     years     = [now.year, now.year + 1]

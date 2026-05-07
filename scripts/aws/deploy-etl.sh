@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 # deploy-etl.sh - BookFlow ETL full pipeline deploy
-# Order: ECR image build/push -> SAM Lambda deploy -> Glue scripts S3 sync
+# Order: ECR image build/push -> SAM Lambda build+deploy -> Glue scripts S3 sync
 # Prerequisites: AWS CLI configured, Docker running, SAM CLI installed
 set -euo pipefail
 
 REGION="${AWS_REGION:-ap-northeast-1}"
 PROJECT="bookflow"
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+
+# GCS staging bucket: Terraform gcs.tf google_storage_bucket.staging.name
+# Override with env var if needed: GCS_STAGING_BUCKET=xxx bash deploy-etl.sh
+GCP_PROJECT_ID="${GCP_PROJECT_ID:-project-8ab6bf05-54d2-4f5d-b8d}"
+GCS_STAGING_BUCKET="${GCS_STAGING_BUCKET:-${GCP_PROJECT_ID}-bookflow-staging}"
 
 # Get AWS account info
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
@@ -23,6 +28,7 @@ echo " Account : ${ACCOUNT_ID}"
 echo " Region  : ${REGION}"
 echo " ECR     : ${ECR_REGISTRY}"
 echo " Glue S3 : s3://${GLUE_BUCKET}/scripts/"
+echo " GCS     : gs://${GCS_STAGING_BUCKET}"
 echo "============================================"
 
 # 1. ECR login
@@ -68,9 +74,9 @@ print(f\"  OK {s['serviceName']} -> {s['desiredCount']} tasks\")
 " || echo "  WARN ${SIM} service update failed (service may not be deployed yet)"
 done
 
-# 4. Lambda SAM deploy
+# 4. Lambda SAM build + deploy
 echo ""
-echo "[4/5] Lambda SAM deploy..."
+echo "[4/5] Lambda SAM build + deploy..."
 
 LAMBDA_DIR="${REPO_ROOT}/infra/aws/99-serverless"
 SAM_TEMPLATE="${LAMBDA_DIR}/sam-template.yaml"
@@ -83,21 +89,25 @@ SF_ARN=$(aws cloudformation describe-stacks \
 
 cd "${LAMBDA_DIR}"
 
-SAM_PARAMS="ParameterKey=ProjectName,ParameterValue=${PROJECT}"
+SAM_PARAMS="ProjectName=${PROJECT} GcsStagingBucket=${GCS_STAGING_BUCKET}"
 if [ -n "${SF_ARN}" ]; then
-  SAM_PARAMS="${SAM_PARAMS} ParameterKey=StepFunctionsArn,ParameterValue=${SF_ARN}"
+  SAM_PARAMS="${SAM_PARAMS} StepFunctionsArn=${SF_ARN}"
   echo "  Step Functions ARN: ${SF_ARN}"
 fi
 
+# sam build: lambdas/*/requirements.txt 패키징 (google-cloud-storage 등 외부 라이브러리 포함)
+echo "  Building Lambda packages..."
+sam build -t sam-template.yaml
+
+# sam deploy: 빌드된 패키지 + GcsStagingBucket 파라미터 전달
 sam deploy \
-  --template-file "${SAM_TEMPLATE}" \
   --stack-name "${PROJECT}-99-lambdas" \
   --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND CAPABILITY_IAM \
   --region "${REGION}" \
   --parameter-overrides ${SAM_PARAMS} \
   --no-fail-on-empty-changeset
 
-echo "  OK Lambda deploy complete"
+echo "  OK Lambda build + deploy complete"
 
 # 5. Glue scripts S3 sync
 echo ""
@@ -111,19 +121,42 @@ aws s3 sync "${GLUE_JOBS_DIR}/" "s3://${GLUE_BUCKET}/scripts/" \
 
 echo "  OK Glue scripts synced"
 
+# 6. Initial data collection (Lambda invoke)
+# cron 대기 없이 배포 직후 즉시 Raw 데이터 수집 → 이후 Glue Job 실행 가능 상태 확보
+echo ""
+echo "[6/6] Initial data collection (Lambda invoke)..."
+
+for FN in aladin-sync event-sync sns-gen; do
+  echo "  -> ${PROJECT}-${FN} invoke..."
+  STATUS=$(aws lambda invoke \
+    --function-name "${PROJECT}-${FN}" \
+    --payload '{}' \
+    --cli-binary-format raw-in-base64-out \
+    --region "${REGION}" \
+    /tmp/${FN}_out.json \
+    --query 'StatusCode' --output text 2>/dev/null || echo "ERROR")
+
+  if [ "${STATUS}" = "200" ]; then
+    echo "  OK ${FN} → StatusCode 200"
+  else
+    echo "  WARN ${FN} StatusCode: ${STATUS} (Secrets 미설정 시 정상 · CloudWatch 확인)"
+  fi
+done
+
 echo ""
 echo "============================================"
 echo " ETL Deploy Complete"
 echo " ECS sims  : online-sim / offline-sim"
-echo " Lambdas   : 7 (aladin-sync / event-sync / sns-gen"
+echo " Lambdas   : 8 (aladin-sync / event-sync / sns-gen"
 echo "             spike-detect / forecast-trigger"
-echo "             secret-forwarder / pos-ingestor)"
+echo "             secret-forwarder / pos-ingestor / mart-to-gcs)"
 echo " Glue      : s3://${GLUE_BUCKET}/scripts/"
 echo "             (6 jobs: raw_pos/sns/aladin/event / sales_daily / features)"
+echo " GCS       : gs://${GCS_STAGING_BUCKET}"
 echo ""
 echo " Next steps:"
 echo "   1. Check ECS tasks: aws ecs list-tasks --cluster ${ECS_CLUSTER}"
-echo "   2. Test Lambda: aws lambda invoke --function-name ${PROJECT}-aladin-sync /dev/null"
-echo "   3. Run Glue job: aws glue start-job-run --job-name ${PROJECT}-raw-pos-mart"
-echo "   4. Check CloudWatch Logs: /aws/lambda/${PROJECT}-* / /aws-glue/jobs/"
+echo "   2. Run Glue jobs:   bash scripts/aws/daily/day06_0505_glue_raw.sh"
+echo "   3. Check BigQuery:  bq query --use_legacy_sql=false 'SELECT COUNT(*) FROM bookflow_dw.sales_fact'"
+echo "   4. CloudWatch Logs: /aws/lambda/${PROJECT}-* / /aws-glue/jobs/"
 echo "============================================"

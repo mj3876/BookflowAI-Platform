@@ -50,7 +50,7 @@ SPIKE_MULT_MAX = 30
 
 def _get_config(sm) -> dict:
     return json.loads(
-        sm.get_secret_value(SecretId="bookflow/sns-gen-config")["SecretString"]
+        sm.get_secret_value(SecretId="bookflow/etl/sns-gen-config")["SecretString"]
     )
 
 
