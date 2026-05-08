@@ -147,7 +147,7 @@ def _alter_rds_pod_roles(rds_pw: str) -> None:
 
     sql = " ".join([
         f"ALTER ROLE {r} WITH PASSWORD $bf$" + rds_pw + "$bf$;"
-        for r in ["auth_pod", "inventory_svc", "forecast_svc", "decision_svc", "intervention_svc", "notification_svc"]
+        for r in ["auth_pod", "dashboard_svc", "inventory_svc", "forecast_svc", "decision_svc", "intervention_svc", "notification_svc"]
     ])
     sql_b64 = base64.b64encode(sql.encode()).decode()
     cmd = (

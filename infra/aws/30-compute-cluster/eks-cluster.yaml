@@ -13,6 +13,17 @@ Parameters:
   CiCdRoleArn:
     Type: String
     Default: ''
+
+  EKSEndpointPublicAccess:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: Phase 0-3 (개발) = true / Phase 4+ (private 전환 · client-vpn 사용) = false
+  EKSEndpointPrivateAccess:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: 항상 true 권장 (private 도 같이 켜두면 dual access)
     Description: CodeBuild/CodePipeline IAM Role ARN ( CICD tier    update-stack  )
 
 Conditions:
@@ -67,8 +78,8 @@ Resources:
           - !ImportValue
             Fn::Sub: ${ProjectName}-subnet-bookflow-ai-private-az2
         SecurityGroupIds: [!Ref ClusterSecurityGroup]
-        EndpointPublicAccess: true
-        EndpointPrivateAccess: true
+        EndpointPublicAccess: !Ref EKSEndpointPublicAccess
+        EndpointPrivateAccess: !Ref EKSEndpointPrivateAccess
       EncryptionConfig:
         - Provider:
             KeyArn: !ImportValue

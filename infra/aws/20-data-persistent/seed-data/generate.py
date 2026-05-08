@@ -21,12 +21,10 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import pyarrow.parquet as pq
-
 random.seed(42)
 
 ROOT = Path(__file__).resolve().parent
-PARQUET_DIR = ROOT.parent.parent.parent.parent / "scripts" / "output" / "historical"
+ALADIN_JSON = ROOT / "books_aladin.json"
 
 KST = timezone(timedelta(hours=9))
 NOW = datetime.now(KST).replace(microsecond=0)
@@ -46,16 +44,16 @@ def write_csv(name: str, rows: list[dict]) -> None:
     print(f"  + {name}.csv ({len(rows)} rows)")
 
 
-def parquet_to_dicts(path: Path) -> list[dict]:
-    t = pq.read_table(path)
-    return t.to_pylist()
+def read_aladin_json(path: Path) -> list[dict]:
+    """books_aladin.json 읽기 (fetch_aladin.py 결과). 1000개 dict 반환."""
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 # =========================================================================
 # 1. publishers (extracted from books_seed) + 2. authors (split + meta)
 # =========================================================================
 def gen_books_authors_publishers() -> tuple[list[dict], list[dict], list[dict]]:
-    src = parquet_to_dicts(PARQUET_DIR / "books_seed.parquet")
+    src = read_aladin_json(ALADIN_JSON)
 
     # publishers: dedupe by name
     pub_map: dict[str, int] = {}
@@ -126,20 +124,32 @@ def gen_warehouses_locations() -> tuple[list[dict], list[dict]]:
         {"wh_id": 1, "name": "Sudogwon WH", "region": "Sudogwon",  "capacity": 50000},
         {"wh_id": 2, "name": "Yeongnam WH",  "region": "Yeongnam",   "capacity": 40000},
     ]
-    locs_src = parquet_to_dicts(PARQUET_DIR / "locations_seed.parquet")
-    locations = [
-        {
-            "location_id":  l["location_id"],
-            "location_type": l["location_type"],
-            "wh_id":        l["wh_id"],
-            "name":         l.get("name") or "",
-            "size":         l.get("size") or "",
-            "region":       l.get("region") or "",
-            "is_virtual":   "true" if l.get("is_virtual") else "false",
-            "active":       "true" if l.get("active") else "false",
-        }
-        for l in locs_src
-    ]
+    # 14 locations · 오프라인 12 (수도권 6 + 영남 6) + 온라인 가상 2
+    SUDO_STORES = [("Gangnam", "L"), ("Gwanghwamun", "L"), ("Jamsil", "M"),
+                   ("Hongdae", "M"), ("Sinchon", "S"), ("Yongsan", "S")]
+    YEONG_STORES = [("Busan Seomyeon", "L"), ("Daegu Dongseong", "L"),
+                    ("Ulsan Samsan", "M"), ("Daegu Gyodae", "M"),
+                    ("Busan Centum", "S"), ("Pohang Yangdeok", "S")]
+    locations: list[dict] = []
+    lid = 1
+    for name, size in SUDO_STORES:
+        locations.append({"location_id": lid, "location_type": "STORE_OFFLINE", "wh_id": 1,
+                          "name": name, "size": size, "region": "Sudogwon",
+                          "is_virtual": "false", "active": "true"})
+        lid += 1
+    for name, size in YEONG_STORES:
+        locations.append({"location_id": lid, "location_type": "STORE_OFFLINE", "wh_id": 2,
+                          "name": name, "size": size, "region": "Yeongnam",
+                          "is_virtual": "false", "active": "true"})
+        lid += 1
+    # 온라인 가상 (각 WH 1 개씩)
+    locations.append({"location_id": lid, "location_type": "STORE_ONLINE", "wh_id": 1,
+                      "name": "Online Sudogwon", "size": "L", "region": "Sudogwon",
+                      "is_virtual": "true", "active": "true"})
+    lid += 1
+    locations.append({"location_id": lid, "location_type": "STORE_ONLINE", "wh_id": 2,
+                      "name": "Online Yeongnam", "size": "L", "region": "Yeongnam",
+                      "is_virtual": "true", "active": "true"})
     return warehouses, locations
 
 
@@ -517,8 +527,8 @@ def gen_audit_log() -> list[dict]:
 
 def main() -> None:
     print(f"BookFlow seed-data generator (deterministic, seed=42)")
-    print(f"  reading parquet from: {PARQUET_DIR}")
-    print(f"  output dir:           {ROOT}")
+    print(f"  aladin source: {ALADIN_JSON.name}")
+    print(f"  output dir:    {ROOT}")
     print()
 
     books, authors, publishers = gen_books_authors_publishers()
