@@ -22,7 +22,7 @@ spark = glue.spark_session
 job   = Job(glue)
 job.init(args["JOB_NAME"], args)
 
-POS_PATH    = f"s3://{args['MART_BUCKET']}/pos_events/"
+POS_PATH    = f"s3://{args['MART_BUCKET']}/mart/sales_fact/*/"
 TARGET_PATH = f"s3://{args['MART_BUCKET']}/sales_daily/"
 
 pos = spark.read.parquet(POS_PATH)

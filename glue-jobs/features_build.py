@@ -31,11 +31,11 @@ spark.conf.set("spark.sql.parquet.datetimeRebaseModeInWrite",     "CORRECTED")
 spark.conf.set("spark.sql.legacy.parquet.int96RebaseModeInRead",  "CORRECTED")
 spark.conf.set("spark.sql.legacy.parquet.int96RebaseModeInWrite", "CORRECTED")
 
+from datetime import datetime, timezone
+_batch_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+
 MART = f"s3://{args['MART_BUCKET']}"
 
-# Read with schema inference — no explicit schema avoids [B cannot be cast to Integer errors.
-# Physical Parquet type is read as-is; explicit cast() below converts safely (returns null on
-# failure rather than throwing ClassCastException).
 sales_raw  = spark.read.parquet(f"{MART}/sales_daily/")
 sns_raw    = spark.read.parquet(f"{MART}/sns_mentions/")
 aladin_raw = spark.read.parquet(f"{MART}/aladin_books/")
@@ -162,11 +162,10 @@ features = (
     )
 )
 
-TARGET = f"{MART}/features/"
+TARGET = f"{MART}/mart/features/{_batch_id}/"
 (
     features.write
     .mode("overwrite")
-    .partitionBy("date")
     .parquet(TARGET)
 )
 

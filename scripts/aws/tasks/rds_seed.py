@@ -58,7 +58,8 @@ SEED_DIR=infra/aws/20-data-persistent/seed-data
 for t in {load_order}; do
   csv="$SEED_DIR/${{t}}.csv"
   [ -f "$csv" ] || {{ echo "  skip $t"; continue; }}
-  $PSQL -At -c "\\copy $t FROM '$csv' WITH (FORMAT csv, HEADER true);" > /dev/null
+  COLS=$(head -1 "$csv")
+  $PSQL -At -c "\\copy $t ($COLS) FROM '$csv' WITH (FORMAT csv, HEADER true);" > /dev/null
   n=$($PSQL -At -c "SELECT count(*) FROM $t")
   echo "  $t -> $n"
 done

@@ -38,7 +38,7 @@ from pyspark.sql.types import (
 
 args = getResolvedOptions(
     sys.argv,
-    ["JOB_NAME", "RAW_BUCKET", "MART_BUCKET", "catalog_database"],
+    ["JOB_NAME", "RAW_BUCKET", "MART_BUCKET", "catalog_database", "GCP_SECRET_ID", "BQ_TABLE"],
 )
 
 sc    = SparkContext()
@@ -47,8 +47,12 @@ spark = glue.spark_session
 job   = Job(glue)
 job.init(args["JOB_NAME"], args)
 
-SOURCE = f"s3://{args['RAW_BUCKET']}/aladin/"
-TARGET = f"s3://{args['MART_BUCKET']}/aladin_books/"
+from datetime import datetime, timezone
+_batch_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+
+SOURCE      = f"s3://{args['RAW_BUCKET']}/aladin/"
+_INTERNAL   = f"s3://{args['MART_BUCKET']}/aladin_books/"   # SCD 내부용
+TARGET      = f"s3://{args['MART_BUCKET']}/mart/books_static/{_batch_id}/"
 
 SCHEMA = StructType([
     StructField("isbn13",      StringType(),  False),
@@ -76,11 +80,11 @@ incoming = (
     .filter(F.col("isbn13").isNotNull())
 )
 
-#  mart   UNION ·    
+# SCD Type1: 내부 경로(_INTERNAL)에서 기존 데이터 읽어 병합
 try:
-    existing = spark.read.parquet(TARGET)
+    existing = spark.read.parquet(_INTERNAL)
     existing.cache()
-    existing.count()  # force eager S3 read inside try block
+    existing.count()
     combined = existing.unionByName(incoming, allowMissingColumns=True)
 except Exception:
     combined = incoming
@@ -94,11 +98,43 @@ deduped = (
     .drop("_rn")
 )
 
-(
-    deduped.write
-    .mode("overwrite")
-    .parquet(TARGET)
-)
+# 내부 경로에 SCD 결과 저장 (다음 실행 때 기존 데이터로 사용)
+deduped.cache()
+deduped.write.mode("overwrite").parquet(_INTERNAL)
 
-print(f"[raw_aladin_mart] source={SOURCE} target={TARGET} books={deduped.count()}")
+# GCS export 경로에 저장 → EventBridge → mart-to-gcs Lambda → GCS → BigQuery
+deduped.write.mode("overwrite").parquet(TARGET)
+
+book_count = deduped.count()
+print(f"[raw_aladin_mart] source={SOURCE} target={TARGET} books={book_count}")
+
+# BigQuery 적재 (google-cloud-bigquery)
+import boto3, json
+from google.oauth2 import service_account
+from google.cloud import bigquery as bq
+
+_sm  = boto3.client("secretsmanager")
+_key = json.loads(_sm.get_secret_value(SecretId=args["GCP_SECRET_ID"])["SecretString"])
+_creds = service_account.Credentials.from_service_account_info(_key)
+_bq    = bq.Client(project=_key["project_id"], credentials=_creds)
+
+_table_id = f"{_key['project_id']}.{args['BQ_TABLE']}"
+
+# 타임스탬프 → string 변환 (Arrow 타입 오류 방지)
+_df_bq = deduped.withColumn("synced_at", F.col("synced_at").cast("string"))
+_pdf = _df_bq.toPandas()
+
+# BQ 테이블 스키마 가져와서 컬럼 정렬
+# - BQ에만 있는 컬럼 → None 추가
+# - DataFrame에만 있는 컬럼 → 제거
+_bq_table  = _bq.get_table(_table_id)
+_bq_fields = [f.name for f in _bq_table.schema]
+for _col in _bq_fields:
+    if _col not in _pdf.columns:
+        _pdf[_col] = None
+_pdf = _pdf[_bq_fields]
+
+_job_config = bq.LoadJobConfig(write_disposition="WRITE_APPEND", schema=_bq_table.schema)
+_bq.load_table_from_dataframe(_pdf, _table_id, job_config=_job_config).result()
+print(f"[raw_aladin_mart] BigQuery {_table_id} 적재 완료 books={book_count}")
 job.commit()

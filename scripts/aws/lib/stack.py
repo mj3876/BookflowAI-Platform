@@ -61,8 +61,8 @@ class Stack:
         template_body = self.template_path.read_text(encoding="utf-8")
 
         current = self.status()
-        if current == "ROLLBACK_COMPLETE":
-            log.warn(f"{self.full_name} is in ROLLBACK_COMPLETE — deleting before re-create")
+        if current in ("ROLLBACK_COMPLETE", "REVIEW_IN_PROGRESS"):
+            log.warn(f"{self.full_name} is in {current} — deleting before re-create")
             self.cf.delete_stack(StackName=self.full_name)
             self.cf.get_waiter("stack_delete_complete").wait(StackName=self.full_name)
             current = None

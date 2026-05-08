@@ -108,8 +108,12 @@ Resources:
         ConnectionType: JDBC
         Description: BigQuery JDBC connection (GCP SA key from Secrets Manager)
         ConnectionProperties:
-          JDBC_CONNECTION_URL: jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=PLACEHOLDER;OAuthType=0;OAuthServiceAcctEmail=PLACEHOLDER;OAuthPvtKeyPath=/tmp/sa-key.json
+          JDBC_CONNECTION_URL: jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=project-8ab6bf05-54d2-4f5d-b8d;OAuthType=0;OAuthServiceAcctEmail=PLACEHOLDER;OAuthPvtKeyPath=/tmp/sa-key.json
           JDBC_DRIVER_CLASS_NAME: com.simba.googlebigquery.jdbc.Driver
+          JDBC_DRIVER_S3_PATH: !Sub
+            - s3://${BucketName}/jars/GoogleBigQueryJDBC42.jar
+            - BucketName: !ImportValue
+                Fn::Sub: ${ProjectName}-s3-glue-scripts-name
           USERNAME: placeholder
           PASSWORD: placeholder
 
@@ -148,6 +152,9 @@ Resources:
         '--MART_BUCKET': !ImportValue
           Fn::Sub: ${ProjectName}-s3-mart-name
         '--catalog_database': !Ref Database
+        '--additional-python-modules': 'google-cloud-bigquery==3.11.0,db-dtypes==1.1.1'
+        '--GCP_SECRET_ID': bookflow/glue/gcp-sa-key
+        '--BQ_TABLE': bookflow_dw.sales_fact
       WorkerType: G.1X
       NumberOfWorkers: 2
 
@@ -216,6 +223,9 @@ Resources:
         '--MART_BUCKET': !ImportValue
           Fn::Sub: ${ProjectName}-s3-mart-name
         '--catalog_database': !Ref Database
+        '--additional-python-modules': 'google-cloud-bigquery==3.11.0,db-dtypes==1.1.1'
+        '--GCP_SECRET_ID': bookflow/glue/gcp-sa-key
+        '--BQ_TABLE': bookflow_dw.books_static
       WorkerType: G.1X
       NumberOfWorkers: 2
 

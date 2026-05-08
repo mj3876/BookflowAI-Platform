@@ -1,11 +1,21 @@
 #!/usr/bin/env bash
 # etl.sh · Lambda (SAM) + Glue + Step Functions
+# GCS_STAGING_BUCKET env var 설정 필요 (mart-to-gcs Lambda · raw_pos_mart → GCS → BigQuery):
+#   export GCS_STAGING_BUCKET=<gcp-project-id>-bookflow-staging
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../lib/common.sh"
 ACTION="${1:-up}"
 load_env; acquire_lock "etl"; init_log "etl" "$ACTION"; pre_flight
 INFRA="$PROJECT_ROOT/infra/aws"
+
+# GCS staging bucket for mart-to-gcs Lambda (raw_pos_mart Parquet → GCS → BigQuery)
+GCP_PROJECT_ID="${GCP_PROJECT_ID:-}"
+GCS_STAGING_BUCKET="${GCS_STAGING_BUCKET:-${GCP_PROJECT_ID:+${GCP_PROJECT_ID}-bookflow-staging}}"
+export GCS_STAGING_BUCKET
+[ -n "$GCS_STAGING_BUCKET" ] \
+  && log "GCS staging bucket: gs://${GCS_STAGING_BUCKET}" \
+  || warn "GCS_STAGING_BUCKET 미설정 — mart-to-gcs Lambda 비활성 (export GCS_STAGING_BUCKET=<bucket>)"
 
 case "$ACTION" in
 up)
