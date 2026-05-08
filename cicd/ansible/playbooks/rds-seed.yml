@@ -65,17 +65,19 @@
 
     # RDS 는 server-side COPY 불가 (postgresql_copy 모듈은 서버 파일 가정).
     # psql 클라이언트의 \copy 메타커맨드를 통해 client-side stream 적재.
-    - name: Bulk \copy each seed CSV via psql
+    # column-aware: csv header 의 column 만 명시 → DB 의 추가 컬럼 (default 있는 created_at · rejected_at 등) 은 자동 default.
+    # 매일 schema 변동 시 generate.py 의 csv header 가 source of truth · ansible 자동 정합.
+    - name: Bulk \copy each seed CSV via psql (column-aware · csv header → column list)
       ansible.builtin.shell: |
         export PGPASSWORD={{ db_master_password | quote }}
+        HEADER=$(head -1 {{ seed_dir }}/{{ item.item }}.csv)
         psql -h {{ db_host }} -p {{ db_port }} -U {{ db_master_user }} -d {{ db_name }} \
           -v ON_ERROR_STOP=1 \
-          -c "\copy {{ item.item }} FROM '{{ seed_dir }}/{{ item.item }}.csv' WITH (FORMAT csv, HEADER true, DELIMITER ',');"
+          -c "\copy {{ item.item }} ($HEADER) FROM '{{ seed_dir }}/{{ item.item }}.csv' WITH (FORMAT csv, HEADER true, DELIMITER ',');"
       loop: "{{ csv_stats.results }}"
       when: item.stat.exists
       loop_control:
         label: "{{ item.item }}"
-      no_log: true
       changed_when: true
 
     - name: Update sequences (SERIAL/BIGSERIAL columns) post-seed

@@ -285,27 +285,36 @@ def gen_forecast_cache(books, scenario_b_isbns: list[str]) -> list[dict]:
         scenario_b_isbns[7]: [2],
     }
     rows = []
+    seen: set[tuple[str, str, int]] = set()  # PK (snapshot_date, isbn13, store_id) dedupe
     snap_date = TODAY
 
     # 시나리오 B fixture 먼저 (slice 시 우선 보존) — predicted_demand >> available
     for isbn, locs in SHORT_PAIRS.items():
         for store_id in locs:
+            key = (snap_date.isoformat(), isbn, store_id)
+            if key in seen:
+                continue
+            seen.add(key)
             rows.append({
                 "snapshot_date": snap_date.isoformat(),
                 "isbn13": isbn,
                 "store_id": store_id,
-                "predicted_demand": round(random.uniform(50, 80), 2),  # 의도 큰 수요 (available < 5 인 매장)
+                "predicted_demand": round(random.uniform(50, 80), 2),  # 의도 큰 수요
                 "confidence_low":   40.0,
                 "confidence_high":  100.0,
                 "model_version":    "automl-v1.0.0",
                 "synced_at": NOW.isoformat(),
             })
 
-    # 나머지 random fill (총 1000 row)
+    # 나머지 random fill — 시나리오 B isbns 와 store_id 조합 중복 X (PK seen check)
     for b in books[:200]:
         for store_id in range(1, 13):
             if len(rows) >= 1000:
                 break
+            key = (snap_date.isoformat(), b["isbn13"], store_id)
+            if key in seen:
+                continue  # 시나리오 B fixture 와 중복 skip
+            seen.add(key)
             base = random.randint(1, 30)
             rows.append({
                 "snapshot_date": snap_date.isoformat(),
