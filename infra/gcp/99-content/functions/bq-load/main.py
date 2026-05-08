@@ -45,8 +45,14 @@ from google.cloud import bigquery
 # Glue 스크립트가 S3 Mart에 쓰는 폴더명과 BigQuery 테이블명이 다른 경우 여기서 변환
 _DEFAULT_TABLE_MAP: dict[str, str] = {
     "pos_events":      "sales_fact",     # Glue pos_etl.py → mart/pos_events/
+    "sales_daily":     "sales_fact",
     "aladin_books":    "books_static",   # Glue aladin_etl.py → mart/aladin_books/
+    "books_static":    "books_static",
     "calendar_events": "features",       # Glue event_etl.py → mart/calendar_events/
+    "features":        "features",
+    "inventory_daily": "inventory_daily",
+    "locations_static": "locations_static",
+    "store_location_map": "store_location_map",
     "sns_mentions":    "sns_mentions",   # Glue sns_agg.py → mart/sns_mentions/ (동일)
 }
 
@@ -62,9 +68,16 @@ def _load_table_map() -> dict[str, str]:
     예) BOOKFLOW_TABLE_MAP='{"pos_events": "sales_transactions"}'
     """
     raw = os.environ.get("BOOKFLOW_TABLE_MAP", "")
+    aliases = os.environ.get("BOOKFLOW_LOAD_TABLE_ALIASES", "")
     try:
-        return {**_DEFAULT_TABLE_MAP, **json.loads(raw)} if raw else _DEFAULT_TABLE_MAP
-    except json.JSONDecodeError:
+        table_map = {**_DEFAULT_TABLE_MAP, **json.loads(raw)} if raw else dict(_DEFAULT_TABLE_MAP)
+        for alias in aliases.split(","):
+            if not alias or ":" not in alias:
+                continue
+            source_name, table_name = alias.split(":", 1)
+            table_map[source_name.strip()] = table_name.strip()
+        return table_map
+    except (json.JSONDecodeError, ValueError):
         return _DEFAULT_TABLE_MAP
 
 

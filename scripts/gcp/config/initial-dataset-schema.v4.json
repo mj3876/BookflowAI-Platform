@@ -1,0 +1,97 @@
+{
+  "version": "V4_BOOKFLOW_Data_Schema",
+  "tables": {
+    "books_static": {
+      "file": "books_static.parquet",
+      "columns": [
+        "isbn13",
+        "category_id",
+        "category_name",
+        "publisher",
+        "author",
+        "price_standard",
+        "price_sales",
+        "price_tier",
+        "sales_point",
+        "item_page",
+        "is_bestseller_flag",
+        "author_past_books_count",
+        "author_debut_year",
+        "author_experience_years"
+      ]
+    },
+    "locations_static": {
+      "file": "locations_static.parquet",
+      "columns": [
+        "location_id",
+        "location_type",
+        "wh_id",
+        "size",
+        "is_virtual"
+      ]
+    },
+    "store_location_map": {
+      "file": "store_location_map.parquet",
+      "columns": [
+        "store_id",
+        "location_id",
+        "inventory_location_id",
+        "mapping_rule"
+      ]
+    },
+    "sales_fact": {
+      "file": "sales_fact.parquet",
+      "date_columns": [
+        "sale_date"
+      ],
+      "columns": [
+        "sale_date",
+        "isbn13",
+        "store_id",
+        "wh_id",
+        "channel",
+        "qty_sold",
+        "revenue",
+        "avg_price",
+        "tx_count"
+      ]
+    },
+    "inventory_daily": {
+      "file": "inventory_daily.parquet",
+      "date_columns": [
+        "snapshot_date"
+      ],
+      "columns": [
+        "snapshot_date",
+        "isbn13",
+        "location_id",
+        "on_hand",
+        "reserved_qty",
+        "safety_stock"
+      ]
+    },
+    "features": {
+      "file": "features.parquet",
+      "date_columns": [
+        "feature_date"
+      ],
+      "columns": [
+        "feature_date",
+        "isbn13",
+        "is_holiday",
+        "holiday_name",
+        "season",
+        "day_of_week",
+        "is_weekend",
+        "month",
+        "event_nearby_days",
+        "sns_mentions_1d",
+        "sns_mentions_7d",
+        "book_age_days",
+        "is_bestseller_flag",
+        "on_hand_total",
+        "days_since_last_stockout"
+      ]
+    }
+  }
+}

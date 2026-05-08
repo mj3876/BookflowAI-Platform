@@ -13,6 +13,7 @@ def _json_error(message, status_code):
 def handler(request):
     try:
         payload = request.get_json(silent=True) or {}
+        invoke_mode = (payload.get("mode") or os.getenv("BOOKFLOW_VERTEX_INVOKE_MODE", "real")).lower()
         project_id = payload.get("project_id") or os.getenv("BOOKFLOW_PROJECT_ID")
         location = payload.get("location") or payload.get("endpoint_location") or os.getenv(
             "BOOKFLOW_VERTEX_LOCATION"
@@ -26,6 +27,25 @@ def handler(request):
             instances = instances["instances"]
         if isinstance(instances, dict):
             instances = [instances]
+
+        if invoke_mode == "stub":
+            return {
+                "predictions": [
+                    {
+                        "predicted_demand": 0,
+                        "confidence_low": 0,
+                        "confidence_high": 0,
+                        "stub": True,
+                    }
+                    for _ in instances or [{}]
+                ],
+                "deployed_model_id": None,
+                "model_version_id": None,
+                "metadata": {
+                    "mode": "stub",
+                    "reason": "BOOKFLOW_VERTEX_INVOKE_MODE=stub",
+                },
+            }
 
         missing = [
             name

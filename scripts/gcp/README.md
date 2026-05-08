@@ -15,6 +15,7 @@ scripts/gcp/
 +-- 2-tasks/
 +-- deploy-all.ps1
 +-- destroy-all.ps1
++-- destroy-gcp-layers.ps1
 +-- README.md
 ```
 
@@ -109,6 +110,26 @@ Run from the repository root:
 ```
 
 Manual cleanup note: Terraform destroy can fail if GCS buckets still contain objects. If that happens, manually remove remaining objects from the managed buckets, then rerun `destroy-all.ps1`.
+
+### `destroy-gcp-layers.ps1`
+
+Runs full logged teardown across every GCP Terraform layer:
+
+```text
+99-content -> 20-network-daily -> 00-foundation
+```
+
+Use this when the network layer has been deployed and the whole GCP stack should be removed. Logs are written under:
+
+```text
+scripts/gcp/destroy-logs/
+```
+
+Run from the repository root:
+
+```powershell
+.\scripts\gcp\destroy-gcp-layers.ps1
+```
 
 ## Special Implementation Notes
 

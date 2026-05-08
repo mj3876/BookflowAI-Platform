@@ -49,6 +49,7 @@ load_dotenv()
 ALADIN_TTB_KEY   = os.getenv("ALADIN_TTB_KEY", "")
 HOLIDAY_API_KEY  = os.getenv("HOLIDAY_API_KEY", "")
 OUTPUT_DIR       = Path(os.getenv("OUTPUT_DIR", "./output/historical"))
+DEFAULT_SCHEMA_PATH = Path(__file__).resolve().parent / "gcp" / "config" / "initial-dataset-schema.v4.json"
 
 # ── 고정 마스터 데이터 ─────────────────────────────────────────────────────────
 
@@ -160,7 +161,7 @@ def _parse_aladin_item(item: dict, fake: Faker) -> dict:
 
     return {
         "isbn13":            str(item.get("isbn13", "")),
-        "title":             str(item.get("title",  fake.sentence(nb_words=4)))[:200],
+        "title":             str(item.get("title") or _fake_korean_title())[:200],
         "author":            author[:100],
         "publisher":         str(item.get("publisher", fake.company()))[:100],
         "pub_date":          pub_date.isoformat(),
@@ -292,7 +293,7 @@ def build_books_seed(aladin_items: list[dict], target: int, fake: Faker) -> pd.D
         debut_year = random.randint(1980, date.today().year - 1)
         rows.append({
             "isbn13":            isbn,
-            "title":             fake.sentence(nb_words=random.randint(2, 6))[:200],
+            "title":             _fake_korean_title(),
             "author":            fake.name()[:100],
             "publisher":         fake.company()[:100],
             "pub_date":          (date.today() - timedelta(days=random.randint(0, 3_650))).isoformat(),
@@ -314,7 +315,7 @@ def build_books_seed(aladin_items: list[dict], target: int, fake: Faker) -> pd.D
             "item_page":         random.randint(90, 850),
             "is_bestseller_flag": random.random() < 0.05,
             "active":            True,
-            "source":            "ALADIN",
+            "source":            "FAKER",
         })
 
     df = pd.DataFrame(rows[:target])
@@ -380,6 +381,22 @@ def build_locations_seed() -> pd.DataFrame:
             "region":        region,
             "is_virtual":    online,
             "active":        True,
+        })
+    return pd.DataFrame(rows)
+
+
+def build_store_location_map(stores: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    for _, row in stores.iterrows():
+        store_id = int(row["store_id"])
+        location_id = int(row["location_id"])
+        wh_id = int(row["wh_id"])
+        inventory_location_id = wh_id if bool(row["is_online"]) else location_id
+        rows.append({
+            "store_id": store_id,
+            "location_id": location_id,
+            "inventory_location_id": inventory_location_id,
+            "mapping_rule": f"{store_id}->{location_id}->{inventory_location_id}",
         })
     return pd.DataFrame(rows)
 
@@ -564,6 +581,27 @@ def _sns_mentions() -> int:
     return int(abs(random.gauss(30, 40)))
 
 
+def _fake_korean_title() -> str:
+    prefixes = [
+        "오늘의", "다시 시작하는", "작은", "깊은", "조용한", "새로운",
+        "마지막", "처음 만나는", "쉽게 배우는", "일상을 바꾸는", "현장을 위한",
+        "어른의",
+    ]
+    subjects = [
+        "물류", "재고관리", "데이터", "책방", "독서", "경영", "마음", "도시",
+        "계절", "시간", "브랜드", "리더십", "경제", "인공지능", "고객 경험",
+    ]
+    suffixes = [
+        "수업", "노트", "이야기", "전략", "연습", "가이드", "질문들", "원칙",
+        "습관", "지도", "레시피", "인사이트",
+    ]
+
+    title = f"{random.choice(prefixes)} {random.choice(subjects)} {random.choice(suffixes)}"
+    if random.random() < 0.25:
+        title = f"{title}: {random.choice(subjects)}를 이해하는 법"
+    return title[:200]
+
+
 def _make_isbn13(used: set[str]) -> str:
     while True:
         prefix = "979" + "".join(str(random.randint(0, 9)) for _ in range(9))
@@ -587,6 +625,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--days",  type=int, default=730,   help="생성할 기간(일) (기본: 730 = 2년)")
     p.add_argument("--seed",  type=int, default=42,    help="랜덤 시드")
     p.add_argument("--output-dir", type=Path, default=OUTPUT_DIR, help="출력 디렉터리")
+    p.add_argument("--schema-config", type=Path, default=DEFAULT_SCHEMA_PATH, help="출력 parquet 스키마 설정 JSON")
     return p.parse_args()
 
 
@@ -606,6 +645,8 @@ def main() -> None:
     out_dir = args.output_dir
     out_dir.mkdir(parents=True, exist_ok=True)
     print(f"출력 경로: {out_dir.resolve()}")
+    schema = _load_schema_config(args.schema_config)
+    print(f"스키마 설정: {args.schema_config.resolve()} ({schema.get('version', 'unknown')})")
 
     # 날짜 범위 (오늘 기준 과거 args.days 일)
     today      = date.today()
@@ -617,14 +658,15 @@ def main() -> None:
     print("\n[1/6] 알라딘 도서 수집 ...")
     aladin_items = fetch_aladin_books(args.books)
     books_df     = build_books_seed(aladin_items, args.books, fake)
-    _save(books_df, out_dir / "books_seed.parquet")
+    _save_table(books_df, out_dir, schema, "books_static")
 
     # ── 2. 지점 마스터 ───────────────────────────────────────────────────────
     print("\n[2/6] 지점·위치 마스터 생성 ...")
     stores_df    = build_stores_seed()
     locations_df = build_locations_seed()
-    _save(stores_df,    out_dir / "stores_seed.parquet")
-    _save(locations_df, out_dir / "locations_seed.parquet")
+    store_location_map_df = build_store_location_map(stores_df)
+    _save_table(locations_df, out_dir, schema, "locations_static")
+    _save_table(store_location_map_df, out_dir, schema, "store_location_map")
 
     # ── 3. 공휴일 데이터 ─────────────────────────────────────────────────────
     print("\n[3/6] 특일정보 API 공휴일 수집 ...")
@@ -634,29 +676,28 @@ def main() -> None:
     # ── 4. sales_fact ────────────────────────────────────────────────────────
     print("\n[4/6] sales_fact 생성 ...")
     sales_df = build_sales_fact(books_df, stores_df, date_range)
-    _save(sales_df, out_dir / "sales_fact_2y.parquet")
+    _save_table(sales_df, out_dir, schema, "sales_fact")
 
     # ── 5. inventory_daily ───────────────────────────────────────────────────
     print("\n[5/6] inventory_daily 생성 ...")
     inv_df = build_inventory_daily(books_df, date_range)
-    _save(inv_df, out_dir / "inventory_daily_2y.parquet")
+    _save_table(inv_df, out_dir, schema, "inventory_daily")
 
     # ── 6. features ──────────────────────────────────────────────────────────
     print("\n[6/6] features 생성 ...")
     feat_df = build_features(books_df, date_range, holidays)
-    _save(feat_df, out_dir / "features_2y.parquet")
+    _save_table(feat_df, out_dir, schema, "features")
 
     # ── 완료 요약 ────────────────────────────────────────────────────────────
     print("\n" + "=" * 60)
     print("✅ 생성 완료")
     print("=" * 60)
     total = 0
-    for fname in ["books_seed", "stores_seed", "locations_seed",
-                  "sales_fact_2y", "inventory_daily_2y", "features_2y"]:
-        path = out_dir / f"{fname}.parquet"
+    for table_name, table_config in schema["tables"].items():
+        path = out_dir / table_config["file"]
         rows = len(pd.read_parquet(path))
         size = path.stat().st_size / 1_024 / 1_024
-        print(f"  {fname:30s}  {rows:>9,}행  ({size:.1f} MB)")
+        print(f"  {table_name:30s}  {rows:>9,}행  ({size:.1f} MB)")
         total += rows
     print(f"\n  합계: {total:,}행")
     print(f"  경로: {out_dir.resolve()}")
@@ -670,6 +711,40 @@ def _save(df: pd.DataFrame, path: Path) -> None:
     df.to_parquet(path, index=False, compression="snappy")
     size_mb = path.stat().st_size / 1_024 / 1_024
     print(f"  저장: {path.name}  ({len(df):,}행, {size_mb:.1f} MB)")
+
+
+def _load_schema_config(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        raise FileNotFoundError(f"Schema config not found: {path}")
+    with path.open("r", encoding="utf-8") as fp:
+        schema = json.load(fp)
+    if "tables" not in schema or not isinstance(schema["tables"], dict):
+        raise ValueError(f"Invalid schema config: missing tables object in {path}")
+    return schema
+
+
+def _save_table(df: pd.DataFrame, out_dir: Path, schema: dict[str, Any], table_name: str) -> None:
+    tables = schema["tables"]
+    if table_name not in tables:
+        raise KeyError(f"Missing table schema: {table_name}")
+
+    table_config = tables[table_name]
+    columns = table_config.get("columns", [])
+    missing = [column for column in columns if column not in df.columns]
+    if missing:
+        raise ValueError(f"{table_name} is missing required columns: {', '.join(missing)}")
+
+    table_df = df.loc[:, columns].copy()
+    for column in table_config.get("date_columns", []):
+        if column not in table_df.columns:
+            raise ValueError(f"{table_name} date column not found: {column}")
+        table_df[column] = pd.to_datetime(table_df[column]).dt.date
+
+    _save(table_df, out_dir / table_config["file"])
+
+    legacy_alias = schema.get("legacy_aliases", {}).get(table_name)
+    if legacy_alias:
+        _save(table_df, out_dir / legacy_alias)
 
 
 if __name__ == "__main__":

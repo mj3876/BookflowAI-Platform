@@ -35,11 +35,13 @@ function Invoke-FoundationEssentialApply {
         "google_storage_bucket.models",
         "google_bigquery_dataset.bookflow_dw",
         "google_bigquery_table.sales_fact",
-        "google_bigquery_table.inventory",
+        "google_bigquery_table.inventory_daily",
         "google_bigquery_table.forecast_results",
         "google_bigquery_table.features",
-        "google_bigquery_table.training_dataset",
-        "google_bigquery_table.book_master"
+        "google_bigquery_table.books_static",
+        "google_bigquery_table.locations_static",
+        "google_bigquery_table.store_location_map",
+        "google_bigquery_table.training_dataset"
     )
 
     Push-Location $LayerPath

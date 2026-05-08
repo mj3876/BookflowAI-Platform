@@ -56,6 +56,43 @@ variable "aws_allowed_cidrs" {
   type        = list(string)
 }
 
+variable "github_owner" {
+  description = "GitHub owner or organization allowed to federate into the GCP Terraform deployer service account."
+  type        = string
+}
+
+variable "github_repositories" {
+  description = "GitHub repositories allowed to federate into the GCP Terraform deployer service account."
+  type        = list(string)
+
+  validation {
+    condition     = length(var.github_repositories) > 0
+    error_message = "github_repositories must contain at least one repository name."
+  }
+}
+
+variable "terraform_deployer_roles" {
+  description = "Project IAM roles granted to the GitHub OIDC Terraform deployer service account."
+  type        = set(string)
+  default = [
+    "roles/aiplatform.admin",
+    "roles/artifactregistry.admin",
+    "roles/bigquery.admin",
+    "roles/cloudbuild.builds.editor",
+    "roles/cloudfunctions.admin",
+    "roles/compute.networkAdmin",
+    "roles/eventarc.admin",
+    "roles/iam.serviceAccountAdmin",
+    "roles/iam.serviceAccountUser",
+    "roles/pubsub.admin",
+    "roles/run.admin",
+    "roles/serviceusage.serviceUsageAdmin",
+    "roles/storage.admin",
+    "roles/vpcaccess.admin",
+    "roles/workflows.admin",
+  ]
+}
+
 variable "labels" {
   description = "Common labels applied to supported resources."
   type        = map(string)

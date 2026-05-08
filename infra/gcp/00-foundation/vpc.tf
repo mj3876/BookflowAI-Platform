@@ -1,4 +1,4 @@
-﻿resource "google_project_service" "vpcaccess" {
+resource "google_project_service" "vpcaccess" {
   project            = var.project_id
   service            = "vpcaccess.googleapis.com"
   disable_on_destroy = false

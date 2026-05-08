@@ -11,6 +11,7 @@ locals {
     "pubsub.googleapis.com",
     "run.googleapis.com",
     "storage.googleapis.com",
+    "storagetransfer.googleapis.com",
     "vpcaccess.googleapis.com",
     "workflowexecutions.googleapis.com",
     "workflows.googleapis.com",
@@ -25,6 +26,7 @@ locals {
   models_bucket_name           = coalesce(var.models_bucket_name, "${var.project_id}-bookflow-models")
   vertex_pipeline_template_uri = coalesce(var.vertex_pipeline_template_uri, "gs://${local.models_bucket_name}/${var.vertex_pipeline_template_object}")
   vertex_pipeline_root         = coalesce(var.vertex_pipeline_root, "gs://${var.project_id}-bookflow-models/pipeline-root")
+  vertex_endpoint_resource     = coalesce(var.vertex_endpoint_resource_name, google_vertex_ai_endpoint.forecast.name)
 
   function_specs = {
     bq_load = {
@@ -48,6 +50,7 @@ locals {
           var.features_table,
           var.books_static_table,
           var.locations_static_table,
+          var.store_location_map_table,
         ])
         BOOKFLOW_LOAD_TABLE_ALIASES = join(",", [
           for source_name, table_name in var.load_table_aliases : "${source_name}:${table_name}"
@@ -67,12 +70,15 @@ locals {
       source_dir   = "feature-assemble"
       zip_name     = "bookflow-feature-assemble.zip"
       env = {
-        BOOKFLOW_DATASET_ID  = var.dataset_id
-        BOOKFLOW_BQ_LOCATION = var.bigquery_location
+        BOOKFLOW_DATASET_ID      = var.dataset_id
+        BOOKFLOW_BQ_LOCATION     = var.bigquery_location
+        BOOKFLOW_FEATURE_TABLE   = var.new_book_feature_view_id
+        BOOKFLOW_FEATURE_COLUMNS = join(",", var.vertex_feature_columns)
         BOOKFLOW_FEATURE_TABLES = join(",", [
           var.sales_table,
           var.books_static_table,
           var.features_table,
+          var.store_location_map_table,
         ])
       }
     }
@@ -88,9 +94,10 @@ locals {
       source_dir   = "vertex-invoke"
       zip_name     = "bookflow-vertex-invoke.zip"
       env = {
-        BOOKFLOW_VERTEX_ENDPOINT = google_vertex_ai_endpoint.forecast.name
-        BOOKFLOW_VERTEX_LOCATION = local.region
-        BOOKFLOW_DATASET_ID      = var.dataset_id
+        BOOKFLOW_VERTEX_ENDPOINT    = local.vertex_endpoint_resource
+        BOOKFLOW_VERTEX_LOCATION    = local.region
+        BOOKFLOW_DATASET_ID         = var.dataset_id
+        BOOKFLOW_VERTEX_INVOKE_MODE = var.vertex_invoke_mode
       }
     }
   }

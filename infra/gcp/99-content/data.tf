@@ -1,4 +1,4 @@
-﻿#    (Project Number)    
+#    (Project Number)    
 data "google_project" "project" {
   project_id = var.project_id
 }

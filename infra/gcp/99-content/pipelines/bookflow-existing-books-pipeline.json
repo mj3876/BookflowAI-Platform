@@ -28,6 +28,9 @@
           "sales_table": {
             "parameterType": "STRING"
           },
+          "store_location_map_table": {
+            "parameterType": "STRING"
+          },
           "training_table": {
             "parameterType": "STRING"
           }
@@ -171,11 +174,11 @@
           "command": [
             "sh",
             "-c",
-            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery'  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
+            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery'  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
             "sh",
             "-ec",
             "program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
-            "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import *\n\ndef build_training_dataset(\n    project_id: str,\n    dataset_id: str,\n    sales_table: str,\n    inventory_table: str,\n    features_table: str,\n    books_table: str,\n    locations_table: str,\n    location: str,\n    training_table: str,\n) -> str:\n    from google.cloud import bigquery\n\n    client = bigquery.Client(project=project_id, location=location)\n    table_id = f\"{project_id}.{dataset_id}.{training_table}\"\n\n    query = f\"\"\"\n    CREATE OR REPLACE TABLE `{table_id}` AS\n    SELECT\n      sf.isbn13,\n      sf.store_id,\n      SAFE.PARSE_DATE('%Y-%m-%d', CAST(sf.sale_date AS STRING)) AS sale_date,\n      SUM(CAST(sf.qty_sold AS FLOAT64)) AS qty_sold,\n      ANY_VALUE(bs.category_id) AS category_id,\n      ANY_VALUE(bs.category_name) AS category_name,\n      ANY_VALUE(bs.publisher) AS publisher,\n      ANY_VALUE(bs.author) AS author,\n      ANY_VALUE(bs.price_tier) AS price_tier,\n      ANY_VALUE(bs.sales_point) AS sales_point,\n      ANY_VALUE(bs.item_page) AS item_page,\n      ANY_VALUE(ls.location_type) AS location_type,\n      ANY_VALUE(ls.wh_id) AS wh_id,\n      ANY_VALUE(ls.size) AS size,\n      ANY_VALUE(ls.is_virtual) AS is_virtual,\n      LOGICAL_OR(COALESCE(feat.is_holiday, FALSE)) AS is_holiday,\n      ANY_VALUE(feat.season) AS season,\n      ANY_VALUE(feat.day_of_week) AS day_of_week,\n      LOGICAL_OR(COALESCE(feat.is_weekend, FALSE)) AS is_weekend,\n      ANY_VALUE(feat.month) AS month,\n      AVG(CAST(feat.event_nearby_days AS FLOAT64)) AS event_nearby_days,\n      AVG(CAST(feat.sns_mentions_1d AS FLOAT64)) AS sns_mentions_1d,\n      AVG(CAST(feat.sns_mentions_7d AS FLOAT64)) AS sns_mentions_7d,\n      AVG(CAST(feat.on_hand_total AS FLOAT64)) AS on_hand_total,\n      AVG(CAST(feat.days_since_last_stockout AS FLOAT64)) AS days_since_last_stockout,\n      AVG(CAST(feat.book_age_days AS FLOAT64)) AS book_age_days,\n      LOGICAL_OR(COALESCE(feat.is_bestseller_flag, FALSE)) AS is_bestseller_flag,\n      AVG(CAST(inv.on_hand AS FLOAT64)) AS on_hand,\n      AVG(CAST(inv.reserved_qty AS FLOAT64)) AS reserved_qty\n    FROM `{project_id}.{dataset_id}.{sales_table}` AS sf\n    LEFT JOIN `{project_id}.{dataset_id}.{books_table}` AS bs\n      ON sf.isbn13 = bs.isbn13\n    LEFT JOIN `{project_id}.{dataset_id}.{locations_table}` AS ls\n      ON sf.store_id = ls.location_id\n    LEFT JOIN `{project_id}.{dataset_id}.{inventory_table}` AS inv\n      ON sf.isbn13 = inv.isbn13\n     AND sf.store_id = inv.location_id\n     AND SAFE.PARSE_DATE('%Y-%m-%d', CAST(sf.sale_date AS STRING)) = SAFE.PARSE_DATE('%Y-%m-%d', CAST(inv.snapshot_date AS STRING))\n    LEFT JOIN `{project_id}.{dataset_id}.{features_table}` AS feat\n      ON sf.isbn13 = feat.isbn13\n     AND SAFE.PARSE_DATE('%Y-%m-%d', CAST(sf.sale_date AS STRING)) = SAFE.PARSE_DATE('%Y-%m-%d', CAST(feat.feature_date AS STRING))\n    WHERE SAFE.PARSE_DATE('%Y-%m-%d', CAST(sf.sale_date AS STRING)) IS NOT NULL\n    GROUP BY sf.isbn13, sf.store_id, sale_date\n    \"\"\"\n\n    client.query(query).result()\n    return table_id\n\n"
+            "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import *\n\ndef build_training_dataset(\n    project_id: str,\n    dataset_id: str,\n    sales_table: str,\n    inventory_table: str,\n    features_table: str,\n    books_table: str,\n    locations_table: str,\n    store_location_map_table: str,\n    location: str,\n    training_table: str,\n) -> str:\n    from google.cloud import bigquery\n\n    client = bigquery.Client(project=project_id, location=location)\n    table_id = f\"{project_id}.{dataset_id}.{training_table}\"\n\n    query = f\"\"\"\n    CREATE OR REPLACE TABLE `{table_id}` AS\n    WITH sales_bounds AS (\n      SELECT\n        MIN(SAFE_CAST(sale_date AS DATE)) AS min_date,\n        MAX(SAFE_CAST(sale_date AS DATE)) AS max_date\n      FROM `{project_id}.{dataset_id}.{sales_table}`\n    ),\n    date_spine AS (\n      SELECT day AS sale_date\n      FROM sales_bounds, UNNEST(GENERATE_DATE_ARRAY(min_date, max_date)) AS day\n      WHERE min_date IS NOT NULL AND max_date IS NOT NULL\n    ),\n    active_books AS (\n      SELECT\n        isbn13,\n        category_id,\n        category_name,\n        publisher,\n        author,\n        price_standard,\n        price_sales,\n        price_tier,\n        sales_point,\n        item_page,\n        is_bestseller_flag,\n        author_past_books_count,\n        author_debut_year,\n        author_experience_years\n      FROM `{project_id}.{dataset_id}.{books_table}`\n    ),\n    stores AS (\n      SELECT\n        m.store_id,\n        m.location_id,\n        m.inventory_location_id,\n        ls.location_type,\n        ls.wh_id,\n        ls.size,\n        ls.is_virtual\n      FROM `{project_id}.{dataset_id}.{store_location_map_table}` AS m\n      JOIN `{project_id}.{dataset_id}.{locations_table}` AS ls\n        ON m.location_id = ls.location_id\n    ),\n    sales_daily AS (\n      SELECT\n        SAFE_CAST(sale_date AS DATE) AS sale_date,\n        isbn13,\n        store_id,\n        SUM(CAST(qty_sold AS FLOAT64)) AS qty_sold,\n        SUM(CAST(revenue AS FLOAT64)) AS revenue,\n        SAFE_DIVIDE(SUM(CAST(revenue AS FLOAT64)), NULLIF(SUM(CAST(qty_sold AS FLOAT64)), 0)) AS avg_price,\n        SUM(CAST(tx_count AS FLOAT64)) AS tx_count\n      FROM `{project_id}.{dataset_id}.{sales_table}`\n      WHERE SAFE_CAST(sale_date AS DATE) IS NOT NULL\n      GROUP BY sale_date, isbn13, store_id\n    ),\n    training_grid AS (\n      SELECT\n        d.sale_date,\n        b.isbn13,\n        s.store_id,\n        s.location_id,\n        s.inventory_location_id,\n        b.category_id,\n        b.category_name,\n        b.publisher,\n        b.author,\n        b.price_standard,\n        b.price_sales,\n        b.price_tier,\n        b.sales_point,\n        b.item_page,\n        b.is_bestseller_flag AS book_is_bestseller_flag,\n        b.author_past_books_count,\n        b.author_debut_year,\n        b.author_experience_years,\n        s.location_type,\n        s.wh_id,\n        s.size,\n        s.is_virtual\n      FROM date_spine AS d\n      CROSS JOIN active_books AS b\n      CROSS JOIN stores AS s\n    )\n    SELECT\n      g.sale_date,\n      g.isbn13,\n      g.store_id,\n      COALESCE(s.qty_sold, 0) AS qty_sold,\n      COALESCE(s.revenue, 0) AS revenue,\n      s.avg_price,\n      COALESCE(s.tx_count, 0) AS tx_count,\n      g.category_id,\n      g.category_name,\n      g.publisher,\n      g.author,\n      g.price_standard,\n      g.price_sales,\n      g.price_tier,\n      g.sales_point,\n      g.item_page,\n      g.book_is_bestseller_flag,\n      g.author_past_books_count,\n      g.author_debut_year,\n      g.author_experience_years,\n      g.location_id,\n      g.inventory_location_id,\n      g.location_type,\n      g.wh_id,\n      g.size,\n      g.is_virtual,\n      feat.is_holiday,\n      feat.holiday_name,\n      feat.season,\n      feat.day_of_week,\n      feat.is_weekend,\n      feat.month,\n      feat.event_nearby_days,\n      COALESCE(feat.sns_mentions_1d, 0) AS sns_mentions_1d,\n      COALESCE(feat.sns_mentions_7d, 0) AS sns_mentions_7d,\n      COALESCE(feat.on_hand_total, 0) AS on_hand_total,\n      feat.days_since_last_stockout,\n      feat.book_age_days,\n      COALESCE(feat.is_bestseller_flag, g.book_is_bestseller_flag, FALSE) AS is_bestseller_flag,\n      COALESCE(inv.on_hand, 0) AS on_hand,\n      COALESCE(inv.reserved_qty, 0) AS reserved_qty,\n      COALESCE(inv.safety_stock, 0) AS safety_stock\n    FROM training_grid AS g\n    LEFT JOIN sales_daily AS s\n      ON g.sale_date = s.sale_date\n     AND g.isbn13 = s.isbn13\n     AND g.store_id = s.store_id\n    LEFT JOIN `{project_id}.{dataset_id}.{features_table}` AS feat\n      ON g.isbn13 = feat.isbn13\n     AND g.sale_date = SAFE_CAST(feat.feature_date AS DATE)\n    LEFT JOIN `{project_id}.{dataset_id}.{inventory_table}` AS inv\n      ON g.isbn13 = inv.isbn13\n     AND g.sale_date = SAFE_CAST(inv.snapshot_date AS DATE)\n     AND g.inventory_location_id = inv.location_id\n    \"\"\"\n\n    client.query(query).result()\n    return table_id\n\n"
           ],
           "image": "python:3.12-slim"
         }
@@ -191,7 +194,7 @@
           "command": [
             "sh",
             "-c",
-            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery'  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
+            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery'  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
             "sh",
             "-ec",
             "program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
@@ -211,7 +214,7 @@
           "command": [
             "sh",
             "-c",
-            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery'  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
+            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery'  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
             "sh",
             "-ec",
             "program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
@@ -231,7 +234,7 @@
           "command": [
             "sh",
             "-c",
-            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
+            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
             "sh",
             "-ec",
             "program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
@@ -251,7 +254,7 @@
           "command": [
             "sh",
             "-c",
-            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery'  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
+            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery'  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
             "sh",
             "-ec",
             "program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
@@ -304,6 +307,9 @@
               },
               "sales_table": {
                 "componentInputParameter": "sales_table"
+              },
+              "store_location_map_table": {
+                "componentInputParameter": "store_location_map_table"
               },
               "training_table": {
                 "componentInputParameter": "training_table"
@@ -486,6 +492,9 @@
         "staging_bucket": {
           "parameterType": "STRING"
         },
+        "store_location_map_table": {
+          "parameterType": "STRING"
+        },
         "training_table": {
           "parameterType": "STRING"
         }
@@ -493,5 +502,5 @@
     }
   },
   "schemaVersion": "2.1.0",
-  "sdkVersion": "kfp-2.16.1"
+  "sdkVersion": "kfp-2.16.0"
 }
