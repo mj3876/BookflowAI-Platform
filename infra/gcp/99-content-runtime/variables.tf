@@ -32,6 +32,12 @@ variable "vpc_connector_name" {
   default     = "bookflow-vpc-conn"
 }
 
+variable "vpc_connector_cidr" {
+  description = "CIDR range for the Serverless VPC Access connector."
+  type        = string
+  default     = "192.168.254.0/28"
+}
+
 variable "vpc_name" {
   description = "Existing BOOKFLOW VPC name."
   type        = string

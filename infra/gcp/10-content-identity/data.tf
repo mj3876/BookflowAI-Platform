@@ -1,19 +1,3 @@
-#    (Project Number)    
-data "google_project" "project" {
-  project_id = var.project_id
-}
-
-data "google_compute_network" "bookflow_vpc" {
-  name    = local.vpc_name
-  project = var.project_id
-}
-
-data "google_vpc_access_connector" "bookflow" {
-  name    = local.vpc_connector_name
-  project = var.project_id
-  region  = local.region
-}
-
 data "google_storage_bucket" "staging" {
   name = local.staging_bucket_name
 }
@@ -29,4 +13,12 @@ data "google_bigquery_dataset" "bookflow_dw" {
 
 data "google_storage_project_service_account" "gcs" {
   project = var.project_id
+}
+
+data "google_storage_transfer_project_service_account" "default" {
+  project = var.project_id
+
+  depends_on = [
+    google_project_service.storagetransfer,
+  ]
 }

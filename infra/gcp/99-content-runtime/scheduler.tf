@@ -1,19 +1,3 @@
-resource "google_service_account" "daily_existing_books_scheduler" {
-  count = var.enable_daily_existing_books_schedule ? 1 : 0
-
-  account_id   = "bookflow-daily-forecast"
-  project      = var.project_id
-  display_name = "BOOKFLOW daily existing-books forecast scheduler"
-}
-
-resource "google_project_iam_member" "daily_existing_books_scheduler_invoker" {
-  count = var.enable_daily_existing_books_schedule ? 1 : 0
-
-  project = var.project_id
-  role    = "roles/workflows.invoker"
-  member  = "serviceAccount:${google_service_account.daily_existing_books_scheduler[0].email}"
-}
-
 resource "google_cloud_scheduler_job" "daily_existing_books_workflow" {
   count = var.enable_daily_existing_books_schedule ? 1 : 0
 
@@ -47,14 +31,13 @@ resource "google_cloud_scheduler_job" "daily_existing_books_workflow" {
     }))
 
     oauth_token {
-      service_account_email = google_service_account.daily_existing_books_scheduler[0].email
+      service_account_email = data.google_service_account.daily_existing_books_scheduler[0].email
     }
   }
 
   depends_on = [
     google_project_service.required["cloudscheduler.googleapis.com"],
     google_project_service.required["workflowexecutions.googleapis.com"],
-    google_project_iam_member.daily_existing_books_scheduler_invoker,
     google_workflows_workflow.gcs_router,
   ]
 }

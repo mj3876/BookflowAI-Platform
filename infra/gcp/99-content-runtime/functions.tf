@@ -46,11 +46,11 @@ resource "google_cloudfunctions2_function" "content" {
     timeout_seconds    = each.value.timeout
     ingress_settings   = "ALLOW_INTERNAL_ONLY"
     service_account_email = {
-      bq_load          = google_service_account.bq_load.email
-      feature_assemble = google_service_account.feature_assemble.email
-      vertex_invoke    = google_service_account.vertex_invoke.email
+      bq_load          = data.google_service_account.bq_load.email
+      feature_assemble = data.google_service_account.feature_assemble.email
+      vertex_invoke    = data.google_service_account.vertex_invoke.email
     }[each.key]
-    vpc_connector                  = data.google_vpc_access_connector.bookflow.id
+    vpc_connector                  = google_vpc_access_connector.bookflow.id
     vpc_connector_egress_settings  = "ALL_TRAFFIC"
     all_traffic_on_latest_revision = true
     environment_variables = merge(each.value.env, {
@@ -63,7 +63,7 @@ resource "google_cloudfunctions2_function" "content" {
     google_project_service.required["run.googleapis.com"],
     google_project_service.required["artifactregistry.googleapis.com"],
     google_project_service.required["cloudbuild.googleapis.com"],
-    data.google_vpc_access_connector.bookflow,
+    google_vpc_access_connector.bookflow,
     google_storage_bucket_object.function_source,
   ]
 }

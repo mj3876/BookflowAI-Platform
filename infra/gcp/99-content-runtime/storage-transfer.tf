@@ -1,15 +1,3 @@
-data "google_storage_transfer_project_service_account" "default" {
-  project = var.project_id
-}
-
-resource "google_storage_bucket_iam_member" "storage_transfer_staging_object_admin" {
-  count = var.storage_transfer_enabled ? 1 : 0
-
-  bucket = data.google_storage_bucket.staging.name
-  role   = "roles/storage.objectAdmin"
-  member = "serviceAccount:${data.google_storage_transfer_project_service_account.default.email}"
-}
-
 resource "google_storage_transfer_job" "aws_mart_to_gcs_staging" {
   count = var.storage_transfer_enabled ? 1 : 0
 
@@ -75,6 +63,5 @@ resource "google_storage_transfer_job" "aws_mart_to_gcs_staging" {
 
   depends_on = [
     google_project_service.required["storagetransfer.googleapis.com"],
-    google_storage_bucket_iam_member.storage_transfer_staging_object_admin,
   ]
 }

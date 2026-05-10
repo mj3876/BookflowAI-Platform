@@ -5,5 +5,5 @@ resource "google_cloud_run_service_iam_member" "workflow_function_invoker" {
   location = local.region
   service  = each.value.name
   role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_service_account.workflow.email}"
+  member   = "serviceAccount:${data.google_service_account.workflow.email}"
 }
