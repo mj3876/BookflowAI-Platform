@@ -24,20 +24,17 @@ resource "google_bigquery_table" "sales_fact" {
 
   clustering = ["isbn13", "store_id"]
 
-  lifecycle {
-    ignore_changes = [schema]
-  }
-
   schema = jsonencode([
-    { name = "sale_date", type = "DATE", mode = "REQUIRED", description = "Sales date." },
-    { name = "isbn13", type = "STRING", mode = "REQUIRED", description = "Book ISBN-13." },
-    { name = "store_id", type = "INTEGER", mode = "REQUIRED", description = "Store id, 1-12." },
+    { name = "sale_date", type = "STRING", mode = "NULLABLE", description = "Sales date as provided by the historical parquet feed." },
+    { name = "isbn13", type = "STRING", mode = "NULLABLE", description = "Book ISBN-13." },
+    { name = "store_id", type = "INTEGER", mode = "NULLABLE", description = "Store id, 1-12." },
     { name = "wh_id", type = "INTEGER", mode = "NULLABLE", description = "Warehouse region id." },
     { name = "channel", type = "STRING", mode = "NULLABLE", description = "offline or online." },
     { name = "qty_sold", type = "INTEGER", mode = "NULLABLE", description = "Vertex AI training target." },
     { name = "revenue", type = "NUMERIC", mode = "NULLABLE", description = "Daily revenue." },
     { name = "avg_price", type = "NUMERIC", mode = "NULLABLE", description = "Average selling price." },
     { name = "tx_count", type = "INTEGER", mode = "NULLABLE", description = "Transaction count." },
+    { name = "synthetic", type = "BOOLEAN", mode = "NULLABLE", description = "Marks generated historical seed rows." },
   ])
 }
 

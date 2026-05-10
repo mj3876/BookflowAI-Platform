@@ -174,7 +174,7 @@
           "command": [
             "sh",
             "-c",
-            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery'  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
+            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery'  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
             "sh",
             "-ec",
             "program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
@@ -194,7 +194,7 @@
           "command": [
             "sh",
             "-c",
-            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery'  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
+            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery'  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
             "sh",
             "-ec",
             "program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
@@ -214,7 +214,7 @@
           "command": [
             "sh",
             "-c",
-            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery'  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
+            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery'  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
             "sh",
             "-ec",
             "program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
@@ -234,7 +234,7 @@
           "command": [
             "sh",
             "-c",
-            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
+            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
             "sh",
             "-ec",
             "program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
@@ -254,11 +254,11 @@
           "command": [
             "sh",
             "-c",
-            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery'  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
+            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery'  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
             "sh",
             "-ec",
             "program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
-            "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import *\n\ndef write_batch_forecast(\n    project_id: str,\n    dataset_id: str,\n    location: str,\n    training_table: str,\n    model_name: str,\n    forecast_table: str,\n) -> str:\n    from google.cloud import bigquery\n\n    client = bigquery.Client(project=project_id, location=location)\n    model_id = f\"{project_id}.{dataset_id}.{model_name}\"\n    source_table_id = f\"{project_id}.{dataset_id}.{training_table}\"\n    forecast_table_id = f\"{project_id}.{dataset_id}.{forecast_table}\"\n\n    query = f\"\"\"\n    CREATE OR REPLACE TABLE `{forecast_table_id}` AS\n    SELECT\n      CURRENT_DATE() AS prediction_date,\n      DATE_ADD(sale_date, INTERVAL 1 DAY) AS target_date,\n      isbn13,\n      store_id,\n      predicted_qty_sold AS predicted_demand,\n      CAST(NULL AS NUMERIC) AS confidence_low,\n      CAST(NULL AS NUMERIC) AS confidence_high,\n      '{model_name}' AS model_version,\n      CAST(NULL AS INT64) AS inference_ms\n    FROM ML.PREDICT(\n      MODEL `{model_id}`,\n      (\n        SELECT\n          isbn13,\n          store_id,\n          sale_date,\n          EXTRACT(DAYOFWEEK FROM sale_date) AS day_of_week,\n          EXTRACT(MONTH FROM sale_date) AS month,\n          COALESCE(on_hand, 0) AS on_hand,\n          CAST(COALESCE(is_holiday, FALSE) AS INT64) AS holiday_flag,\n          COALESCE(event_nearby_days, 0) AS event_nearby_days,\n          COALESCE(sns_mentions_1d, 0) AS sns_mentions_1d,\n          COALESCE(sns_mentions_7d, 0) AS sns_mentions_7d\n        FROM `{source_table_id}`\n      )\n    )\n    \"\"\"\n\n    client.query(query).result()\n    return forecast_table_id\n\n"
+            "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import *\n\ndef write_batch_forecast(\n    project_id: str,\n    dataset_id: str,\n    location: str,\n    training_table: str,\n    model_name: str,\n    forecast_table: str,\n) -> str:\n    from google.cloud import bigquery\n\n    client = bigquery.Client(project=project_id, location=location)\n    model_id = f\"{project_id}.{dataset_id}.{model_name}\"\n    source_table_id = f\"{project_id}.{dataset_id}.{training_table}\"\n    forecast_table_id = f\"{project_id}.{dataset_id}.{forecast_table}\"\n\n    query = f\"\"\"\n    DELETE FROM `{forecast_table_id}`\n    WHERE prediction_date = CURRENT_DATE();\n\n    INSERT INTO `{forecast_table_id}` (\n      prediction_date,\n      target_date,\n      isbn13,\n      store_id,\n      predicted_demand,\n      confidence_low,\n      confidence_high,\n      model_version,\n      inference_ms\n    )\n    SELECT\n      CURRENT_DATE() AS prediction_date,\n      DATE_ADD(sale_date, INTERVAL 1 DAY) AS target_date,\n      isbn13,\n      store_id,\n      CAST(predicted_qty_sold AS NUMERIC) AS predicted_demand,\n      CAST(NULL AS NUMERIC) AS confidence_low,\n      CAST(NULL AS NUMERIC) AS confidence_high,\n      @model_name AS model_version,\n      CAST(NULL AS INT64) AS inference_ms\n    FROM ML.PREDICT(\n      MODEL `{model_id}`,\n      (\n        SELECT\n          isbn13,\n          store_id,\n          sale_date,\n          EXTRACT(DAYOFWEEK FROM sale_date) AS day_of_week,\n          EXTRACT(MONTH FROM sale_date) AS month,\n          COALESCE(on_hand, 0) AS on_hand,\n          CAST(COALESCE(is_holiday, FALSE) AS INT64) AS holiday_flag,\n          COALESCE(event_nearby_days, 0) AS event_nearby_days,\n          COALESCE(sns_mentions_1d, 0) AS sns_mentions_1d,\n          COALESCE(sns_mentions_7d, 0) AS sns_mentions_7d\n        FROM `{source_table_id}`\n      )\n    )\n    \"\"\"\n\n    job_config = bigquery.QueryJobConfig(\n        query_parameters=[\n            bigquery.ScalarQueryParameter(\"model_name\", \"STRING\", model_name),\n        ]\n    )\n    client.query(query, job_config=job_config).result()\n    return forecast_table_id\n\n"
           ],
           "image": "python:3.12-slim"
         }
@@ -502,5 +502,5 @@
     }
   },
   "schemaVersion": "2.1.0",
-  "sdkVersion": "kfp-2.16.0"
+  "sdkVersion": "kfp-2.16.1"
 }
