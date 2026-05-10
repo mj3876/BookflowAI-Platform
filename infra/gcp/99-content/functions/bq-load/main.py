@@ -108,6 +108,24 @@ def _load_table_map() -> dict[str, str]:
     return table_map
 
 
+def _load_column_aliases() -> dict[str, dict[str, str]]:
+    raw = os.environ.get("BOOKFLOW_LOAD_COLUMN_ALIASES", "")
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+        return {
+            str(table_name): {
+                str(target_column): str(source_column)
+                for target_column, source_column in aliases.items()
+            }
+            for table_name, aliases in parsed.items()
+            if isinstance(aliases, dict)
+        }
+    except (json.JSONDecodeError, ValueError, TypeError):
+        return {}
+
+
 def _parse_path(object_name: str) -> tuple[str, str]:
     """
     GCS object 경로에서 (폴더명, Hive 파티션 전 prefix) 추출.
@@ -132,11 +150,21 @@ def _parse_path(object_name: str) -> tuple[str, str]:
     return folder, base
 
 
-def _field_expr(field: bigquery.SchemaField, source_columns: set[str]) -> str:
+def _field_expr(
+    table_name: str,
+    field: bigquery.SchemaField,
+    source_columns: set[str],
+    column_aliases: dict[str, dict[str, str]],
+) -> str:
     field_name = field.name.replace("`", "")
     field_type = _BQ_CAST_TYPES.get(field.field_type.upper(), field.field_type.upper())
     if field_name in source_columns:
         return f"SAFE_CAST(`{field_name}` AS {field_type}) AS `{field_name}`"
+    source_name = column_aliases.get(table_name, {}).get(field_name)
+    if source_name and source_name in source_columns:
+        return f"SAFE_CAST(`{source_name}` AS {field_type}) AS `{field_name}`"
+    if source_name and re.fullmatch(r"-?\d+(\.\d+)?", source_name):
+        return f"SAFE_CAST({source_name} AS {field_type}) AS `{field_name}`"
     return f"CAST(NULL AS {field_type}) AS `{field_name}`"
 
 
@@ -174,6 +202,7 @@ def handler(request):
 
     # ── GCS 경로 → BigQuery 테이블명 결정 ────────────────────────────────
     table_map          = _load_table_map()
+    column_aliases     = _load_column_aliases()
     folder, base_path  = _parse_path(object_name)
     table_name         = table_map.get(folder, folder)   # 매핑 없으면 폴더명 그대로 사용
 
@@ -223,7 +252,10 @@ def handler(request):
     temp_table = client.get_table(temp_table_ref)
     source_columns = {field.name for field in temp_table.schema}
     target_columns = [field.name.replace("`", "") for field in target_table.schema]
-    select_exprs = [_field_expr(field, source_columns) for field in target_table.schema]
+    select_exprs = [
+        _field_expr(table_name, field, source_columns, column_aliases)
+        for field in target_table.schema
+    ]
 
     insert_sql = f"""
     INSERT INTO `{table_ref}` ({", ".join(f"`{column}`" for column in target_columns)})

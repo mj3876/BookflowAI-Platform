@@ -55,7 +55,8 @@ locals {
         BOOKFLOW_LOAD_TABLE_ALIASES = join(",", [
           for source_name, table_name in var.load_table_aliases : "${source_name}:${table_name}"
         ])
-        BOOKFLOW_WRITE_DISPOSITION = "WRITE_APPEND"
+        BOOKFLOW_LOAD_COLUMN_ALIASES = jsonencode(var.load_column_aliases)
+        BOOKFLOW_WRITE_DISPOSITION   = "WRITE_APPEND"
       }
     }
     feature_assemble = {

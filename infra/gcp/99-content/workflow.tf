@@ -60,7 +60,7 @@ main:
         next: route_existing_books_pipeline
     - route_existing_books_pipeline:
         switch:
-          - condition: $${${var.enable_existing_books_pipeline}}
+          - condition: $${${var.enable_existing_books_pipeline} and len(text.find_all_regex(object_name, "${var.existing_books_pipeline_trigger_object_regex}")) > 0}
             next: start_existing_book_pipeline
         next: return_historical_load_success
     - return_historical_load_success:

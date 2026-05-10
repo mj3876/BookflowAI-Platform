@@ -290,16 +290,29 @@ def write_batch_forecast(
     forecast_table_id = f"{project_id}.{dataset_id}.{forecast_table}"
 
     query = f"""
-    CREATE OR REPLACE TABLE `{forecast_table_id}` AS
+    DELETE FROM `{forecast_table_id}`
+    WHERE prediction_date = CURRENT_DATE();
+
+    INSERT INTO `{forecast_table_id}` (
+      prediction_date,
+      target_date,
+      isbn13,
+      store_id,
+      predicted_demand,
+      confidence_low,
+      confidence_high,
+      model_version,
+      inference_ms
+    )
     SELECT
       CURRENT_DATE() AS prediction_date,
       DATE_ADD(sale_date, INTERVAL 1 DAY) AS target_date,
       isbn13,
       store_id,
-      predicted_qty_sold AS predicted_demand,
+      CAST(predicted_qty_sold AS NUMERIC) AS predicted_demand,
       CAST(NULL AS NUMERIC) AS confidence_low,
       CAST(NULL AS NUMERIC) AS confidence_high,
-      '{model_name}' AS model_version,
+      @model_name AS model_version,
       CAST(NULL AS INT64) AS inference_ms
     FROM ML.PREDICT(
       MODEL `{model_id}`,
@@ -320,7 +333,12 @@ def write_batch_forecast(
     )
     """
 
-    client.query(query).result()
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("model_name", "STRING", model_name),
+        ]
+    )
+    client.query(query, job_config=job_config).result()
     return forecast_table_id
 
 

@@ -84,6 +84,12 @@ variable "load_table_aliases" {
   default     = {}
 }
 
+variable "load_column_aliases" {
+  description = "Per-target-table mapping from BigQuery target columns to incoming parquet source columns or numeric literals."
+  type        = map(map(string))
+  default     = {}
+}
+
 variable "forecast_table" {
   description = "BigQuery table where the Vertex pipeline writes forecast results."
   type        = string
@@ -190,6 +196,12 @@ variable "enable_existing_books_pipeline" {
   description = "Whether Workflows starts the existing-books Vertex AI Pipeline after historical data loads."
   type        = bool
   default     = false
+}
+
+variable "existing_books_pipeline_trigger_object_regex" {
+  description = "Regex for GCS mart objects allowed to trigger the existing-books Vertex AI Pipeline. Keep narrow to avoid one pipeline run per input table."
+  type        = string
+  default     = "^mart/features/.+[.]parquet$"
 }
 
 variable "enable_vertex_batch_prediction" {
