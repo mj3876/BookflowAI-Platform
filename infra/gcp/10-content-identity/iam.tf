@@ -34,6 +34,18 @@ resource "google_service_account" "vertex_pipeline" {
   display_name = "BOOKFLOW Vertex AI pipeline runner"
 }
 
+resource "google_service_account" "staging_cleanup" {
+  account_id   = "bookflow-staging-cleanup"
+  project      = var.project_id
+  display_name = "BOOKFLOW GCS staging cleanup"
+}
+
+resource "google_service_account" "daily_existing_books_scheduler" {
+  account_id   = "bookflow-daily-forecast"
+  project      = var.project_id
+  display_name = "BOOKFLOW daily existing-books forecast scheduler"
+}
+
 resource "google_project_iam_member" "bq_load_job_user" {
   project = var.project_id
   role    = "roles/bigquery.jobUser"
@@ -132,4 +144,28 @@ resource "google_storage_bucket_iam_member" "vertex_pipeline_models_admin" {
   bucket = data.google_storage_bucket.models.name
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${google_service_account.vertex_pipeline.email}"
+}
+
+resource "google_storage_bucket_iam_member" "staging_cleanup_object_admin" {
+  bucket = data.google_storage_bucket.staging.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.staging_cleanup.email}"
+}
+
+resource "google_project_iam_member" "staging_cleanup_workflows_invoker" {
+  project = var.project_id
+  role    = "roles/workflows.invoker"
+  member  = "serviceAccount:${google_service_account.staging_cleanup.email}"
+}
+
+resource "google_project_iam_member" "daily_existing_books_scheduler_invoker" {
+  project = var.project_id
+  role    = "roles/workflows.invoker"
+  member  = "serviceAccount:${google_service_account.daily_existing_books_scheduler.email}"
+}
+
+resource "google_storage_bucket_iam_member" "storage_transfer_staging_object_admin" {
+  bucket = data.google_storage_bucket.staging.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${data.google_storage_transfer_project_service_account.default.email}"
 }

@@ -3,7 +3,7 @@ resource "google_workflows_workflow" "gcs_router" {
   project         = var.project_id
   region          = local.region
   description     = "Routes GCS finalized objects through BQ load and Vertex AI workflows."
-  service_account = google_service_account.workflow.email
+  service_account = data.google_service_account.workflow.email
   labels          = var.labels
 
   lifecycle {
@@ -131,7 +131,7 @@ main:
           region: "${local.region}"
           body:
             displayName: "bookflow-existing-books-forecast"
-            serviceAccount: "${google_service_account.vertex_pipeline.email}"
+            serviceAccount: "${data.google_service_account.vertex_pipeline.email}"
             templateUri: "${local.vertex_pipeline_template_uri}"
             runtimeConfig:
               gcsOutputDirectory: "${local.vertex_pipeline_root}"
@@ -192,7 +192,6 @@ YAML
     google_project_service.required["workflowexecutions.googleapis.com"],
     google_cloudfunctions2_function.content,
     google_cloud_run_service_iam_member.workflow_function_invoker,
-    google_project_iam_member.workflow_aiplatform_user,
     google_storage_bucket_object.vertex_pipeline_template,
     google_bigquery_table.batch_prediction_input_view,
   ]

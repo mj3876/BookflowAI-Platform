@@ -21,6 +21,11 @@ output "vertex_endpoint_name" {
   value       = google_vertex_ai_endpoint.forecast.name
 }
 
+output "vpc_connector_name" {
+  description = "Serverless VPC Access connector name used by content Cloud Functions."
+  value       = google_vpc_access_connector.bookflow.name
+}
+
 output "bigquery_view_ids" {
   description = "Operational BigQuery views used by feature assembly and batch prediction."
   value = {

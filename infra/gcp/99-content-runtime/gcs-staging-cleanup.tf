@@ -1,20 +1,8 @@
-resource "google_service_account" "staging_cleanup" {
-  account_id   = "bookflow-staging-cleanup"
-  project      = var.project_id
-  display_name = "BOOKFLOW GCS staging cleanup"
-}
-
-resource "google_storage_bucket_iam_member" "staging_cleanup_object_admin" {
-  bucket = data.google_storage_bucket.staging.name
-  role   = "roles/storage.objectAdmin"
-  member = "serviceAccount:${google_service_account.staging_cleanup.email}"
-}
-
 resource "google_workflows_workflow" "staging_cleanup" {
   name            = "bookflow-staging-cleanup-4h"
   project         = var.project_id
   region          = local.region
-  service_account = google_service_account.staging_cleanup.email
+  service_account = data.google_service_account.staging_cleanup.email
   description     = "Deletes BOOKFLOW GCS staging objects older than 4 hours."
 
   source_contents = <<-YAML
@@ -59,12 +47,6 @@ YAML
   ]
 }
 
-resource "google_project_iam_member" "staging_cleanup_workflows_invoker" {
-  project = var.project_id
-  role    = "roles/workflows.invoker"
-  member  = "serviceAccount:${google_service_account.staging_cleanup.email}"
-}
-
 resource "google_cloud_scheduler_job" "staging_cleanup" {
   name        = "bookflow-staging-cleanup-4h"
   project     = var.project_id
@@ -88,14 +70,12 @@ resource "google_cloud_scheduler_job" "staging_cleanup" {
     }))
 
     oauth_token {
-      service_account_email = google_service_account.staging_cleanup.email
+      service_account_email = data.google_service_account.staging_cleanup.email
       scope                 = "https://www.googleapis.com/auth/cloud-platform"
     }
   }
 
   depends_on = [
     google_project_service.required["cloudscheduler.googleapis.com"],
-    google_project_iam_member.staging_cleanup_workflows_invoker,
-    google_storage_bucket_iam_member.staging_cleanup_object_admin,
   ]
 }

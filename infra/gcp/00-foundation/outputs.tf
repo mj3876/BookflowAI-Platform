@@ -8,11 +8,6 @@ output "main_subnet_name" {
   value       = google_compute_subnetwork.bookflow_main.name
 }
 
-output "vpc_connector_name" {
-  description = "Serverless VPC Access connector name used by 99-content."
-  value       = google_vpc_access_connector.bookflow.name
-}
-
 output "staging_bucket_name" {
   description = "GCS staging bucket name."
   value       = google_storage_bucket.staging.name
