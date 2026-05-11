@@ -29,6 +29,9 @@ load_env() {
   local env_file="$SCRIPTS_DIR/config/${env_name}.env"
   [ -f "$env_file" ] || { echo "ERR: $env_file 없음" >&2; exit 1; }
   set -a; . "$env_file"; set +a
+  # .env.local: 로컬 전용 오버라이드 (git push 금지 · GCP IP/PSK 등)
+  local local_env="$SCRIPTS_DIR/config/.env.local"
+  [ -f "$local_env" ] && { set -a; . "$local_env"; set +a; }
   export AWS_PROFILE="${AWS_PROFILE:-bookflow-${env_name}}"
   export AWS_REGION="${AWS_REGION:-ap-northeast-1}"
 }

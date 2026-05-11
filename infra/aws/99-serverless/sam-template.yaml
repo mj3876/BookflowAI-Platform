@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: BOOKFLOW Tier 99-serverless 8 Lambdas + EventBridge cron + Kinesis ESM + API Gateway HTTP
+Description: BOOKFLOW Tier 99-serverless 7 Lambdas + EventBridge cron + Kinesis ESM + API Gateway HTTP
 
 Parameters:
   ProjectName:
@@ -10,10 +10,6 @@ Parameters:
     Type: String
     Default: ''
     Description: ETL3 Step Functions State Machine ARN
-  GcsStagingBucket:
-    Type: String
-    Default: ''
-    Description: GCS staging bucket name for mart-to-gcs Lambda
 
 Conditions:
   HasStepFn: !Not [!Equals [!Ref StepFunctionsArn, '']]
@@ -273,55 +269,7 @@ Resources:
             MaximumBatchingWindowInSeconds: 5
             FunctionResponseTypes: [ReportBatchItemFailures]
 
-  # 8. mart-to-gcs (S3 EventBridge -> GCS staging, VPC private → TGW → VPN → GCP)
-  MartToGcsFn:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub ${ProjectName}-mart-to-gcs
-      CodeUri: lambdas/mart-to-gcs/
-      Handler: index.lambda_handler
-      MemorySize: 512
-      Timeout: 120
-      VpcConfig:
-        SecurityGroupIds: [!Ref LambdaVpcSg]
-        SubnetIds:
-          - !ImportValue
-            Fn::Sub: ${ProjectName}-subnet-bookflow-ai-private-az1
-          - !ImportValue
-            Fn::Sub: ${ProjectName}-subnet-bookflow-ai-private-az2
-      Environment:
-        Variables:
-          GCS_STAGING_BUCKET: !Ref GcsStagingBucket
-          GCP_SECRET_ID: bookflow/glue/gcp-sa-key
-      Policies:
-        - VPCAccessPolicy: {}
-        - S3ReadPolicy:
-            BucketName: !ImportValue
-              Fn::Sub: ${ProjectName}-s3-mart-name
-        - Statement:
-            - Effect: Allow
-              Action: secretsmanager:GetSecretValue
-              Resource:
-                - !ImportValue
-                  Fn::Sub: ${ProjectName}-secrets-gcp-sa-key-arn
-                - !ImportValue
-                  Fn::Sub: ${ProjectName}-secrets-glue-gcp-arn
-      Events:
-        S3EventBridge:
-          Type: EventBridgeRule
-          Properties:
-            Pattern:
-              source:
-                - aws.s3
-              detail-type:
-                - Object Created
-              detail:
-                bucket:
-                  name:
-                    - !Sub '${ProjectName}-mart-${AWS::AccountId}'
-                object:
-                  key:
-                    - prefix: mart/
+  # GCS 전송은 Glue Connection(features_build Job)이 담당 — mart-to-gcs Lambda 제거됨
 
 Outputs:
   AladinSyncArn:
@@ -348,9 +296,6 @@ Outputs:
   PosIngestorArn:
     Value: !GetAtt PosIngestorFn.Arn
     Export: { Name: !Sub '${ProjectName}-lambda-pos-ingestor-arn' }
-  MartToGcsArn:
-    Value: !GetAtt MartToGcsFn.Arn
-    Export: { Name: !Sub '${ProjectName}-lambda-mart-to-gcs-arn' }
   LambdaVpcSgId:
     Value: !Ref LambdaVpcSg
     Export: { Name: !Sub '${ProjectName}-lambda-vpc-sg-id' }

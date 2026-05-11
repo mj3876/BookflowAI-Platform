@@ -62,8 +62,9 @@ up)
   [ -n "$AZ_PSK" ] && VPN_PARAMS+="|AzurePresharedKey=$AZ_PSK"
   [ -n "$GCP_IP" ] && VPN_PARAMS+="|EnableGcpVpn=true"
   [ -n "$GCP_PSK" ] && VPN_PARAMS+="|GcpPresharedKey=$GCP_PSK"
+  GCP_VPC_CIDR="${BOOKFLOW_GCP_VPC_CIDR:-10.50.0.0/24}"
   cfn_parallel_deploy <<EOF
-bookflow-60-tgw-vpc-routes|$INFRA/60-network-cross-cloud/tgw-vpc-routes.yaml
+bookflow-60-tgw-vpc-routes|$INFRA/60-network-cross-cloud/tgw-vpc-routes.yaml|GcpVpcCidr=$GCP_VPC_CIDR
 bookflow-60-vpn-site-to-site|$INFRA/60-network-cross-cloud/vpn-site-to-site.yaml${VPN_PARAMS}
 EOF
 

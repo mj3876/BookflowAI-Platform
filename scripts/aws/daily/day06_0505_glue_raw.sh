@@ -136,20 +136,21 @@ wait_glue_job "${PROJECT}-raw-event-mart" "${RUN_ID}"
 # ── Step 8. S3 Mart   ────────────────────────────────
 step "Step 8 · S3 Mart  "
 
-# GCS export 경로 확인 (mart/ 프리픽스 · EventBridge → mart-to-gcs Lambda 트리거 대상)
+# GCS 전송 경로: Glue features_build Job이 직접 GCS dual-write 수행
+# mart-to-gcs Lambda는 제거됨 — EventBridge S3 트리거 방식 사용 안 함
 for TABLE in mart/sales_fact mart/books_static; do
   COUNT=$(aws s3 ls "s3://${MART_BUCKET}/${TABLE}/" --recursive 2>/dev/null | wc -l)
   if [ "${COUNT}" -gt 0 ]; then
-    ok "${TABLE}/: ${COUNT} Parquet → GCS 전송 대상"
+    ok "${TABLE}/: ${COUNT} Parquet (features_build 입력용)"
   else
     warn "${TABLE}/: 없음 · Glue Job 실패 확인"
   fi
 done
-# 내부 전용 경로 확인
-for TABLE in sns_mentions aladin_books calendar_events; do
+# features_build 입력 재료 (내부 ETL용 · GCS 직접 전송 없음)
+for TABLE in sns_mentions aladin_books calendar_events sales_daily; do
   COUNT=$(aws s3 ls "s3://${MART_BUCKET}/${TABLE}/" --recursive 2>/dev/null | wc -l)
   if [ "${COUNT}" -gt 0 ]; then
-    ok "${TABLE}/: ${COUNT} Parquet (내부 ETL용)"
+    ok "${TABLE}/: ${COUNT} Parquet (features_build 입력용)"
   else
     warn "${TABLE}/: 없음"
   fi

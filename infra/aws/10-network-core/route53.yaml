@@ -1,5 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: "BOOKFLOW - Tier 10 - Route 53 Private Hosted Zone vpn.bookflow.internal (Client VPN endpoint + service discovery; associated with all 5 VPCs: BookFlow AI, Sales Data, Egress, Data, Ansible)"
+Description: "BOOKFLOW - Tier 10 - Route 53 PHZ: vpn.bookflow.internal + googleapis.com (PSC override → VPN 경유 GCS 접근)"
 Parameters:
   ProjectName:
     Type: String
@@ -7,6 +7,10 @@ Parameters:
   DomainName:
     Type: String
     Default: vpn.bookflow.internal
+  GcpPscEndpointIp:
+    Type: String
+    Default: '10.50.0.10'
+    Description: GCP PSC endpoint IP (cidrhost("10.50.0.0/24", 10)) — storage.googleapis.com을 VPN 경유로 강제
 
 Resources:
   PrivateZone:
@@ -30,6 +34,49 @@ Resources:
         - Key: Name
           Value: !Sub '${ProjectName}-private-zone'
 
+  # googleapis.com PHZ — storage.googleapis.com을 GCP PSC IP로 override
+  # Glue/Lambda가 gs:// 쓸 때 공인 인터넷 대신 VPN 경로 사용하도록 강제
+  GoogleapisPrivateZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: googleapis.com
+      HostedZoneConfig:
+        Comment: !Sub ${ProjectName} GCS PSC override — routes *.googleapis.com to GCP PSC via VPN
+      VPCs:
+        - VPCId: !ImportValue { 'Fn::Sub': '${ProjectName}-vpc-bookflow-ai-id' }
+          VPCRegion: !Ref AWS::Region
+        - VPCId: !ImportValue { 'Fn::Sub': '${ProjectName}-vpc-sales-data-id' }
+          VPCRegion: !Ref AWS::Region
+        - VPCId: !ImportValue { 'Fn::Sub': '${ProjectName}-vpc-egress-id' }
+          VPCRegion: !Ref AWS::Region
+        - VPCId: !ImportValue { 'Fn::Sub': '${ProjectName}-vpc-data-id' }
+          VPCRegion: !Ref AWS::Region
+        - VPCId: !ImportValue { 'Fn::Sub': '${ProjectName}-vpc-ansible-id' }
+          VPCRegion: !Ref AWS::Region
+      HostedZoneTags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-googleapis-psc-zone'
+
+  StorageGoogleapisRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref GoogleapisPrivateZone
+      Name: storage.googleapis.com
+      Type: A
+      TTL: '300'
+      ResourceRecords:
+        - !Ref GcpPscEndpointIp
+
+  WildcardGoogleapisRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref GoogleapisPrivateZone
+      Name: '*.googleapis.com'
+      Type: A
+      TTL: '300'
+      ResourceRecords:
+        - !Ref GcpPscEndpointIp
+
 Outputs:
   HostedZoneId:
     Value: !Ref PrivateZone
@@ -38,3 +85,7 @@ Outputs:
   DomainName:
     Value: !Ref DomainName
     Export: { Name: !Sub '${ProjectName}-r53-private-zone-name' }
+
+  GoogleapisPrivateZoneId:
+    Value: !Ref GoogleapisPrivateZone
+    Export: { Name: !Sub '${ProjectName}-r53-googleapis-zone-id' }
