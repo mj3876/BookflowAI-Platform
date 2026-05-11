@@ -19,8 +19,14 @@ def _package_sam(artifact_bucket: str) -> Path:
 
     if not built.exists():
         log.info("  sam build 실행 중...")
+        # Windows 에서 PATH 에 sam 없으면 SAM_CMD env 또는 default 위치 fallback
+        sam_cmd = os.environ.get("SAM_CMD")
+        if not sam_cmd:
+            from shutil import which
+            sam_cmd = which("sam") or which("sam.cmd") or r"C:\Program Files\Amazon\AWSSAMCLI\bin\sam.cmd"
+        # --use-container: Docker 안에서 build (로컬 python 버전 = Lambda runtime 일치 강제 회피)
         subprocess.run(
-            ["sam", "build", "--template-file", str(sam_dir / "sam-template.yaml")],
+            [sam_cmd, "build", "--use-container", "--template-file", str(sam_dir / "sam-template.yaml")],
             cwd=str(sam_dir), check=True,
             env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"},
         )
