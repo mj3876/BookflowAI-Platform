@@ -1,5 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW - Tier 99-glue - Glue Database + 6 Jobs (Flex) + IAM + Connection (BigQuery) + Data Quality
+Description: BOOKFLOW - Tier 99-glue - Glue Database + 6 Jobs (Flex) + IAM + GCS VPN Connection + Data Quality
 Parameters:
   ProjectName:
     Type: String
@@ -11,6 +11,10 @@ Parameters:
     Type: String
     Default: '4.0'
     Description: Glue 4.0 (Spark 3.3 · Python 3.10)
+  GcsBucket:
+    Type: String
+    Default: ''
+    Description: GCS staging bucket name for features_build dual-write. Pass by env/deploy parameter.
 
 Resources:
   # ─── Glue Database (Mart  ) ───
@@ -322,7 +326,7 @@ Resources:
         '--catalog_database': !Ref Database
         '--gcp_secret_arn': !ImportValue
           Fn::Sub: ${ProjectName}-secrets-glue-gcp-arn
-        '--GCS_BUCKET': ''
+        '--GCS_BUCKET': !Ref GcsBucket
         '--extra-jars': !Sub
           - s3://${BucketName}/jars/gcs-connector-hadoop3-latest.jar
           - BucketName: !ImportValue

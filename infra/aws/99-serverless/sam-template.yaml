@@ -269,7 +269,7 @@ Resources:
             MaximumBatchingWindowInSeconds: 5
             FunctionResponseTypes: [ReportBatchItemFailures]
 
-  # GCS 전송은 Glue Connection(features_build Job)이 담당 — mart-to-gcs Lambda 제거됨
+  # GCS transfer is handled by the Glue features_build job via GcsVpnConnection.
 
 Outputs:
   AladinSyncArn:

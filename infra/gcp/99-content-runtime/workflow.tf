@@ -142,12 +142,7 @@ main:
                 staging_bucket: "${data.google_storage_bucket.staging.name}"
                 models_bucket: "${data.google_storage_bucket.models.name}"
                 source_object: $${object_name}
-                sales_table: "${var.sales_table}"
-                inventory_table: "${var.inventory_daily_table}"
                 features_table: "${var.features_table}"
-                books_table: "${var.books_static_table}"
-                locations_table: "${var.locations_static_table}"
-                store_location_map_table: "${var.store_location_map_table}"
                 training_table: "${var.training_table}"
                 model_name: "${var.existing_books_model_name}"
                 forecast_table: "${var.forecast_table}"
