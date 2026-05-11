@@ -240,7 +240,6 @@ Resources:
       Handler: index.lambda_handler
       MemorySize: 512
       Timeout: 60
-      ReservedConcurrentExecutions: 5
       VpcConfig:
         SecurityGroupIds: [!Ref LambdaVpcSg]
         SubnetIds:
