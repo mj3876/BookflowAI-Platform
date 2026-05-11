@@ -13,3 +13,5 @@ location_id,location_type,wh_id,name,size,region,is_virtual,active
 12,STORE_OFFLINE,2,포항 양덕점,S,영남,false,true
 13,STORE_ONLINE,1,수도권 온라인,L,수도권,true,true
 14,STORE_ONLINE,2,영남 온라인,L,영남,true,true
+15,WH,1,수도권 거점창고,XL,수도권,false,true
+16,WH,2,영남 거점창고,XL,영남,false,true

@@ -153,6 +153,15 @@ def gen_warehouses_locations() -> tuple[list[dict], list[dict]]:
     locations.append({"location_id": lid, "location_type": "STORE_ONLINE", "wh_id": 2,
                       "name": "영남 온라인", "size": "L", "region": "영남",
                       "is_virtual": "true", "active": "true"})
+    lid += 1
+    # WH 본체 (거점 창고 자체) 2 row — 권역 거점 inventory 저장 (출판사 입고 → WH → 매장 분배)
+    locations.append({"location_id": lid, "location_type": "WH", "wh_id": 1,
+                      "name": "수도권 거점창고", "size": "XL", "region": "수도권",
+                      "is_virtual": "false", "active": "true"})
+    lid += 1
+    locations.append({"location_id": lid, "location_type": "WH", "wh_id": 2,
+                      "name": "영남 거점창고", "size": "XL", "region": "영남",
+                      "is_virtual": "false", "active": "true"})
     return warehouses, locations
 
 

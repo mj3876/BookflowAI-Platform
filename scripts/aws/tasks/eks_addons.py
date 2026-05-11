@@ -285,28 +285,33 @@ def _apply_manifests() -> None:
             continue
         _apply_with_subs(m)
 
-    # 7 pod manifests (cicd-eks 없는 admin 환경에서 idempotent apply)
-    pod_dirs = ["auth-pod", "dashboard-svc", "decision-svc", "forecast-svc",
-                "intervention-svc", "inventory-svc", "notification-svc"]
-    pod_manifest_names = {"deployment.yaml", "service.yaml", "configmap.yaml",
-                          "externalsecret.yaml", "serviceaccount.yaml", "hpa.yaml",
-                          "cronjob.yaml"}
-    for pod in pod_dirs:
-        k8s_dir = apps / "eks-pods" / pod / "k8s"
-        if not k8s_dir.exists():
-            log.warn(f"pod k8s dir missing (skip): {pod}")
-            continue
-        for m in sorted(k8s_dir.glob("*.yaml")):
-            if m.name not in pod_manifest_names:
+    # 7 pod manifests (admin 환경 전용 · deploy 는 cicd-eks 가 build/push/apply 자동 처리)
+    # BOOKFLOW_ENV=admin 일 때만 실행 — deploy 에서 중복 apply 회피
+    if os.environ.get("BOOKFLOW_ENV", "deploy") == "admin":
+        log.info("admin 환경 · 7 pod manifest auto-apply (cicd 없음)")
+        pod_dirs = ["auth-pod", "dashboard-svc", "decision-svc", "forecast-svc",
+                    "intervention-svc", "inventory-svc", "notification-svc"]
+        pod_manifest_names = {"deployment.yaml", "service.yaml", "configmap.yaml",
+                              "externalsecret.yaml", "serviceaccount.yaml", "hpa.yaml",
+                              "cronjob.yaml"}
+        for pod in pod_dirs:
+            k8s_dir = apps / "eks-pods" / pod / "k8s"
+            if not k8s_dir.exists():
+                log.warn(f"pod k8s dir missing (skip): {pod}")
                 continue
-            if pod == "auth-pod" and m.name in {"cluster-issuer.yaml", "certificate.yaml"}:
-                continue
-            _apply_with_subs(m, extra={"POD_NAME": pod})
+            for m in sorted(k8s_dir.glob("*.yaml")):
+                if m.name not in pod_manifest_names:
+                    continue
+                if pod == "auth-pod" and m.name in {"cluster-issuer.yaml", "certificate.yaml"}:
+                    continue
+                _apply_with_subs(m, extra={"POD_NAME": pod})
 
-    # publisher-watcher CronJob (별도 위치)
-    pw_cronjob = apps / "eks-pods" / "publisher-watcher" / "k8s" / "cronjob.yaml"
-    if pw_cronjob.exists():
-        _apply_with_subs(pw_cronjob, extra={"POD_NAME": "publisher-watcher"})
+        # publisher-watcher CronJob (별도 위치)
+        pw_cronjob = apps / "eks-pods" / "publisher-watcher" / "k8s" / "cronjob.yaml"
+        if pw_cronjob.exists():
+            _apply_with_subs(pw_cronjob, extra={"POD_NAME": "publisher-watcher"})
+    else:
+        log.info("deploy 환경 · 7 pod manifest 는 cicd-eks 가 처리 · skip")
 
 
 def deploy() -> None:
