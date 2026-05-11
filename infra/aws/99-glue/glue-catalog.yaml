@@ -97,25 +97,24 @@ Resources:
                   - !ImportValue
                     Fn::Sub: ${ProjectName}-secrets-rds-master-arn
 
-  # ─── Glue Connection (BigQuery JDBC · GCP SA key from Secrets) ───
-  #   features_build job  BigQuery  historical   
-  BigQueryConnection:
+  # ─── Glue Connection (NETWORK · bookflow-ai private subnet → TGW → VPN → GCS) ───
+  # Glue Worker 가 이 Connection 을 통해 bookflow-ai private subnet 에 ENI 를 얻고
+  # RT: 10.50.0.0/24 → TGW → Site-to-Site VPN → GCP PSC → storage.googleapis.com
+  GcsVpnConnection:
     Type: AWS::Glue::Connection
     Properties:
       CatalogId: !Ref AWS::AccountId
       ConnectionInput:
-        Name: !Sub ${ProjectName}-bigquery
-        ConnectionType: JDBC
-        Description: BigQuery JDBC connection (GCP SA key from Secrets Manager)
-        ConnectionProperties:
-          JDBC_CONNECTION_URL: jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=project-8ab6bf05-54d2-4f5d-b8d;OAuthType=0;OAuthServiceAcctEmail=PLACEHOLDER;OAuthPvtKeyPath=/tmp/sa-key.json
-          JDBC_DRIVER_CLASS_NAME: com.simba.googlebigquery.jdbc.Driver
-          JDBC_DRIVER_S3_PATH: !Sub
-            - s3://${BucketName}/jars/GoogleBigQueryJDBC42.jar
-            - BucketName: !ImportValue
-                Fn::Sub: ${ProjectName}-s3-glue-scripts-name
-          USERNAME: placeholder
-          PASSWORD: placeholder
+        Name: !Sub ${ProjectName}-gcs-vpn
+        ConnectionType: NETWORK
+        Description: GCS via TGW VPN (bookflow-ai private subnet ENI)
+        PhysicalConnectionRequirements:
+          SubnetId: !ImportValue
+            Fn::Sub: ${ProjectName}-subnet-bookflow-ai-private-az1
+          SecurityGroupIdList:
+            - !ImportValue
+              Fn::Sub: ${ProjectName}-lambda-vpc-sg-id
+          AvailabilityZone: ap-northeast-1a
 
   # ─── Glue Jobs × 6 (Flex execution ·  ) ───
   #     yaml 
@@ -289,13 +288,16 @@ Resources:
       WorkerType: G.1X
       NumberOfWorkers: 2
 
-  # 6. features_build (forecast  feature )
+  # 6. features_build (forecast feature + GCS dual-write via VPN)
   FeaturesBuildJob:
     Type: AWS::Glue::Job
     Properties:
       Name: !Sub ${ProjectName}-features-build
       Role: !GetAtt GlueServiceRole.Arn
       GlueVersion: !Ref GlueVersion
+      Connections:
+        Connections:
+          - !Sub ${ProjectName}-gcs-vpn
       Command:
         Name: glueetl
         ScriptLocation: !Sub
@@ -318,8 +320,16 @@ Resources:
         '--MART_BUCKET': !ImportValue
           Fn::Sub: ${ProjectName}-s3-mart-name
         '--catalog_database': !Ref Database
-        '--bigquery_secret_arn': !ImportValue
+        '--gcp_secret_arn': !ImportValue
           Fn::Sub: ${ProjectName}-secrets-glue-gcp-arn
+        '--GCS_BUCKET': ''
+        '--extra-jars': !Sub
+          - s3://${BucketName}/jars/gcs-connector-hadoop3-latest.jar
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        '--conf': >-
+          spark.hadoop.fs.gs.impl=com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem
+          --conf spark.hadoop.fs.AbstractFileSystem.gs.impl=com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS
       WorkerType: G.1X
       NumberOfWorkers: 4
 
@@ -351,6 +361,6 @@ Outputs:
   FeaturesBuildJobName:
     Value: !Ref FeaturesBuildJob
     Export: { Name: !Sub '${ProjectName}-glue-job-features-build' }
-  BigQueryConnectionName:
-    Value: !Ref BigQueryConnection
-    Export: { Name: !Sub '${ProjectName}-glue-connection-bigquery' }
+  GcsVpnConnectionName:
+    Value: !Ref GcsVpnConnection
+    Export: { Name: !Sub '${ProjectName}-glue-connection-gcs-vpn' }
