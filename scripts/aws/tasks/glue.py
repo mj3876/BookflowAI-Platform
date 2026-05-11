@@ -1,4 +1,5 @@
 ﻿"""task-glue · Tier 99-glue (Catalog + 6 Jobs + Step Functions ETL3)."""
+import os
 import boto3
 from ..lib import Stack, log, Config
 
@@ -6,8 +7,16 @@ from ..lib import Stack, log, Config
 def deploy() -> None:
     log.step("=== task-glue · Glue Catalog + 6 Jobs + Step Functions ===")
 
+    params = {}
+    gcs_bucket = os.environ.get("GCS_BUCKET") or os.environ.get("GCS_STAGING_BUCKET", "")
+    if gcs_bucket:
+        params["GcsBucket"] = gcs_bucket
+    else:
+        log.warn("GCS_BUCKET 미설정 · features_build GCS dual-write 인자가 비어 있음")
+
     Stack(tier="99", name="glue-catalog",
-          template="99-glue/glue-catalog.yaml").deploy()
+          template="99-glue/glue-catalog.yaml",
+          parameters=params).deploy()
     Stack(tier="99", name="step-functions",
           template="99-glue/step-functions.yaml").deploy()
 

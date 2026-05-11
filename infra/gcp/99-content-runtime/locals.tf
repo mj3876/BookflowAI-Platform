@@ -44,14 +44,7 @@ locals {
         BOOKFLOW_DATASET_ID     = var.dataset_id
         BOOKFLOW_BQ_LOCATION    = var.bigquery_location
         BOOKFLOW_STAGING_BUCKET = local.staging_bucket_name
-        BOOKFLOW_LOAD_TABLES = join(",", [
-          var.sales_table,
-          var.inventory_daily_table,
-          var.features_table,
-          var.books_static_table,
-          var.locations_static_table,
-          var.store_location_map_table,
-        ])
+        BOOKFLOW_LOAD_TABLES = var.features_table
         BOOKFLOW_LOAD_TABLE_ALIASES = join(",", [
           for source_name, table_name in var.load_table_aliases : "${source_name}:${table_name}"
         ])
@@ -75,12 +68,7 @@ locals {
         BOOKFLOW_BQ_LOCATION     = var.bigquery_location
         BOOKFLOW_FEATURE_TABLE   = var.new_book_feature_view_id
         BOOKFLOW_FEATURE_COLUMNS = join(",", var.vertex_feature_columns)
-        BOOKFLOW_FEATURE_TABLES = join(",", [
-          var.sales_table,
-          var.books_static_table,
-          var.features_table,
-          var.store_location_map_table,
-        ])
+        BOOKFLOW_FEATURE_TABLES = var.features_table
       }
     }
     vertex_invoke = {

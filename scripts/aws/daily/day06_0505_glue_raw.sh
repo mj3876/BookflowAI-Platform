@@ -159,10 +159,10 @@ done
 # ── Step 9. Historical Parquet → S3 Mart (3 ) ───────
 step "Step 9 · Historical Parquet → S3 Mart (e2e-001, 3 )"
 
-# sales_fact, books_static 는 Glue ETL1(raw_pos_mart, raw_aladin_mart)이
-# 이미 mart/ 에 써서 EventBridge → mart-to-gcs Lambda → GCS 까지 전달됨 → 제외
+# sales_fact, books_static 는 Glue ETL1(raw_pos_mart, raw_aladin_mart)이 S3 Mart에 기록.
+# GCS 전달은 Storage Transfer(활성화 후) 또는 gsutil cp 수동 업로드로 처리.
 #
-# Glue Job 이 없어 historical 파일만이 유일한 소스인 3개 테이블만 업로드
+# Glue Job 이 없어 historical 파일만이 유일한 소스인 3개 테이블만 S3에 업로드
 BATCH_ID="e2e-001"
 HISTORICAL_DIR="${REPO_ROOT}/scripts/output/historical"
 DAY06_TABLES=(inventory_daily locations_static store_location_map)

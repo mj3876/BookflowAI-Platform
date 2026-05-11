@@ -135,7 +135,7 @@ done
 # ── Step 7. S3 Mart 최종 확인 ────────────────────────────────
 step "Step 7 · S3 Mart 최종 확인 (6개 테이블)"
 
-# features 는 Step 3 features_build 완료 시 EventBridge → mart-to-gcs Lambda → GCS 자동 전달
+# features 는 Step 3 features_build 완료 시 GCS dual-write → gs://{GCS_BUCKET}/mart/features/ 자동 전달
 # historical features.parquet 재업로드 시 BigQuery WRITE_APPEND 중복 발생 → 업로드 제외
 printf "\n  %-35s %6s\n" "경로" "파일수"
 printf "  %-35s %6s\n" "──────────────────────────────" "──────"
@@ -150,15 +150,15 @@ done
 step "Day 07  "
 cat << 'EOF'
   [ ] sales_daily_agg SUCCEEDED
-  [ ] features_build SUCCEEDED → EventBridge → mart-to-gcs → GCS 자동 전달
+  [ ] features_build SUCCEEDED → GCS dual-write → gs://{GCS_BUCKET}/mart/features/
   [ ] Step Functions ETL3 ARN 확인 (재실행 안 함 · 중복 방지)
   [ ] forecast-trigger STEP_FN_ARN 설정 (1회성 Lambda 환경변수)
   [ ] S3 Mart 6개 테이블 파일 수 확인
 
-  ★ GCS 전달 경로 (mart/ 프리픽스 → EventBridge 자동):
-    day06: mart/sales_fact/, mart/books_static/  (Glue raw_pos/aladin_mart)
-    day06: mart/inventory_daily/, mart/locations_static/, mart/store_location_map/ (historical)
-    day07: mart/features/  (Glue features_build)
+  ★ GCS 전달 경로 (features_build GCS dual-write):
+    day06: mart/sales_fact/, mart/books_static/  (Glue raw_pos/aladin_mart → GCS 미전달, BQ 직접 적재 불필요)
+    day06: mart/inventory_daily/, mart/locations_static/, mart/store_location_map/ (historical → GCS 수동 업로드)
+    day07: mart/features/  (Glue features_build → GCS dual-write → Eventarc → GCP Workflows → bq-load)
   ★ training_dataset 은 BigQuery Vertex AI 파이프라인이 학습 직전 JOIN 으로 생성
 
 (5/7)  : day08_0507_cicd_glue.sh

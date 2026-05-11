@@ -1,7 +1,7 @@
 """task-lambdas · Tier 99-serverless (8 Lambdas + EventBridge + Kinesis ESM + API Gateway).
 
 SAM template auto-fetches RDS/Redis/SF/Secret/Bucket params from existing stacks.
-GCS_STAGING_BUCKET env var required for mart-to-gcs Lambda (raw_pos_mart → GCS → BigQuery).
+GCS transfer is handled by the Glue features_build job, not by a Lambda.
 """
 import os
 import subprocess
@@ -57,12 +57,6 @@ def deploy() -> None:
     sf_arn = Stack(tier="99", name="step-functions", template="").outputs().get("Etl3StateMachineArn", "")
     if sf_arn:
         params["StepFunctionsArn"] = sf_arn
-
-    gcs_bucket = os.environ.get("GCS_STAGING_BUCKET", "")
-    if gcs_bucket:
-        params["GcsStagingBucket"] = gcs_bucket
-    else:
-        log.warn("GCS_STAGING_BUCKET 미설정 · mart-to-gcs Lambda 비활성")
 
     log.info(f"  SAM params: {sorted(params)}")
 
