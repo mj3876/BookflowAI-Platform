@@ -112,3 +112,10 @@ aladin_out.json
 event_out.json
 sns_out.json
 etl/**/output/
+
+# ─── 보안 민감 파일 (절대 push 금지) ───
+sa-key.json
+*-sa-key.json
+*.sa-key.json
+GoogleBigQueryJDBC42.jar
+*.jar
