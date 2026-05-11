@@ -4,6 +4,11 @@
 
 set -euo pipefail
 
+# Windows AWS CLI (Python) 가 cp949 대신 UTF-8 로 파일을 읽도록 강제.
+# YAML 템플릿의 한글·박스문자(─ ═) 파싱 오류 방지.
+export PYTHONUTF8=1
+export PYTHONIOENCODING=utf-8
+
 # ── paths ──
 # scripts/aws/lib/common.sh  → SCRIPTS_DIR=scripts/aws, PROJECT_ROOT=repo root
 # Git Bash 의 POSIX path (/c/Users/...) 는 Windows native Python/AWS CLI 가 못 읽음.
@@ -24,6 +29,9 @@ load_env() {
   local env_file="$SCRIPTS_DIR/config/${env_name}.env"
   [ -f "$env_file" ] || { echo "ERR: $env_file 없음" >&2; exit 1; }
   set -a; . "$env_file"; set +a
+  # .env.local: 로컬 전용 오버라이드 (git push 금지 · GCP IP/PSK 등)
+  local local_env="$SCRIPTS_DIR/config/.env.local"
+  [ -f "$local_env" ] && { set -a; . "$local_env"; set +a; }
   export AWS_PROFILE="${AWS_PROFILE:-bookflow-${env_name}}"
   export AWS_REGION="${AWS_REGION:-ap-northeast-1}"
 }

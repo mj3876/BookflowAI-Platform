@@ -1,0 +1,7 @@
+# Local Terraform state and secret var files must never be committed.
+.terraform/
+terraform.tfstate
+terraform.tfstate.backup
+*.tfplan
+*.secret.tfvars
+*.auto.tfvars

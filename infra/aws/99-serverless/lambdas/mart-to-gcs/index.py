@@ -66,7 +66,8 @@ def _gcs_client() -> storage.Client:
     키는 secrets.yaml GcpSaKey 리소스로 생성된 bookflow/gcp-sa-key 시크릿에 저장됨.
     """
     sm  = boto3.client("secretsmanager", region_name=REGION)
-    raw = sm.get_secret_value(SecretId="bookflow/gcp-sa-key")["SecretString"]
+    secret_id = os.environ.get("GCP_SECRET_ID", "bookflow/glue/gcp-sa-key")
+    raw = sm.get_secret_value(SecretId=secret_id)["SecretString"]
     key = json.loads(raw)
     creds = service_account.Credentials.from_service_account_info(
         key,

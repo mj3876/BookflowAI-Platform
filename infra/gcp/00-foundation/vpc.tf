@@ -23,18 +23,6 @@ resource "google_compute_subnetwork" "bookflow_main" {
   ip_cidr_range = var.main_subnet_cidr
 }
 
-resource "google_vpc_access_connector" "bookflow" {
-  name          = "bookflow-vpc-conn"
-  project       = var.project_id
-  region        = var.region
-  network       = google_compute_network.bookflow_vpc.name
-  ip_cidr_range = var.vpc_connector_cidr
-
-  depends_on = [
-    google_project_service.vpcaccess,
-  ]
-}
-
 resource "google_compute_firewall" "bookflow_internal" {
   name        = "bookflow-allow-internal"
   project     = var.project_id

@@ -8,6 +8,9 @@
 # ║  3. raw_pos_mart · raw_sns_mart Job  +            ║
 # ║  4. raw_aladin_mart · raw_event_mart Job  +       ║
 # ║  5. S3 Mart                                          ║
+# ║  9. Historical Parquet → S3 Mart (3 · Glue  )  ║
+# ║     inventory_daily / locations_static / store_location_map  ║
+# ║     (sales_fact · books_static 는 Glue ETL1 → GCS 전달 완료) ║
 # ╚══════════════════════════════════════════════════════════════╝
 source "$(dirname "$0")/_common.sh"
 
@@ -133,12 +136,46 @@ wait_glue_job "${PROJECT}-raw-event-mart" "${RUN_ID}"
 # ── Step 8. S3 Mart   ────────────────────────────────
 step "Step 8 · S3 Mart  "
 
-for TABLE in pos_events sns_mentions aladin_books calendar_events; do
+# GCS 전송 경로: Glue features_build Job이 직접 GCS dual-write 수행
+# mart-to-gcs Lambda는 제거됨 — EventBridge S3 트리거 방식 사용 안 함
+for TABLE in mart/sales_fact mart/books_static; do
   COUNT=$(aws s3 ls "s3://${MART_BUCKET}/${TABLE}/" --recursive 2>/dev/null | wc -l)
   if [ "${COUNT}" -gt 0 ]; then
-    ok "${TABLE}/: ${COUNT} Parquet "
+    ok "${TABLE}/: ${COUNT} Parquet (features_build 입력용)"
   else
-    warn "${TABLE}/:   · Job  "
+    warn "${TABLE}/: 없음 · Glue Job 실패 확인"
+  fi
+done
+# features_build 입력 재료 (내부 ETL용 · GCS 직접 전송 없음)
+for TABLE in sns_mentions aladin_books calendar_events sales_daily; do
+  COUNT=$(aws s3 ls "s3://${MART_BUCKET}/${TABLE}/" --recursive 2>/dev/null | wc -l)
+  if [ "${COUNT}" -gt 0 ]; then
+    ok "${TABLE}/: ${COUNT} Parquet (features_build 입력용)"
+  else
+    warn "${TABLE}/: 없음"
+  fi
+done
+
+# ── Step 9. Historical Parquet → S3 Mart (3 ) ───────
+step "Step 9 · Historical Parquet → S3 Mart (e2e-001, 3 )"
+
+# sales_fact, books_static 는 Glue ETL1(raw_pos_mart, raw_aladin_mart)이 S3 Mart에 기록.
+# GCS 전달은 Storage Transfer(활성화 후) 또는 gsutil cp 수동 업로드로 처리.
+#
+# Glue Job 이 없어 historical 파일만이 유일한 소스인 3개 테이블만 S3에 업로드
+BATCH_ID="e2e-001"
+HISTORICAL_DIR="${REPO_ROOT}/scripts/output/historical"
+DAY06_TABLES=(inventory_daily locations_static store_location_map)
+
+for TABLE in "${DAY06_TABLES[@]}"; do
+  LOCAL="${HISTORICAL_DIR}/${TABLE}.parquet"
+  S3_URI="s3://${MART_BUCKET}/mart/${TABLE}/${BATCH_ID}/part-0.parquet"
+  if [ -f "${LOCAL}" ]; then
+    aws s3 cp "${LOCAL}" "${S3_URI}" \
+      --region "${REGION}" --no-progress 2>/dev/null
+    ok "${TABLE} → ${S3_URI}"
+  else
+    warn "${LOCAL} 없음 · 스킵 (scripts/output/historical/ 확인)"
   fi
 done
 
@@ -146,17 +183,21 @@ done
 step "Day 06  "
 cat << 'EOF'
   [ ] bookflow-99-glue-catalog   (SUCCEED)
-  [ ] bookflow-99-step-functions  
-  [ ] Glue  6 S3 
+  [ ] bookflow-99-step-functions
+  [ ] Glue  6 S3
   [ ] raw_pos_mart SUCCEEDED
   [ ] raw_sns_mart SUCCEEDED
   [ ] raw_aladin_mart SUCCEEDED
   [ ] raw_event_mart SUCCEEDED
-  [ ] S3 Mart pos_events/ · sns_mentions/ · aladin_books/ · calendar_events/  
+  [ ] S3 Mart mart/sales_fact/ · mart/books_static/ · sns_mentions/
+  [ ] Historical → mart/inventory_daily/e2e-001/   (Glue Job 없음)
+  [ ] Historical → mart/locations_static/e2e-001/  (Glue Job 없음)
+  [ ] Historical → mart/store_location_map/e2e-001/(Glue Job 없음)
+  ※ sales_fact · books_static 는 Glue ETL1 → EventBridge → GCS 자동 전달
 
   ★ Job  : aws glue get-job-runs --job-name bookflow-raw-pos-mart
   ★ Logs: /aws-glue/jobs/output/
 
 (5/6)  : day07_0506_glue_agg.sh
-  → sales_daily_agg + features_build Job 
+  → sales_daily_agg + features_build Job  + features historical
 EOF

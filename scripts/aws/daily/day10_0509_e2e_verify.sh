@@ -19,7 +19,7 @@ MART_BUCKET=$(stack_output "bookflow-00-s3" "MartBucketName" 2>/dev/null || \
 # ── Step 1. S3 Mart    ─────────────────────────
 step "Step 1 · S3 Mart  "
 
-for TABLE in pos_events sns_mentions sales_daily features; do
+for TABLE in mart/sales_fact mart/books_static mart/features mart/inventory_daily mart/locations_static mart/store_location_map; do
   info "${TABLE}  :"
   aws s3 ls "s3://${MART_BUCKET}/${TABLE}/" 2>/dev/null | head -5 || warn "${TABLE} "
 done

@@ -1,0 +1,10 @@
+# Local Terraform state and credentials must never be committed.
+.terraform/
+terraform.tfstate
+terraform.tfstate.backup
+*.tfplan
+
+sa-key.json
+*-sa-key.json
+*service-account*.json
+*credentials*.json

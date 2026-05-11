@@ -1,6 +1,0 @@
-# Local credentials and exported service-account keys must never be committed.
-sa-key.json
-*-sa-key.json
-*service-account*.json
-*credentials*.json
-
