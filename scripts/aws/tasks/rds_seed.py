@@ -58,6 +58,7 @@ SEED_DIR=infra/aws/20-data-persistent/seed-data
 for t in {load_order}; do
   csv="$SEED_DIR/${{t}}.csv"
   [ -f "$csv" ] || {{ echo "  skip $t"; continue; }}
+  # column-aware \copy: csv header → DB column list (DB 추가 컬럼은 default · generate.py csv 가 source of truth)
   COLS=$(head -1 "$csv")
   $PSQL -At -c "\\copy $t ($COLS) FROM '$csv' WITH (FORMAT csv, HEADER true);" > /dev/null
   n=$($PSQL -At -c "SELECT count(*) FROM $t")

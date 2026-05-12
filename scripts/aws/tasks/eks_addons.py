@@ -241,19 +241,77 @@ def _apply_manifests() -> None:
     subprocess.run(["kubectl", "apply", "-f", "-"], input=yaml, text=True, check=True)
     log.info("  ✓ namespace bookflow")
 
+    # envsubst 공통 변수 (admin path 전용 · cicd-eks 의 buildspec envsubst 와 무관)
+    # subs 에 없는 ${...} (예: cronjob 의 ${IP}, ${TOKEN}) 는 그대로 둠 → shell expansion
+    import boto3 as _b
+    _region = os.environ.get("AWS_REGION", "ap-northeast-1")
+    _account = _b.client("sts", region_name=_region).get_caller_identity()["Account"]
+    # RDS_HOST 동적 fetch (admin 매일 destroy/redeploy 시 endpoint 변동 가능 · stale 방지)
+    try:
+        _rds_host = _b.client("rds", region_name=_region).describe_db_instances(
+            DBInstanceIdentifier="bookflow-postgres"
+        )["DBInstances"][0]["Endpoint"]["Address"]
+    except Exception as e:
+        log.warn(f"RDS host fetch failed (configmap RDS_HOST 빈 채로 apply): {e}")
+        _rds_host = ""
+    common_subs = {
+        "ECR_REGISTRY": f"{_account}.dkr.ecr.{_region}.amazonaws.com",
+        "IMAGE_TAG": os.environ.get("BOOKFLOW_IMAGE_TAG", "latest"),
+        "PROJECT_NAME": "bookflow",
+        "DOMAIN": os.environ.get("BOOKFLOW_DUCKDNS_FQDN", "bookflow.duckdns.org"),
+        "RDS_HOST": _rds_host,
+    }
+
+    def _apply_with_subs(manifest: Path, extra: dict[str, str] | None = None) -> None:
+        text = manifest.read_text(encoding="utf-8")
+        merged = {**common_subs, **(extra or {})}
+        for k, v in merged.items():
+            text = text.replace("${" + k + "}", v)
+        log.info(f"kubectl apply -f {manifest.parent.name}/{manifest.name}")
+        # Windows stdin cp949 회피 위해 bytes 로 전달 (UTF-8 encoded)
+        subprocess.run(["kubectl", "apply", "-f", "-"], input=text.encode("utf-8"), check=True)
+
     apps = _apps_dir()
-    manifests = [
+    # 인프라 manifests (먼저 · cert-manager + duckdns + dashboard ingress)
+    infra_manifests = [
         apps / "eks-pods" / "auth-pod" / "k8s" / "cluster-issuer.yaml",
         apps / "eks-pods" / "auth-pod" / "k8s" / "certificate.yaml",
         apps / "eks-pods" / "duckdns-sync" / "k8s" / "cronjob.yaml",
         apps / "eks-pods" / "dashboard-svc" / "k8s" / "ingress.yaml",
     ]
-    for m in manifests:
+    for m in infra_manifests:
         if not m.exists():
             log.warn(f"manifest missing (skip): {m}")
             continue
-        log.info(f"kubectl apply -f {m.name}")
-        subprocess.run(["kubectl", "apply", "-f", str(m)], check=True)
+        _apply_with_subs(m)
+
+    # 7 pod manifests (admin 환경 전용 · deploy 는 cicd-eks 가 build/push/apply 자동 처리)
+    # BOOKFLOW_ENV=admin 일 때만 실행 — deploy 에서 중복 apply 회피
+    if os.environ.get("BOOKFLOW_ENV", "deploy") == "admin":
+        log.info("admin 환경 · 7 pod manifest auto-apply (cicd 없음)")
+        pod_dirs = ["auth-pod", "dashboard-svc", "decision-svc", "forecast-svc",
+                    "intervention-svc", "inventory-svc", "notification-svc"]
+        pod_manifest_names = {"deployment.yaml", "service.yaml", "configmap.yaml",
+                              "externalsecret.yaml", "serviceaccount.yaml", "hpa.yaml",
+                              "cronjob.yaml"}
+        for pod in pod_dirs:
+            k8s_dir = apps / "eks-pods" / pod / "k8s"
+            if not k8s_dir.exists():
+                log.warn(f"pod k8s dir missing (skip): {pod}")
+                continue
+            for m in sorted(k8s_dir.glob("*.yaml")):
+                if m.name not in pod_manifest_names:
+                    continue
+                if pod == "auth-pod" and m.name in {"cluster-issuer.yaml", "certificate.yaml"}:
+                    continue
+                _apply_with_subs(m, extra={"POD_NAME": pod})
+
+        # publisher-watcher CronJob (별도 위치)
+        pw_cronjob = apps / "eks-pods" / "publisher-watcher" / "k8s" / "cronjob.yaml"
+        if pw_cronjob.exists():
+            _apply_with_subs(pw_cronjob, extra={"POD_NAME": "publisher-watcher"})
+    else:
+        log.info("deploy 환경 · 7 pod manifest 는 cicd-eks 가 처리 · skip")
 
 
 def deploy() -> None:
@@ -275,6 +333,15 @@ def deploy() -> None:
     _apply_cluster_secret_store()
     _apply_manifests()
     _sync_rds_pod_roles()
+    # ALTER ROLE 후 7 pod 의 connection pool 캐시 무효화 — rollout restart 로 새 password 적용
+    log.info("rollout restart 7 pods · ALTER ROLE 적용 위해 connection pool 재생성")
+    subprocess.run(
+        ["kubectl", "rollout", "restart", "deployment",
+         "auth-pod", "dashboard-svc", "decision-svc", "forecast-svc",
+         "intervention-svc", "inventory-svc", "notification-svc",
+         "-n", "bookflow"],
+        check=False,
+    )
 
     log.step("=== task-eks-addons done ===")
     log.info("https://bookflow.duckdns.org/ should serve in 60-90s after first cert issuance")

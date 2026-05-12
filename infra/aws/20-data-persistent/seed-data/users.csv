@@ -1,18 +1,18 @@
 user_id,email,display_name,role,scope_wh_id,scope_store_id,last_login_at
-00000000-0000-0000-0000-000000000001,hq-admin@bookflow.local,HQ Admin,hq-admin,,,2026-05-08T15:30:20+09:00
-66e04f77-bc4a-5b99-96cc-470817927a5b,wh1-manager@bookflow.local,WH1 Manager,wh-manager,1,,2026-05-08T13:30:20+09:00
-2565d4b6-e9af-5c35-860a-1acd9322e3b6,wh2-manager@bookflow.local,WH2 Manager,wh-manager,2,,2026-05-08T13:30:20+09:00
-ec0cb39c-82b6-5e9c-9471-b9cc0baab18a,branch1@bookflow.local,Branch 1 Clerk,branch-clerk,1,1,2026-05-07T20:30:20+09:00
-4b601d59-bdf5-5c82-9804-1b7cfb224506,branch2@bookflow.local,Branch 2 Clerk,branch-clerk,1,2,2026-05-08T13:30:20+09:00
-db8eeb57-15e6-529b-8b50-ca7457260394,branch3@bookflow.local,Branch 3 Clerk,branch-clerk,1,3,2026-05-08T16:30:20+09:00
-982c65a7-d6b9-5f9f-905b-fe92e8e453e5,branch4@bookflow.local,Branch 4 Clerk,branch-clerk,1,4,2026-05-07T17:30:20+09:00
-81b3bff4-6c55-5d1c-97a4-14d1eaa53b31,branch5@bookflow.local,Branch 5 Clerk,branch-clerk,1,5,2026-05-08T08:30:20+09:00
-b1c2723f-0980-57de-9303-233e754e6972,branch6@bookflow.local,Branch 6 Clerk,branch-clerk,1,6,2026-05-08T09:30:20+09:00
-d677dda4-f400-5175-b207-11cf64b8e9cf,branch7@bookflow.local,Branch 7 Clerk,branch-clerk,2,7,2026-05-08T09:30:20+09:00
-bc07da9f-a3e3-52cc-bcf2-963f8dad79a6,branch8@bookflow.local,Branch 8 Clerk,branch-clerk,2,8,2026-05-08T12:30:20+09:00
-851b4b4e-1949-56a9-ba0e-366de0c5d04a,branch9@bookflow.local,Branch 9 Clerk,branch-clerk,2,9,2026-05-07T17:30:20+09:00
-1a35d1ab-287d-547c-9a1a-7fbcb8b1209c,branch10@bookflow.local,Branch 10 Clerk,branch-clerk,2,10,2026-05-08T13:30:20+09:00
-207a588e-996e-5c0d-a518-5ef387873782,branch11@bookflow.local,Branch 11 Clerk,branch-clerk,2,11,2026-05-07T19:30:20+09:00
-529b071b-df05-573f-b0c1-4d96d75203c6,branch12@bookflow.local,Branch 12 Clerk,branch-clerk,2,12,2026-05-07T17:30:20+09:00
-4e517fab-1403-5c86-9224-80def74a326a,branch13@bookflow.local,Branch 13 Clerk,branch-clerk,1,13,2026-05-07T23:30:20+09:00
-2d0a352a-d8f4-5e7a-82ef-346757d85b3f,branch14@bookflow.local,Branch 14 Clerk,branch-clerk,2,14,2026-05-08T14:30:20+09:00
+00000000-0000-0000-0000-000000000001,hq-admin@bookflow.local,HQ Admin,hq-admin,,,2026-05-12T16:00:00+09:00
+66e04f77-bc4a-5b99-96cc-470817927a5b,wh1-manager@bookflow.local,WH1 Manager,wh-manager,1,,2026-05-12T14:00:00+09:00
+2565d4b6-e9af-5c35-860a-1acd9322e3b6,wh2-manager@bookflow.local,WH2 Manager,wh-manager,2,,2026-05-12T14:00:00+09:00
+ec0cb39c-82b6-5e9c-9471-b9cc0baab18a,branch1@bookflow.local,Branch 1 Clerk,branch-clerk,1,1,2026-05-11T21:00:00+09:00
+4b601d59-bdf5-5c82-9804-1b7cfb224506,branch2@bookflow.local,Branch 2 Clerk,branch-clerk,1,2,2026-05-12T14:00:00+09:00
+db8eeb57-15e6-529b-8b50-ca7457260394,branch3@bookflow.local,Branch 3 Clerk,branch-clerk,1,3,2026-05-12T17:00:00+09:00
+982c65a7-d6b9-5f9f-905b-fe92e8e453e5,branch4@bookflow.local,Branch 4 Clerk,branch-clerk,1,4,2026-05-11T18:00:00+09:00
+81b3bff4-6c55-5d1c-97a4-14d1eaa53b31,branch5@bookflow.local,Branch 5 Clerk,branch-clerk,1,5,2026-05-12T09:00:00+09:00
+b1c2723f-0980-57de-9303-233e754e6972,branch6@bookflow.local,Branch 6 Clerk,branch-clerk,1,6,2026-05-12T10:00:00+09:00
+d677dda4-f400-5175-b207-11cf64b8e9cf,branch7@bookflow.local,Branch 7 Clerk,branch-clerk,2,7,2026-05-12T10:00:00+09:00
+bc07da9f-a3e3-52cc-bcf2-963f8dad79a6,branch8@bookflow.local,Branch 8 Clerk,branch-clerk,2,8,2026-05-12T13:00:00+09:00
+851b4b4e-1949-56a9-ba0e-366de0c5d04a,branch9@bookflow.local,Branch 9 Clerk,branch-clerk,2,9,2026-05-11T18:00:00+09:00
+1a35d1ab-287d-547c-9a1a-7fbcb8b1209c,branch10@bookflow.local,Branch 10 Clerk,branch-clerk,2,10,2026-05-12T14:00:00+09:00
+207a588e-996e-5c0d-a518-5ef387873782,branch11@bookflow.local,Branch 11 Clerk,branch-clerk,2,11,2026-05-11T20:00:00+09:00
+529b071b-df05-573f-b0c1-4d96d75203c6,branch12@bookflow.local,Branch 12 Clerk,branch-clerk,2,12,2026-05-11T18:00:00+09:00
+4e517fab-1403-5c86-9224-80def74a326a,branch13@bookflow.local,Branch 13 Clerk,branch-clerk,1,13,2026-05-12T00:00:00+09:00
+2d0a352a-d8f4-5e7a-82ef-346757d85b3f,branch14@bookflow.local,Branch 14 Clerk,branch-clerk,2,14,2026-05-12T15:00:00+09:00

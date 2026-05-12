@@ -53,7 +53,13 @@
           TRUNCATE TABLE {{ seed_tables | reverse | join(', ') }}
           RESTART IDENTITY CASCADE
         autocommit: true
-      no_log: true
+      register: truncate_result
+      ignore_errors: true
+
+    - name: Show TRUNCATE error if failed
+      ansible.builtin.fail:
+        msg: "TRUNCATE failed: {{ truncate_result.msg | default(truncate_result) }}"
+      when: truncate_result.failed | default(false)
 
     - name: Stat each seed CSV (skip missing tables)
       ansible.builtin.stat:

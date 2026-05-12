@@ -29,6 +29,8 @@ ALADIN_JSON = ROOT / "books_aladin.json"
 
 KST = timezone(timedelta(hours=9))
 NOW = datetime.now(KST).replace(microsecond=0)
+# 시연 시점 = 오늘 18:00 KST 가정 (NOW 가 새벽이라도 .date() 단위로 fixture/daily 가 일관)
+NOW = NOW.replace(hour=18, minute=0, second=0)
 TODAY = NOW.date()
 
 
@@ -151,6 +153,15 @@ def gen_warehouses_locations() -> tuple[list[dict], list[dict]]:
     locations.append({"location_id": lid, "location_type": "STORE_ONLINE", "wh_id": 2,
                       "name": "영남 온라인", "size": "L", "region": "영남",
                       "is_virtual": "true", "active": "true"})
+    lid += 1
+    # WH 본체 (거점 창고 자체) 2 row — 권역 거점 inventory 저장 (출판사 입고 → WH → 매장 분배)
+    locations.append({"location_id": lid, "location_type": "WH", "wh_id": 1,
+                      "name": "수도권 거점창고", "size": "XL", "region": "수도권",
+                      "is_virtual": "false", "active": "true"})
+    lid += 1
+    locations.append({"location_id": lid, "location_type": "WH", "wh_id": 2,
+                      "name": "영남 거점창고", "size": "XL", "region": "영남",
+                      "is_virtual": "false", "active": "true"})
     return warehouses, locations
 
 
@@ -272,8 +283,15 @@ def gen_reservations(books, locations) -> list[dict]:
 # =========================================================================
 # 8. forecast_cache (D+1 only · book × store, store_id 1~12)
 # =========================================================================
-def gen_forecast_cache(books, scenario_b_isbns: list[str]) -> list[dict]:
-    """forecast_cache + 시나리오 B 8 도서 의도적 high predicted_demand (gen_inventory SHORT_PAIRS 정합)."""
+def gen_forecast_cache(books, scenario_b_isbns: list[str], days: int = 7) -> list[dict]:
+    """forecast_cache · 7d rolling (D+0 ~ D+6) × 약 1000 row/day = 7000 row.
+
+    각 day 마다:
+      - 시나리오 B fixture 8 도서 (SHORT_PAIRS) 의도적 high predicted_demand
+      - 일반 random fill (books[:~85] × 12 store ≈ 1000 row)
+
+    PK (snapshot_date, isbn13, store_id) seen check 로 중복 방지.
+    """
     SHORT_PAIRS: dict[str, list[int]] = {
         scenario_b_isbns[0]: [1, 2],
         scenario_b_isbns[1]: [2, 3],
@@ -284,51 +302,57 @@ def gen_forecast_cache(books, scenario_b_isbns: list[str]) -> list[dict]:
         scenario_b_isbns[6]: [7],
         scenario_b_isbns[7]: [2],
     }
-    rows = []
-    seen: set[tuple[str, str, int]] = set()  # PK (snapshot_date, isbn13, store_id) dedupe
-    snap_date = TODAY
+    rows: list[dict] = []
+    seen: set[tuple[str, str, int]] = set()
 
-    # 시나리오 B fixture 먼저 (slice 시 우선 보존) — predicted_demand >> available
-    for isbn, locs in SHORT_PAIRS.items():
-        for store_id in locs:
-            key = (snap_date.isoformat(), isbn, store_id)
-            if key in seen:
-                continue
-            seen.add(key)
-            rows.append({
-                "snapshot_date": snap_date.isoformat(),
-                "isbn13": isbn,
-                "store_id": store_id,
-                "predicted_demand": round(random.uniform(50, 80), 2),  # 의도 큰 수요
-                "confidence_low":   40.0,
-                "confidence_high":  100.0,
-                "model_version":    "automl-v1.0.0",
-                "synced_at": NOW.isoformat(),
-            })
+    for d in range(days):
+        snap_date = TODAY + timedelta(days=d)
+        day_rows = 0
+        target_per_day = 1000
 
-    # 나머지 random fill — 시나리오 B isbns 와 store_id 조합 중복 X (PK seen check)
-    for b in books[:200]:
-        for store_id in range(1, 13):
-            if len(rows) >= 1000:
+        # 시나리오 B fixture 먼저 (모든 day 동일 패턴)
+        for isbn, locs in SHORT_PAIRS.items():
+            for store_id in locs:
+                key = (snap_date.isoformat(), isbn, store_id)
+                if key in seen:
+                    continue
+                seen.add(key)
+                rows.append({
+                    "snapshot_date": snap_date.isoformat(),
+                    "isbn13": isbn,
+                    "store_id": store_id,
+                    "predicted_demand": round(random.uniform(50, 80), 2),
+                    "confidence_low":   40.0,
+                    "confidence_high":  100.0,
+                    "model_version":    "automl-v1.0.0",
+                    "synced_at": NOW.isoformat(),
+                })
+                day_rows += 1
+
+        # 일반 random fill — day 별 target_per_day 까지
+        for b in books[:200]:
+            if day_rows >= target_per_day:
                 break
-            key = (snap_date.isoformat(), b["isbn13"], store_id)
-            if key in seen:
-                continue  # 시나리오 B fixture 와 중복 skip
-            seen.add(key)
-            base = random.randint(1, 30)
-            rows.append({
-                "snapshot_date": snap_date.isoformat(),
-                "isbn13": b["isbn13"],
-                "store_id": store_id,
-                "predicted_demand": round(base * random.uniform(0.8, 1.2), 2),
-                "confidence_low":   round(base * 0.7, 2),
-                "confidence_high":  round(base * 1.3, 2),
-                "model_version":    "automl-v1.0.0",
-                "synced_at": NOW.isoformat(),
-            })
-        if len(rows) >= 1000:
-            break
-    return rows[:1000]
+            for store_id in range(1, 13):
+                if day_rows >= target_per_day:
+                    break
+                key = (snap_date.isoformat(), b["isbn13"], store_id)
+                if key in seen:
+                    continue
+                seen.add(key)
+                base = random.randint(1, 30)
+                rows.append({
+                    "snapshot_date": snap_date.isoformat(),
+                    "isbn13": b["isbn13"],
+                    "store_id": store_id,
+                    "predicted_demand": round(base * random.uniform(0.8, 1.2), 2),
+                    "confidence_low":   round(base * 0.7, 2),
+                    "confidence_high":  round(base * 1.3, 2),
+                    "model_version":    "automl-v1.0.0",
+                    "synced_at": NOW.isoformat(),
+                })
+                day_rows += 1
+    return rows
 
 
 # =========================================================================
@@ -425,6 +449,91 @@ def gen_pending_orders(books, locations, scenario_b_isbns) -> list[dict]:
                             urgency="NORMAL", status=status,
                             hours_ago=12 + i * 6, reason="capacity_balance"))
 
+    return rows
+
+
+# =========================================================================
+# 9b. pending_orders daily-generated (시연 fixture + 운영 mimic)
+# =========================================================================
+def gen_pending_orders_daily(books, locations, days: int = 7, per_day: int = 100) -> list[dict]:
+    """매일 ~100건 daily-generated · batch 시각성 반영.
+
+    하루 batch 흐름:
+      - 03:30 KST decision-cascade 가 모든 PENDING 발의
+      - 07:00 KST intervention-auto-execute 가 URGENT/CRITICAL + auto_execute_eligible 자동 승인
+      - 18:00 KST intervention-auto-reject 가 NORMAL 미처리 D-1 일괄 거절
+
+    시점 별 status 분포:
+      - D-6 ~ D-1 (과거): 모두 batch 처리 완료
+          · URGENT/CRITICAL → AUTO_EXECUTED (07:00 batch)
+          · NORMAL → REJECTED (18:00 batch) 또는 일부 APPROVED (사람이 처리 ~20%)
+      - D-0 (오늘): batch 일부 진행 (시연 시점 09:00+ 가정)
+          · URGENT/CRITICAL → APPROVED (07:00 batch 완료)
+          · NORMAL → PENDING (대부분 · 사용자가 처리할 ~14건) + 일부 APPROVED (사람이 이미 ~5건)
+
+    분포:
+      - order_type: REBALANCE 50% · WH_TRANSFER 30% · PUBLISHER_ORDER 20%
+      - urgency: NORMAL 70% · URGENT 25% · CRITICAL 5%
+    """
+    rows: list[dict] = []
+    isbns = [b["isbn13"] for b in books]
+    store_ids = [l["location_id"] for l in locations if l["location_id"] <= 12]
+    wh_groups = {1: [1, 2, 3, 4, 5, 6], 2: [7, 8, 9, 10, 11, 12]}
+
+    for d in range(days):
+        day_offset = days - 1 - d   # day_offset=0 이 오늘 (D-0), days-1 이 가장 과거 (D-6)
+        is_today = day_offset == 0
+        for i in range(per_day):
+            order_type = random.choices(
+                ["REBALANCE", "WH_TRANSFER", "PUBLISHER_ORDER"],
+                weights=[50, 30, 20],
+            )[0]
+            urgency = random.choices(["NORMAL", "URGENT", "CRITICAL"], weights=[70, 25, 5])[0]
+            auto_exec = urgency in ("URGENT", "CRITICAL")
+
+            # 시점 별 status 결정 (batch 시간성 반영)
+            if is_today:
+                # 오늘: URGENT/CRITICAL 자동 승인 완료 (07:00 batch · 시연 시점 09:00+ 가정)
+                #       NORMAL 은 대부분 PENDING + 일부 APPROVED (사람이 처리)
+                if auto_exec:
+                    status = "APPROVED"   # 07:00 batch 결과
+                else:
+                    status = random.choices(["PENDING", "APPROVED"], weights=[85, 15])[0]
+            else:
+                # 과거: 모두 batch 처리 완료
+                if auto_exec:
+                    status = "APPROVED"   # 07:00 batch
+                else:
+                    # NORMAL: 18:00 batch 가 거절 vs 그날 사람이 처리한 일부 APPROVED
+                    status = random.choices(["REJECTED", "APPROVED"], weights=[75, 25])[0]
+
+            isbn = random.choice(isbns[50:500])
+            qty = random.randint(10, 80)
+            # created_at 을 .date() 기준 정확히 D-day_offset 로 떨어뜨림
+            # (영업시간 09-17 KST · NOW 가 새벽이어도 .date() 일관)
+            target_date = NOW.date() - timedelta(days=day_offset)
+            target_dt = NOW.replace(year=target_date.year, month=target_date.month, day=target_date.day,
+                                    hour=random.randint(9, 17), minute=random.randint(0, 59), second=0)
+            hours_ago = max(1, int((NOW - target_dt).total_seconds() / 3600))
+
+            if order_type == "REBALANCE":
+                wh = random.choice([1, 2])
+                src, tgt = random.sample(wh_groups[wh], 2)
+            elif order_type == "WH_TRANSFER":
+                if random.random() < 0.5:
+                    src = random.choice(wh_groups[1]); tgt = random.choice(wh_groups[2])
+                else:
+                    src = random.choice(wh_groups[2]); tgt = random.choice(wh_groups[1])
+            else:  # PUBLISHER_ORDER
+                src = None
+                tgt = random.choice(store_ids)
+
+            rows.append(_po_row(
+                order_type, isbn, src, tgt, qty,
+                urgency=urgency, status=status,
+                auto_exec=auto_exec, hours_ago=hours_ago,
+                reason="daily_generated",
+            ))
     return rows
 
 
@@ -700,8 +809,10 @@ def main() -> None:
 
     inventory = gen_inventory(books, locations, scenario_b_isbns)
     reservations = gen_reservations(books, locations)
-    forecast_cache = gen_forecast_cache(books, scenario_b_isbns)
+    forecast_cache = gen_forecast_cache(books, scenario_b_isbns, days=7)
+    # 시연 fixture 16 + daily-generated 700 = 716
     pending_orders = gen_pending_orders(books, locations, scenario_b_isbns)
+    pending_orders += gen_pending_orders_daily(books, locations, days=7, per_day=100)
     order_approvals = gen_order_approvals(pending_orders)
     returns_ = gen_returns(books, locations)
     new_book_requests = gen_new_book_requests(publishers)
