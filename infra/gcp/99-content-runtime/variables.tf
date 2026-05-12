@@ -101,6 +101,12 @@ variable "forecast_table" {
   type        = string
 }
 
+variable "wh_forecast_view_id" {
+  description = "BigQuery view id for warehouse-level aggregated forecast results."
+  type        = string
+  default     = "v_wh_forecast"
+}
+
 variable "existing_books_training_view_id" {
   description = "BigQuery view id exposing the existing-books training feature set."
   type        = string
@@ -295,6 +301,30 @@ variable "daily_existing_books_schedule" {
   description = "Cloud Scheduler cron expression for daily existing-books workflow execution."
   type        = string
   default     = "0 4 * * *"
+}
+
+variable "new_book_model_name" {
+  description = "BigQuery ML model name for the new-book demand forecast (trained on first-30-day demand of existing books)."
+  type        = string
+  default     = "bookflow_new_books_forecast"
+}
+
+variable "new_book_training_table" {
+  description = "BigQuery table used as the new-book training dataset."
+  type        = string
+  default     = "new_book_training_dataset"
+}
+
+variable "new_book_forecast_table" {
+  description = "BigQuery table where new-book inference results are written by the new-book-inference Cloud Function."
+  type        = string
+  default     = "new_book_forecast"
+}
+
+variable "new_book_pipeline_template_object" {
+  description = "Object path in the models bucket for the compiled new-books Vertex AI Pipeline template."
+  type        = string
+  default     = "pipelines/bookflow-new-books-pipeline.json"
 }
 
 variable "daily_existing_books_schedule_timezone" {

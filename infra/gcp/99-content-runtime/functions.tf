@@ -46,9 +46,10 @@ resource "google_cloudfunctions2_function" "content" {
     timeout_seconds    = each.value.timeout
     ingress_settings   = "ALLOW_INTERNAL_ONLY"
     service_account_email = {
-      bq_load          = data.google_service_account.bq_load.email
-      feature_assemble = data.google_service_account.feature_assemble.email
-      vertex_invoke    = data.google_service_account.vertex_invoke.email
+      bq_load            = data.google_service_account.bq_load.email
+      feature_assemble   = data.google_service_account.feature_assemble.email
+      vertex_invoke      = data.google_service_account.vertex_invoke.email
+      new_book_inference = google_service_account.new_book_inference.email
     }[each.key]
     vpc_connector                  = google_vpc_access_connector.bookflow.id
     vpc_connector_egress_settings  = "ALL_TRAFFIC"
