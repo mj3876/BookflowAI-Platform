@@ -93,12 +93,19 @@ Resources:
                   - ecr:DescribeImages
                 Resource: !Sub arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/${ProjectName}/*
 
-              # EKS · Access Entry  cluster admin · DescribeCluster  IAM  
+              # EKS · Access Entry  cluster admin · DescribeCluster  IAM
               - Effect: Allow
                 Action:
                   - eks:DescribeCluster
                   - eks:ListClusters
                 Resource: !Sub arn:aws:eks:${AWS::Region}:${AWS::AccountId}:cluster/${EksClusterName}
+
+              # RDS · buildspec envsubst 의 RDS_HOST 동적 fetch 위해 read 권한
+              # (configmap.yaml 의 ${RDS_HOST} 치환 · 매일 redeploy 시 endpoint 자동 정합)
+              - Effect: Allow
+                Action:
+                  - rds:DescribeDBInstances
+                Resource: '*'
 
               # S3 artifacts (CodePipeline   source/build artifacts)
               - Effect: Allow
