@@ -1,5 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW - Tier 99-glue - ETL3 Step Functions State Machine (orchestrates 6 Glue Jobs)
+Description: BOOKFLOW - Tier 99-glue - ETL Step Functions State Machine (orchestrates 9 Glue Jobs)
 Parameters:
   ProjectName:
     Type: String
@@ -59,7 +59,11 @@ Resources:
       LogGroupName: !Sub /aws/vendedlogs/states/${ProjectName}-etl3
       RetentionInDays: 7
 
-  # ─── ETL3 State Machine (Parallel raw → agg → features) ───
+  # ─── ETL State Machine ───
+  # ParallelMart (7 jobs):
+  #   ETL1: raw_pos_mart · raw_sns_mart · raw_aladin_mart · raw_event_mart  (S3 Raw → S3 Mart)
+  #   ETL2: rds_inventory_mart · rds_locations_mart · rds_store_location_map_mart  (RDS → S3 Mart)
+  # → SalesDailyAgg → FeaturesBuild
   Etl3StateMachine:
     Type: AWS::StepFunctions::StateMachine
     DependsOn: StateMachineRole
@@ -76,10 +80,10 @@ Resources:
       DefinitionString: !Sub
         - |
           {
-            "Comment": "BOOKFLOW ETL3 · raw_*_mart parallel → sales_daily_agg → features_build",
-            "StartAt": "ParallelRawMart",
+            "Comment": "BOOKFLOW ETL · ParallelMart (ETL1+ETL2) → sales_daily_agg → features_build",
+            "StartAt": "ParallelMart",
             "States": {
-              "ParallelRawMart": {
+              "ParallelMart": {
                 "Type": "Parallel",
                 "Branches": [
                   {
@@ -129,6 +133,42 @@ Resources:
                         "Retry": [{ "ErrorEquals": ["States.ALL"], "IntervalSeconds": 30, "MaxAttempts": 2, "BackoffRate": 2.0 }]
                       }
                     }
+                  },
+                  {
+                    "StartAt": "RdsInventoryMart",
+                    "States": {
+                      "RdsInventoryMart": {
+                        "Type": "Task",
+                        "Resource": "arn:aws:states:::glue:startJobRun.sync",
+                        "Parameters": { "JobName": "${RdsInventoryJob}" },
+                        "End": true,
+                        "Retry": [{ "ErrorEquals": ["States.ALL"], "IntervalSeconds": 30, "MaxAttempts": 2, "BackoffRate": 2.0 }]
+                      }
+                    }
+                  },
+                  {
+                    "StartAt": "RdsLocationsMart",
+                    "States": {
+                      "RdsLocationsMart": {
+                        "Type": "Task",
+                        "Resource": "arn:aws:states:::glue:startJobRun.sync",
+                        "Parameters": { "JobName": "${RdsLocationsJob}" },
+                        "End": true,
+                        "Retry": [{ "ErrorEquals": ["States.ALL"], "IntervalSeconds": 30, "MaxAttempts": 2, "BackoffRate": 2.0 }]
+                      }
+                    }
+                  },
+                  {
+                    "StartAt": "RdsStoreLocationMapMart",
+                    "States": {
+                      "RdsStoreLocationMapMart": {
+                        "Type": "Task",
+                        "Resource": "arn:aws:states:::glue:startJobRun.sync",
+                        "Parameters": { "JobName": "${RdsStoreLocationMapJob}" },
+                        "End": true,
+                        "Retry": [{ "ErrorEquals": ["States.ALL"], "IntervalSeconds": 30, "MaxAttempts": 2, "BackoffRate": 2.0 }]
+                      }
+                    }
                   }
                 ],
                 "Next": "SalesDailyAgg",
@@ -151,7 +191,7 @@ Resources:
                 "Catch": [{ "ErrorEquals": ["States.ALL"], "Next": "Failed" }]
               },
               "Done": { "Type": "Succeed" },
-              "Failed": { "Type": "Fail", "Cause": "ETL3 pipeline failure", "Error": "Etl3Failed" }
+              "Failed": { "Type": "Fail", "Cause": "ETL pipeline failure", "Error": "EtlFailed" }
             }
           }
         - PosJob: !ImportValue
@@ -162,6 +202,12 @@ Resources:
             Fn::Sub: ${ProjectName}-glue-job-raw-aladin-mart
           EventJob: !ImportValue
             Fn::Sub: ${ProjectName}-glue-job-raw-event-mart
+          RdsInventoryJob: !ImportValue
+            Fn::Sub: ${ProjectName}-glue-job-rds-inventory-mart
+          RdsLocationsJob: !ImportValue
+            Fn::Sub: ${ProjectName}-glue-job-rds-locations-mart
+          RdsStoreLocationMapJob: !ImportValue
+            Fn::Sub: ${ProjectName}-glue-job-rds-store-location-map-mart
           AggJob: !ImportValue
             Fn::Sub: ${ProjectName}-glue-job-sales-daily-agg
           FeaturesJob: !ImportValue

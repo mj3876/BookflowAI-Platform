@@ -1,5 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: BOOKFLOW - Tier 99-glue - Glue Database + 6 Jobs (Flex) + IAM + GCS VPN Connection + Data Quality
+Description: BOOKFLOW - Tier 99-glue - Glue Database + 9 Jobs (Flex) + IAM + GCS VPN Connection + RDS Connection
 Parameters:
   ProjectName:
     Type: String
@@ -101,6 +101,44 @@ Resources:
                   - !ImportValue
                     Fn::Sub: ${ProjectName}-secrets-rds-master-arn
 
+  # ─── Glue VPC Connection SG (self-referencing rule 필수) ───
+  # Glue가 ENI 생성 시 "all ingress open" self-ref rule이 없으면 InvalidInputException 발생
+  GlueConnectionSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Glue VPC Connection SG (self-referencing required by Glue)
+      VpcId: !ImportValue
+        Fn::Sub: ${ProjectName}-vpc-bookflow-ai-id
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-glue-connection-sg' }
+
+  GlueConnectionSGSelfRef:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref GlueConnectionSG
+      IpProtocol: '-1'
+      FromPort: -1
+      ToPort: -1
+      SourceSecurityGroupId: !Ref GlueConnectionSG
+
+  # ─── Glue Connection (NETWORK · bookflow-ai VPC → TGW → data VPC → RDS) ───
+  # RDS SG는 10.0.0.0/16(bookflow-ai VPC)만 5432 허용 → Glue ENI를 bookflow-ai 서브넷에 배치
+  RdsConnection:
+    Type: AWS::Glue::Connection
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      ConnectionInput:
+        Name: !Sub ${ProjectName}-rds
+        ConnectionType: NETWORK
+        Description: RDS PostgreSQL via bookflow-ai VPC TGW routing
+        PhysicalConnectionRequirements:
+          SubnetId: !ImportValue
+            Fn::Sub: ${ProjectName}-subnet-bookflow-ai-private-az1
+          SecurityGroupIdList:
+            - !GetAtt GlueConnectionSG.GroupId 
+            #-!ImportValue Fn::Sub: ${ProjectName}-lambda-vpc-sg-id 수정
+          AvailabilityZone: ap-northeast-1a
+
   # ─── Glue Connection (NETWORK · bookflow-ai private subnet → TGW → VPN → GCS) ───
   # Glue Worker 가 이 Connection 을 통해 bookflow-ai private subnet 에 ENI 를 얻고
   # RT: 10.50.0.0/24 → TGW → Site-to-Site VPN → GCP PSC → storage.googleapis.com
@@ -116,8 +154,7 @@ Resources:
           SubnetId: !ImportValue
             Fn::Sub: ${ProjectName}-subnet-bookflow-ai-private-az1
           SecurityGroupIdList:
-            - !ImportValue
-              Fn::Sub: ${ProjectName}-lambda-vpc-sg-id
+            - !GetAtt GlueConnectionSG.GroupId
           AvailabilityZone: ap-northeast-1a
 
   # ─── Glue Jobs × 6 (Flex execution ·  ) ───
@@ -149,7 +186,7 @@ Resources:
               Fn::Sub: ${ProjectName}-s3-glue-scripts-name
         '--enable-metrics': 'true'
         '--enable-continuous-cloudwatch-log': 'true'
-        '--job-bookmark-option': job-bookmark-enable
+        '--job-bookmark-option': job-bookmark-disable
         '--RAW_BUCKET': !ImportValue
           Fn::Sub: ${ProjectName}-s3-raw-name
         '--MART_BUCKET': !ImportValue
@@ -183,7 +220,7 @@ Resources:
               Fn::Sub: ${ProjectName}-s3-glue-scripts-name
         '--enable-metrics': 'true'
         '--enable-continuous-cloudwatch-log': 'true'
-        '--job-bookmark-option': job-bookmark-enable
+        '--job-bookmark-option': job-bookmark-disable
         '--RAW_BUCKET': !ImportValue
           Fn::Sub: ${ProjectName}-s3-raw-name
         '--MART_BUCKET': !ImportValue
@@ -217,7 +254,7 @@ Resources:
               Fn::Sub: ${ProjectName}-s3-glue-scripts-name
         '--enable-metrics': 'true'
         '--enable-continuous-cloudwatch-log': 'true'
-        '--job-bookmark-option': job-bookmark-enable
+        '--job-bookmark-option': job-bookmark-disable
         '--RAW_BUCKET': !ImportValue
           Fn::Sub: ${ProjectName}-s3-raw-name
         '--MART_BUCKET': !ImportValue
@@ -251,7 +288,7 @@ Resources:
               Fn::Sub: ${ProjectName}-s3-glue-scripts-name
         '--enable-metrics': 'true'
         '--enable-continuous-cloudwatch-log': 'true'
-        '--job-bookmark-option': job-bookmark-enable
+        '--job-bookmark-option': job-bookmark-disable
         '--RAW_BUCKET': !ImportValue
           Fn::Sub: ${ProjectName}-s3-raw-name
         '--MART_BUCKET': !ImportValue
@@ -285,7 +322,7 @@ Resources:
               Fn::Sub: ${ProjectName}-s3-glue-scripts-name
         '--enable-metrics': 'true'
         '--enable-continuous-cloudwatch-log': 'true'
-        '--job-bookmark-option': job-bookmark-enable
+        '--job-bookmark-option': job-bookmark-disable
         '--MART_BUCKET': !ImportValue
           Fn::Sub: ${ProjectName}-s3-mart-name
         '--catalog_database': !Ref Database
@@ -320,7 +357,7 @@ Resources:
               Fn::Sub: ${ProjectName}-s3-glue-scripts-name
         '--enable-metrics': 'true'
         '--enable-continuous-cloudwatch-log': 'true'
-        '--job-bookmark-option': job-bookmark-enable
+        '--job-bookmark-option': job-bookmark-disable
         '--MART_BUCKET': !ImportValue
           Fn::Sub: ${ProjectName}-s3-mart-name
         '--catalog_database': !Ref Database
@@ -337,7 +374,173 @@ Resources:
       WorkerType: G.1X
       NumberOfWorkers: 4
 
-  # 7. inventory-daily-gcs (S3 mart/inventory_daily → GCS via VPN)
+  # 7. rds-inventory-mart (RDS inventory_snapshot_daily → S3 mart/inventory_daily/)
+  RdsInventoryMartJob:
+    Type: AWS::Glue::Job
+    Properties:
+      Name: !Sub ${ProjectName}-rds-inventory-mart
+      Role: !GetAtt GlueServiceRole.Arn
+      GlueVersion: !Ref GlueVersion
+      Connections:
+        Connections:
+          - !Sub ${ProjectName}-rds
+      Command:
+        Name: glueetl
+        ScriptLocation: !Sub
+          - s3://${BucketName}/scripts/rds_inventory_mart.py
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        PythonVersion: '3'
+      ExecutionProperty: { MaxConcurrentRuns: 1 }
+      ExecutionClass: FLEX
+      MaxRetries: 0
+      Timeout: 30
+      DefaultArguments:
+        '--TempDir': !Sub
+          - s3://${BucketName}/tmp/
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        '--enable-metrics': 'true'
+        '--enable-continuous-cloudwatch-log': 'true'
+        '--job-bookmark-option': job-bookmark-disable
+        '--MART_BUCKET': !ImportValue
+          Fn::Sub: ${ProjectName}-s3-mart-name
+        '--RDS_ENDPOINT': !ImportValue
+          Fn::Sub: ${ProjectName}-rds-endpoint
+        '--RDS_PORT': !ImportValue
+          Fn::Sub: ${ProjectName}-rds-port
+        '--RDS_DBNAME': !ImportValue
+          Fn::Sub: ${ProjectName}-rds-dbname
+        '--RDS_SECRET_ARN': !ImportValue
+          Fn::Sub: ${ProjectName}-secrets-rds-master-arn
+      WorkerType: G.1X
+      NumberOfWorkers: 2
+
+  # 8. rds-inventory-seed (one-time: RDS inventory → inventory_snapshot_daily 14일치)
+  RdsInventorySeedJob:
+    Type: AWS::Glue::Job
+    Properties:
+      Name: !Sub ${ProjectName}-rds-inventory-seed
+      Role: !GetAtt GlueServiceRole.Arn
+      GlueVersion: !Ref GlueVersion
+      Connections:
+        Connections:
+          - !Sub ${ProjectName}-rds
+      Command:
+        Name: glueetl
+        ScriptLocation: !Sub
+          - s3://${BucketName}/scripts/rds_inventory_seed.py
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        PythonVersion: '3'
+      ExecutionProperty: { MaxConcurrentRuns: 1 }
+      ExecutionClass: FLEX
+      MaxRetries: 0
+      Timeout: 30
+      DefaultArguments:
+        '--TempDir': !Sub
+          - s3://${BucketName}/tmp/
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        '--enable-metrics': 'true'
+        '--enable-continuous-cloudwatch-log': 'true'
+        '--job-bookmark-option': job-bookmark-disable
+        '--RDS_ENDPOINT': !ImportValue
+          Fn::Sub: ${ProjectName}-rds-endpoint
+        '--RDS_PORT': !ImportValue
+          Fn::Sub: ${ProjectName}-rds-port
+        '--RDS_DBNAME': !ImportValue
+          Fn::Sub: ${ProjectName}-rds-dbname
+        '--RDS_SECRET_ARN': !ImportValue
+          Fn::Sub: ${ProjectName}-secrets-rds-master-arn
+      WorkerType: G.1X
+      NumberOfWorkers: 2
+
+  # 9. rds-locations-mart (RDS locations → S3 mart/locations_static/)
+  RdsLocationsMartJob:
+    Type: AWS::Glue::Job
+    Properties:
+      Name: !Sub ${ProjectName}-rds-locations-mart
+      Role: !GetAtt GlueServiceRole.Arn
+      GlueVersion: !Ref GlueVersion
+      Connections:
+        Connections:
+          - !Sub ${ProjectName}-rds
+      Command:
+        Name: glueetl
+        ScriptLocation: !Sub
+          - s3://${BucketName}/scripts/rds_locations_mart.py
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        PythonVersion: '3'
+      ExecutionProperty: { MaxConcurrentRuns: 1 }
+      ExecutionClass: FLEX
+      MaxRetries: 0
+      Timeout: 30
+      DefaultArguments:
+        '--TempDir': !Sub
+          - s3://${BucketName}/tmp/
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        '--enable-metrics': 'true'
+        '--enable-continuous-cloudwatch-log': 'true'
+        '--job-bookmark-option': job-bookmark-disable
+        '--MART_BUCKET': !ImportValue
+          Fn::Sub: ${ProjectName}-s3-mart-name
+        '--RDS_ENDPOINT': !ImportValue
+          Fn::Sub: ${ProjectName}-rds-endpoint
+        '--RDS_PORT': !ImportValue
+          Fn::Sub: ${ProjectName}-rds-port
+        '--RDS_DBNAME': !ImportValue
+          Fn::Sub: ${ProjectName}-rds-dbname
+        '--RDS_SECRET_ARN': !ImportValue
+          Fn::Sub: ${ProjectName}-secrets-rds-master-arn
+      WorkerType: G.1X
+      NumberOfWorkers: 2
+
+  # 9. rds-store-location-map-mart (RDS locations 파생 → S3 mart/store_location_map/)
+  RdsStoreLocationMapMartJob:
+    Type: AWS::Glue::Job
+    Properties:
+      Name: !Sub ${ProjectName}-rds-store-location-map-mart
+      Role: !GetAtt GlueServiceRole.Arn
+      GlueVersion: !Ref GlueVersion
+      Connections:
+        Connections:
+          - !Sub ${ProjectName}-rds
+      Command:
+        Name: glueetl
+        ScriptLocation: !Sub
+          - s3://${BucketName}/scripts/rds_store_location_map_mart.py
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        PythonVersion: '3'
+      ExecutionProperty: { MaxConcurrentRuns: 1 }
+      ExecutionClass: FLEX
+      MaxRetries: 0
+      Timeout: 30
+      DefaultArguments:
+        '--TempDir': !Sub
+          - s3://${BucketName}/tmp/
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        '--enable-metrics': 'true'
+        '--enable-continuous-cloudwatch-log': 'true'
+        '--job-bookmark-option': job-bookmark-disable
+        '--MART_BUCKET': !ImportValue
+          Fn::Sub: ${ProjectName}-s3-mart-name
+        '--RDS_ENDPOINT': !ImportValue
+          Fn::Sub: ${ProjectName}-rds-endpoint
+        '--RDS_PORT': !ImportValue
+          Fn::Sub: ${ProjectName}-rds-port
+        '--RDS_DBNAME': !ImportValue
+          Fn::Sub: ${ProjectName}-rds-dbname
+        '--RDS_SECRET_ARN': !ImportValue
+          Fn::Sub: ${ProjectName}-secrets-rds-master-arn
+      WorkerType: G.1X
+      NumberOfWorkers: 2
+
+  # 10. inventory-daily-gcs (S3 mart/inventory_daily → GCS via VPN)
   InventoryDailyGcsJob:
     Type: AWS::Glue::Job
     Properties:
@@ -382,7 +585,7 @@ Resources:
       WorkerType: G.1X
       NumberOfWorkers: 2
 
-  # 8. locations-static-gcs (S3 mart/locations_static → GCS via VPN)
+  # 11. locations-static-gcs (S3 mart/locations_static → GCS via VPN)
   LocationsStaticGcsJob:
     Type: AWS::Glue::Job
     Properties:
@@ -427,7 +630,7 @@ Resources:
       WorkerType: G.1X
       NumberOfWorkers: 2
 
-  # 9. store-location-map-gcs (S3 mart/store_location_map → GCS via VPN)
+  # 12. store-location-map-gcs (S3 mart/store_location_map → GCS via VPN)
   StoreLocationMapGcsJob:
     Type: AWS::Glue::Job
     Properties:
@@ -500,9 +703,24 @@ Outputs:
   FeaturesBuildJobName:
     Value: !Ref FeaturesBuildJob
     Export: { Name: !Sub '${ProjectName}-glue-job-features-build' }
+  RdsConnectionName:
+    Value: !Ref RdsConnection
+    Export: { Name: !Sub '${ProjectName}-glue-connection-rds' }
   GcsVpnConnectionName:
     Value: !Ref GcsVpnConnection
     Export: { Name: !Sub '${ProjectName}-glue-connection-gcs-vpn' }
+  RdsInventorySeedJobName:
+    Value: !Ref RdsInventorySeedJob
+    Export: { Name: !Sub '${ProjectName}-glue-job-rds-inventory-seed' }
+  RdsInventoryMartJobName:
+    Value: !Ref RdsInventoryMartJob
+    Export: { Name: !Sub '${ProjectName}-glue-job-rds-inventory-mart' }
+  RdsLocationsMartJobName:
+    Value: !Ref RdsLocationsMartJob
+    Export: { Name: !Sub '${ProjectName}-glue-job-rds-locations-mart' }
+  RdsStoreLocationMapMartJobName:
+    Value: !Ref RdsStoreLocationMapMartJob
+    Export: { Name: !Sub '${ProjectName}-glue-job-rds-store-location-map-mart' }
   InventoryDailyGcsJobName:
     Value: !Ref InventoryDailyGcsJob
     Export: { Name: !Sub '${ProjectName}-glue-job-inventory-daily-gcs' }

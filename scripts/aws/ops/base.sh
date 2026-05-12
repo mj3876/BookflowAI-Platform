@@ -52,11 +52,11 @@ down)
   # 안전망: orphan NLB/ALB (K8s controller 가 만든 LB) 강제 정리 → VPC subnet 의존 해소
   cleanup_orphan_lbs
 
-  cfn_bulk_delete "bookflow-10-" "bookflow-00-"
-  cfn_bulk_delete "bookflow-20-" "bookflow-00-"
-  cfn_bulk_delete "bookflow-30-ecs-cluster" "bookflow-00-"
-  cfn_bulk_delete "bookflow-30-ansible-node" "bookflow-00-"
   cfn_bulk_delete "bookflow-50-" "bookflow-00-"
+  cfn_bulk_delete "bookflow-30-ansible-node" "bookflow-00-"
+  cfn_bulk_delete "bookflow-30-ecs-cluster" "bookflow-00-"
+  cfn_bulk_delete "bookflow-20-" "bookflow-00-"
+  cfn_bulk_delete "bookflow-10-" "bookflow-00-"
   state_write "base" "down"
   step "base.sh down done"
   ;;
