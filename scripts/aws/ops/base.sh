@@ -52,11 +52,9 @@ down)
   # 안전망: orphan NLB/ALB (K8s controller 가 만든 LB) 강제 정리 → VPC subnet 의존 해소
   cleanup_orphan_lbs
 
-  # 의존성 역순 — VPC 가 가장 마지막. RDS/Redis/Kinesis 가 VPC subnet 안에 있으므로
-  # Tier 50 (NAT @ egress VPC) → Tier 30 (ECS/ansible @ VPC) → Tier 20 (data @ VPC) → Tier 10 (VPC)
   cfn_bulk_delete "bookflow-50-" "bookflow-00-"
-  cfn_bulk_delete "bookflow-30-ecs-cluster" "bookflow-00-"
   cfn_bulk_delete "bookflow-30-ansible-node" "bookflow-00-"
+  cfn_bulk_delete "bookflow-30-ecs-cluster" "bookflow-00-"
   cfn_bulk_delete "bookflow-20-" "bookflow-00-"
   cfn_bulk_delete "bookflow-10-" "bookflow-00-"
   state_write "base" "down"

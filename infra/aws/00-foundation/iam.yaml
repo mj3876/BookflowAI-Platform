@@ -10,6 +10,9 @@ Parameters:
   GitHubRepo:
     Type: String
     Default: BookFlowAI-Platform
+  GitHubAppsRepo:
+    Type: String
+    Default: BookFlowAI-Apps
 
 Resources:
   # ─── GitHub Actions OIDC Provider ( ·  ) ───
@@ -80,7 +83,52 @@ Resources:
                   - ec2:DescribeInstances
                 Resource: '*'
 
-  # ─── [ ] CodePipeline Service Role → cicd/codepipeline/*.yaml 
+  # ─── GHA Publisher Deploy Role (S3 upload + CodeDeploy) ───
+  GhaPublisherDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-gha-publisher-deploy
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !GetAtt GitHubOidcProvider.Arn
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringLike:
+                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubOrg}/${GitHubAppsRepo}:ref:refs/heads/main
+      Policies:
+        - PolicyName: PublisherDeploy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:ListBucket
+                Resource:
+                  - !Sub
+                    - arn:aws:s3:::${BucketName}
+                    - BucketName: !ImportValue
+                        Fn::Sub: ${ProjectName}-s3-cp-artifacts-name
+                  - !Sub
+                    - arn:aws:s3:::${BucketName}/publisher/*
+                    - BucketName: !ImportValue
+                        Fn::Sub: ${ProjectName}-s3-cp-artifacts-name
+              - Effect: Allow
+                Action:
+                  - codedeploy:CreateDeployment
+                  - codedeploy:GetDeployment
+                  - codedeploy:GetDeploymentConfig
+                  - codedeploy:RegisterApplicationRevision
+                  - codedeploy:GetApplicationRevision
+                  - cloudformation:ListExports
+                Resource: '*'
+
+  # ─── [ ] CodePipeline Service Role → cicd/codepipeline/*.yaml
   # ─── [ ] CodeBuild Service Role → 
   # ─── [ ] Ansible CN Instance Role → 30-compute-cluster/control-node.yaml
   # ─── [ ] EKS Cluster Role → 30-compute-cluster/eks-cluster.yaml
@@ -103,3 +151,8 @@ Outputs:
     Value: !GetAtt GhaRdsRedeployRole.Arn
     Export:
       Name: !Sub ${ProjectName}-iam-gha-rds-redeploy-role-arn
+
+  GhaPublisherDeployRoleArn:
+    Value: !GetAtt GhaPublisherDeployRole.Arn
+    Export:
+      Name: !Sub ${ProjectName}-iam-gha-publisher-deploy-role-arn

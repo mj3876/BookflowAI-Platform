@@ -154,19 +154,27 @@ def build_features(spark, mart_bucket: str):  # noqa: C901
     base = f"s3://{mart_bucket}"
 
     # ── 1. calendar_events → 날짜별 캘린더 피처 ───────────────────────────────
-    cal_raw = _try_read(spark, f"{base}/mart/calendar_events/")
+    # raw_event_mart(Apps)는 mart/ 없이 {MART_BUCKET}/calendar_events/ 에 씀
+    cal_raw = (
+        _try_read(spark, f"{base}/mart/calendar_events/")
+        or _try_read(spark, f"{base}/calendar_events/")
+    )
     if cal_raw is None:
         print("[features_build] ERROR: calendar_events 없음 — 중단")
         return None
 
-    date_col = _find_col(cal_raw, ("event_date", "date", "feature_date"))
+    date_col = _find_col(cal_raw, ("event_date", "start_date", "date", "feature_date"))
+    if date_col is None:
+        print(f"[features_build] ERROR: calendar_events 날짜 컬럼 없음 — 컬럼 목록: {cal_raw.columns}")
+        return None
+    cal_cols = set(c.lower() for c in cal_raw.columns)
     cal = (
         cal_raw
         .withColumn("feature_date",      F.to_date(F.col(date_col).cast("string")))
-        .withColumn("is_holiday",        F.coalesce(F.col("is_holiday").cast(BooleanType()),    F.lit(False)))
-        .withColumn("holiday_name",      F.coalesce(F.col("holiday_name").cast(StringType()),   F.lit("")))
-        .withColumn("season",            F.coalesce(F.col("season").cast(StringType()),          F.lit("")))
-        .withColumn("event_nearby_days", F.coalesce(F.col("event_nearby_days").cast(IntegerType()), F.lit(0)))
+        .withColumn("is_holiday",        F.coalesce(F.col("is_holiday").cast(BooleanType())          if "is_holiday"        in cal_cols else F.lit(False), F.lit(False)))
+        .withColumn("holiday_name",      F.coalesce(F.col("holiday_name").cast(StringType())         if "holiday_name"      in cal_cols else F.lit(""),    F.lit("")))
+        .withColumn("season",            F.coalesce(F.col("season").cast(StringType())               if "season"            in cal_cols else F.lit(""),    F.lit("")))
+        .withColumn("event_nearby_days", F.coalesce(F.col("event_nearby_days").cast(IntegerType())   if "event_nearby_days" in cal_cols else F.lit(0),     F.lit(0)))
         .withColumn("day_of_week",       F.dayofweek(F.col("feature_date")))   # 1=일 .. 7=토
         .withColumn("is_weekend",        F.dayofweek(F.col("feature_date")).isin(1, 7))
         .withColumn("month",             F.month(F.col("feature_date")))
@@ -286,7 +294,11 @@ def build_features(spark, mart_bucket: str):  # noqa: C901
     )
 
     # ── 5. SNS 언급량: 1일 · 7일 롤링 합계 ───────────────────────────────────
-    sns_raw = _try_read(spark, f"{base}/mart/sns_mentions/")
+    # raw_sns_mart(Apps)는 mart/ 없이 {MART_BUCKET}/sns_mentions/ 에 씀
+    sns_raw = (
+        _try_read(spark, f"{base}/mart/sns_mentions/")
+        or _try_read(spark, f"{base}/sns_mentions/")
+    )
     sns_feat = None
     if sns_raw is not None:
         date_col_s    = _find_col(sns_raw, ("mention_date", "date", "event_date"))
@@ -389,7 +401,11 @@ def build_features(spark, mart_bucket: str):  # noqa: C901
             )
 
     # ── 7. sales_daily → qty_sold (학습 레이블) ───────────────────────────────
-    sales_raw = _try_read(spark, f"{base}/mart/sales_daily/")
+    # sales_daily_agg(Apps)는 mart/ 없이 {MART_BUCKET}/sales_daily/ 에 씀
+    sales_raw = (
+        _try_read(spark, f"{base}/mart/sales_daily/")
+        or _try_read(spark, f"{base}/sales_daily/")
+    )
     sales_feat = None
     if sales_raw is not None:
         sd_col  = _find_col(sales_raw, ("sale_date", "date", "sdate"))

@@ -71,16 +71,17 @@ build_push_image() {
   ok "${image} pushed"
 }
 
-# bookflow.py  (py -3 overrides shebang, uses Python 3.14 with boto3)
+# bookflow.py  (py -3 → python → python3 순으로 fallback)
+_PYTHON=$(command -v py 2>/dev/null || command -v python 2>/dev/null || command -v python3 2>/dev/null || echo "")
 bookflow() {
-  py -3 "${REPO_ROOT}/scripts/aws/bookflow.py" "$@"
+  "${_PYTHON}" "${REPO_ROOT}/scripts/aws/bookflow.py" "$@"
 }
 
 #
 check_env() {
   step " "
-  command -v aws > /dev/null || err "AWS CLI "
-  command -v py  > /dev/null || err "Python (py launcher) "
+  command -v aws > /dev/null || err "AWS CLI 없음"
+  [ -n "${_PYTHON}" ] || err "Python 없음 (py / python / python3 모두 미설치)"
 
   local caller
   caller=$(aws sts get-caller-identity --query 'Arn' --output text 2>/dev/null) || \

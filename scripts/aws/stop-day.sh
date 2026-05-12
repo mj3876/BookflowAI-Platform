@@ -6,8 +6,11 @@
 set +e   # 일부 fail 해도 계속
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
+set +e
+set +u
+set +o pipefail
+trap '' PIPE  # 자식 tee 종료 시 SIGPIPE로 스크립트 죽는 것 방지 (Windows MINGW64)
 load_env
-init_log "stop-day" "down"
 pre_flight
 
 T0=$(date +%s)
@@ -18,12 +21,12 @@ step "1/3 4 서비스 병렬 down (eks · ecs · publisher · etl) + cicd"
 "$SCRIPT_DIR/ops/publisher.sh" down &
 "$SCRIPT_DIR/ops/etl.sh" down &
 "$SCRIPT_DIR/ops/cicd.sh" down &
-wait
+wait || true
 
 step "2/3 peering + cross-cloud down (둘 다 시도 · 어느 모드든 안전)"
 "$SCRIPT_DIR/ops/peering.sh" down &
 "$SCRIPT_DIR/ops/cross-cloud.sh" down &
-wait
+wait || true
 
 step "3/3 base down · 모든 자식 끝났으니 VPC 까지"
 "$SCRIPT_DIR/ops/base.sh" down
