@@ -204,18 +204,30 @@ def _alter_rds_pod_roles(rds_pw: str) -> None:
         f"PGPASSWORD={json.dumps(rds_pw)} psql -h {rds_host} -U bookflow_admin -d bookflow "
         f"-v ON_ERROR_STOP=1 -f /tmp/_alter_roles.sql"
     )
-    r = ssm.send_command(InstanceIds=[instance_id], DocumentName="AWS-RunShellScript",
-                         Parameters={"commands": [cmd]}, Comment="sync 6 pod role passwords")
-    cid = r["Command"]["CommandId"]
-    for _ in range(20):
-        time.sleep(3)
-        inv = ssm.get_command_invocation(CommandId=cid, InstanceId=instance_id)
-        if inv["Status"] in ("Success", "Failed", "Cancelled", "TimedOut"):
-            break
-    if inv["Status"] != "Success":
-        log.err(f"ALTER ROLE failed: {inv.get('StandardErrorContent','')[:200]}")
-        raise SystemExit(1)
-    log.info("  ✓ RDS 6 pod role passwords synced with master")
+    # retry — start-day 흐름상 seed.sh (003_grants.sql) 가 eks-addons 보다 늦을 수 있음.
+    # role 미존재 시 30s × 6회 = 최대 3분 대기 (seed 완료 후 자동 정합).
+    last_err = ""
+    for attempt in range(6):
+        r = ssm.send_command(InstanceIds=[instance_id], DocumentName="AWS-RunShellScript",
+                             Parameters={"commands": [cmd]}, Comment=f"sync pod role passwords (try {attempt+1})")
+        cid = r["Command"]["CommandId"]
+        for _ in range(20):
+            time.sleep(3)
+            inv = ssm.get_command_invocation(CommandId=cid, InstanceId=instance_id)
+            if inv["Status"] in ("Success", "Failed", "Cancelled", "TimedOut"):
+                break
+        if inv["Status"] == "Success":
+            log.info(f"  ✓ RDS pod role passwords synced (try {attempt+1})")
+            return
+        last_err = inv.get("StandardErrorContent", "") + inv.get("StandardOutputContent", "")
+        # role 미존재 = seed 아직 안 됨 → wait. 다른 에러면 즉시 fail.
+        if 'does not exist' in last_err.lower() or 'role' in last_err.lower():
+            log.warn(f"ALTER ROLE try {attempt+1}/6 · seed 대기 (role 미존재) · 30s sleep")
+            time.sleep(30)
+            continue
+        break
+    log.err(f"ALTER ROLE failed after retry: {last_err[:300]}")
+    raise SystemExit(1)
 
 
 def _sync_rds_pod_roles() -> None:

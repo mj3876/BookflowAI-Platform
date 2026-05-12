@@ -33,8 +33,13 @@ for pid in $EKS_PID $ECS_PID $PUB_PID $ETL_PID; do
 done
 [ $FAILED -gt 0 ] && err "$FAILED service failed (logs/ 확인)"
 
-step "4/4 seed · parquet → RDS"
+step "4/5 seed · parquet → RDS (003_grants.sql · 11 pod role 생성)"
 "$SCRIPT_DIR/ops/seed.sh" up
+
+# 5단계: seed 후 eks-addons 의 _sync_rds_pod_roles 재호출 (role password 정합 + 7 pod restart)
+# 4단계 병렬에서 eks-addons 가 seed 보다 먼저 끝나 ALTER ROLE fail 한 경우 자동 정정.
+step "5/5 eks-addons resync · ALTER ROLE 11 + 7 pod rollout (DB pool 정합)"
+py "$PROJECT_ROOT/scripts/aws/bookflow.py" task eks-addons || warn "eks-addons resync 실패 (이미 정합이면 무시)"
 
 ELAPSED=$(( $(date +%s) - T0 ))
 state_write "last-start-day" "$(date +%Y-%m-%dT%H:%M:%S)"
