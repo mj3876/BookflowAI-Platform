@@ -337,6 +337,141 @@ Resources:
       WorkerType: G.1X
       NumberOfWorkers: 4
 
+  # 7. inventory-daily-gcs (S3 mart/inventory_daily → GCS via VPN)
+  InventoryDailyGcsJob:
+    Type: AWS::Glue::Job
+    Properties:
+      Name: !Sub ${ProjectName}-inventory-daily-gcs
+      Role: !GetAtt GlueServiceRole.Arn
+      GlueVersion: !Ref GlueVersion
+      Connections:
+        Connections:
+          - !Sub ${ProjectName}-gcs-vpn
+      Command:
+        Name: glueetl
+        ScriptLocation: !Sub
+          - s3://${BucketName}/scripts/mart_table_gcs.py
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        PythonVersion: '3'
+      ExecutionProperty: { MaxConcurrentRuns: 1 }
+      ExecutionClass: FLEX
+      MaxRetries: 0
+      Timeout: 30
+      DefaultArguments:
+        '--TempDir': !Sub
+          - s3://${BucketName}/tmp/
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        '--enable-metrics': 'true'
+        '--enable-continuous-cloudwatch-log': 'true'
+        '--job-bookmark-option': job-bookmark-disable
+        '--MART_BUCKET': !ImportValue
+          Fn::Sub: ${ProjectName}-s3-mart-name
+        '--gcp_secret_arn': !ImportValue
+          Fn::Sub: ${ProjectName}-secrets-glue-gcp-arn
+        '--GCS_BUCKET': !Ref GcsBucket
+        '--TABLE_NAME': inventory_daily
+        '--extra-jars': !Sub
+          - s3://${BucketName}/jars/gcs-connector-hadoop3-latest.jar
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        '--conf': >-
+          spark.hadoop.fs.gs.impl=com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem
+          --conf spark.hadoop.fs.AbstractFileSystem.gs.impl=com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS
+      WorkerType: G.1X
+      NumberOfWorkers: 2
+
+  # 8. locations-static-gcs (S3 mart/locations_static → GCS via VPN)
+  LocationsStaticGcsJob:
+    Type: AWS::Glue::Job
+    Properties:
+      Name: !Sub ${ProjectName}-locations-static-gcs
+      Role: !GetAtt GlueServiceRole.Arn
+      GlueVersion: !Ref GlueVersion
+      Connections:
+        Connections:
+          - !Sub ${ProjectName}-gcs-vpn
+      Command:
+        Name: glueetl
+        ScriptLocation: !Sub
+          - s3://${BucketName}/scripts/mart_table_gcs.py
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        PythonVersion: '3'
+      ExecutionProperty: { MaxConcurrentRuns: 1 }
+      ExecutionClass: FLEX
+      MaxRetries: 0
+      Timeout: 30
+      DefaultArguments:
+        '--TempDir': !Sub
+          - s3://${BucketName}/tmp/
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        '--enable-metrics': 'true'
+        '--enable-continuous-cloudwatch-log': 'true'
+        '--job-bookmark-option': job-bookmark-disable
+        '--MART_BUCKET': !ImportValue
+          Fn::Sub: ${ProjectName}-s3-mart-name
+        '--gcp_secret_arn': !ImportValue
+          Fn::Sub: ${ProjectName}-secrets-glue-gcp-arn
+        '--GCS_BUCKET': !Ref GcsBucket
+        '--TABLE_NAME': locations_static
+        '--extra-jars': !Sub
+          - s3://${BucketName}/jars/gcs-connector-hadoop3-latest.jar
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        '--conf': >-
+          spark.hadoop.fs.gs.impl=com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem
+          --conf spark.hadoop.fs.AbstractFileSystem.gs.impl=com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS
+      WorkerType: G.1X
+      NumberOfWorkers: 2
+
+  # 9. store-location-map-gcs (S3 mart/store_location_map → GCS via VPN)
+  StoreLocationMapGcsJob:
+    Type: AWS::Glue::Job
+    Properties:
+      Name: !Sub ${ProjectName}-store-location-map-gcs
+      Role: !GetAtt GlueServiceRole.Arn
+      GlueVersion: !Ref GlueVersion
+      Connections:
+        Connections:
+          - !Sub ${ProjectName}-gcs-vpn
+      Command:
+        Name: glueetl
+        ScriptLocation: !Sub
+          - s3://${BucketName}/scripts/mart_table_gcs.py
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        PythonVersion: '3'
+      ExecutionProperty: { MaxConcurrentRuns: 1 }
+      ExecutionClass: FLEX
+      MaxRetries: 0
+      Timeout: 30
+      DefaultArguments:
+        '--TempDir': !Sub
+          - s3://${BucketName}/tmp/
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        '--enable-metrics': 'true'
+        '--enable-continuous-cloudwatch-log': 'true'
+        '--job-bookmark-option': job-bookmark-disable
+        '--MART_BUCKET': !ImportValue
+          Fn::Sub: ${ProjectName}-s3-mart-name
+        '--gcp_secret_arn': !ImportValue
+          Fn::Sub: ${ProjectName}-secrets-glue-gcp-arn
+        '--GCS_BUCKET': !Ref GcsBucket
+        '--TABLE_NAME': store_location_map
+        '--extra-jars': !Sub
+          - s3://${BucketName}/jars/gcs-connector-hadoop3-latest.jar
+          - BucketName: !ImportValue
+              Fn::Sub: ${ProjectName}-s3-glue-scripts-name
+        '--conf': >-
+          spark.hadoop.fs.gs.impl=com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem
+          --conf spark.hadoop.fs.AbstractFileSystem.gs.impl=com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS
+      WorkerType: G.1X
+      NumberOfWorkers: 2
+
 Outputs:
   GlueDatabaseName:
     Value: !Ref Database
@@ -368,3 +503,12 @@ Outputs:
   GcsVpnConnectionName:
     Value: !Ref GcsVpnConnection
     Export: { Name: !Sub '${ProjectName}-glue-connection-gcs-vpn' }
+  InventoryDailyGcsJobName:
+    Value: !Ref InventoryDailyGcsJob
+    Export: { Name: !Sub '${ProjectName}-glue-job-inventory-daily-gcs' }
+  LocationsStaticGcsJobName:
+    Value: !Ref LocationsStaticGcsJob
+    Export: { Name: !Sub '${ProjectName}-glue-job-locations-static-gcs' }
+  StoreLocationMapGcsJobName:
+    Value: !Ref StoreLocationMapGcsJob
+    Export: { Name: !Sub '${ProjectName}-glue-job-store-location-map-gcs' }

@@ -124,27 +124,49 @@ print(f'  ✓ forecast-trigger SF ARN  ')
   fi
 fi
 
-# ── Step 6. S3 Mart   ────────────────────────────────
-step "Step 6 · S3 Mart   "
+# ── Step 6. S3 Mart 전체 확인 ──────────────────────────────────
+step "Step 6 · S3 Mart 전체 확인"
 
+printf "\n  %-40s %6s\n" "S3 경로" "파일수"
+printf "  %-40s %6s\n" "──────────────────────────────────────" "──────"
 for TABLE in mart/sales_fact mart/books_static mart/features mart/inventory_daily mart/locations_static mart/store_location_map sales_daily; do
-  COUNT=$(aws s3 ls "s3://${MART_BUCKET}/${TABLE}/" --recursive 2>/dev/null | wc -l)
-  info "${TABLE}/: ${COUNT}"
-done
-
-# ── Step 7. S3 Mart 최종 확인 ────────────────────────────────
-step "Step 7 · S3 Mart 최종 확인 (6개 테이블)"
-
-# features 는 Step 3 features_build 완료 시 GCS dual-write → gs://{GCS_BUCKET}/mart/features/ 자동 전달
-# historical features.parquet 재업로드 시 BigQuery WRITE_APPEND 중복 발생 → 업로드 제외
-printf "\n  %-35s %6s\n" "경로" "파일수"
-printf "  %-35s %6s\n" "──────────────────────────────" "──────"
-for TABLE in sales_fact books_static features inventory_daily locations_static store_location_map; do
-  S3_PATH="mart/${TABLE}"
-  CNT=$(aws s3 ls "s3://${MART_BUCKET}/${S3_PATH}/" --recursive \
+  CNT=$(aws s3 ls "s3://${MART_BUCKET}/${TABLE}/" --recursive \
     --region "${REGION}" 2>/dev/null | wc -l)
-  printf "  %-35s %6s\n" "${S3_PATH}/" "${CNT}"
+  printf "  %-40s %6s\n" "${TABLE}/" "${CNT}"
 done
+
+# ── Step 7. GCS 적재 확인 (4개 테이블) ─────────────────────────
+step "Step 7 · GCS 적재 확인"
+
+GCS_BUCKET="${GCS_BUCKET:-${BOOKFLOW_GCS_BUCKET:-}}"
+if [ -z "${GCS_BUCKET}" ]; then
+  warn "GCS_BUCKET 미설정 — .env.local 확인"
+else
+  printf "\n  %-45s %6s\n" "GCS 경로" "파일수"
+  printf "  %-45s %6s\n" "─────────────────────────────────────────" "──────"
+  ALL_OK=true
+  for TABLE in features inventory_daily locations_static store_location_map; do
+    if command -v gsutil >/dev/null 2>&1; then
+      GCS_CNT=$(gsutil ls "gs://${GCS_BUCKET}/mart/${TABLE}/" 2>/dev/null | wc -l || echo 0)
+    else
+      # gsutil 없으면 AWS CLI로 GCS 직접 접근 불가 → 메시지만 출력
+      GCS_CNT="?"
+    fi
+    if [ "${GCS_CNT}" = "?" ]; then
+      printf "  %-45s %6s\n" "gs://${GCS_BUCKET}/mart/${TABLE}/" "(gsutil 필요)"
+    elif [ "${GCS_CNT}" -gt 0 ] 2>/dev/null; then
+      printf "  %-45s %6s\n" "gs://${GCS_BUCKET}/mart/${TABLE}/" "${GCS_CNT}"
+      ok "gs://${GCS_BUCKET}/mart/${TABLE}/ 확인"
+    else
+      printf "  %-45s %6s\n" "gs://${GCS_BUCKET}/mart/${TABLE}/" "0 ⚠"
+      warn "gs://${GCS_BUCKET}/mart/${TABLE}/: 파일 없음"
+      ALL_OK=false
+    fi
+  done
+  if [ "${ALL_OK}" = "true" ] && [ "${GCS_CNT}" != "?" ]; then
+    ok "GCS 4개 테이블 모두 적재 확인"
+  fi
+fi
 
 # ──    ──────────────────────────────────────
 step "Day 07  "
@@ -153,14 +175,16 @@ cat << 'EOF'
   [ ] features_build SUCCEEDED → GCS dual-write → gs://{GCS_BUCKET}/mart/features/
   [ ] Step Functions ETL3 ARN 확인 (재실행 안 함 · 중복 방지)
   [ ] forecast-trigger STEP_FN_ARN 설정 (1회성 Lambda 환경변수)
-  [ ] S3 Mart 6개 테이블 파일 수 확인
+  [ ] S3 Mart 전체 확인 (7개 경로)
+  [ ] GCS 적재 확인:
+      [ ] gs://{GCS_BUCKET}/mart/features/           (features_build dual-write)
+      [ ] gs://{GCS_BUCKET}/mart/inventory_daily/    (inventory-daily-gcs Job)
+      [ ] gs://{GCS_BUCKET}/mart/locations_static/   (locations-static-gcs Job)
+      [ ] gs://{GCS_BUCKET}/mart/store_location_map/ (store-location-map-gcs Job)
 
-  ★ GCS 전달 경로 (features_build GCS dual-write):
-    day06: mart/sales_fact/, mart/books_static/  (Glue raw_pos/aladin_mart → GCS 미전달, BQ 직접 적재 불필요)
-    day06: mart/inventory_daily/, mart/locations_static/, mart/store_location_map/ (historical → GCS 수동 업로드)
-    day07: mart/features/  (Glue features_build → GCS dual-write → Eventarc → GCP Workflows → bq-load)
-  ★ training_dataset 은 BigQuery Vertex AI 파이프라인이 학습 직전 JOIN 으로 생성
+  ★ GCS 수동 확인: gsutil ls gs://{GCS_BUCKET}/mart/
+  ★ Glue Job 로그: /aws-glue/jobs/output/ (CloudWatch)
 
-(5/7)  : day08_0507_cicd_glue.sh
-  → glue-redeploy GHA CI/CD  + Ansible CN
+(6/7) 다음: day08_0507_cicd_glue.sh
+  → glue-redeploy GHA CI/CD 설정 + Ansible CN
 EOF
