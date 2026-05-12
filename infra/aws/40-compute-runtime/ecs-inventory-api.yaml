@@ -79,6 +79,11 @@ Resources:
           ToPort: !Ref ContainerPort
           CidrIp: 10.2.0.0/16
           Description: from Egress VPC (External ALB)
+        - IpProtocol: tcp
+          FromPort: !Ref ContainerPort
+          ToPort: !Ref ContainerPort
+          CidrIp: 10.1.0.0/16
+          Description: from Sales-Data VPC (ECS sim discovery + HTTP catalog/stock)
       SecurityGroupEgress:
         - IpProtocol: -1
           CidrIp: 0.0.0.0/0
