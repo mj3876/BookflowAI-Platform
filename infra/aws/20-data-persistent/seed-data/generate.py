@@ -122,35 +122,44 @@ def gen_books_authors_publishers() -> tuple[list[dict], list[dict], list[dict]]:
 # =========================================================================
 def gen_warehouses_locations() -> tuple[list[dict], list[dict]]:
     warehouses = [
-        {"wh_id": 1, "name": "Sudogwon WH", "region": "Sudogwon",  "capacity": 50000},
-        {"wh_id": 2, "name": "Yeongnam WH",  "region": "Yeongnam",   "capacity": 40000},
+        {"wh_id": 1, "name": "수도권 물류센터", "region": "수도권",  "capacity": 50000},
+        {"wh_id": 2, "name": "영남 물류센터",  "region": "영남",     "capacity": 40000},
     ]
-    # 14 locations · 오프라인 12 (수도권 6 + 영남 6) + 온라인 가상 2
-    SUDO_STORES = [("Gangnam", "L"), ("Gwanghwamun", "L"), ("Jamsil", "M"),
-                   ("Hongdae", "M"), ("Sinchon", "S"), ("Yongsan", "S")]
-    YEONG_STORES = [("Busan Seomyeon", "L"), ("Daegu Dongseong", "L"),
-                    ("Ulsan Samsan", "M"), ("Daegu Gyodae", "M"),
-                    ("Busan Centum", "S"), ("Pohang Yangdeok", "S")]
+    # 16 locations · 오프라인 12 + 온라인 2 + WH 본체 2 (한글 정합 · UI 노출용)
+    SUDO_STORES = [("강남점", "L"), ("광화문점", "L"), ("잠실점", "M"),
+                   ("홍대점", "M"), ("신촌점", "S"), ("용산점", "S")]
+    YEONG_STORES = [("부산 서면점", "L"), ("대구 동성점", "L"),
+                    ("울산 삼산점", "M"), ("대구 교대점", "M"),
+                    ("부산 센텀점", "S"), ("포항 양덕점", "S")]
     locations: list[dict] = []
     lid = 1
     for name, size in SUDO_STORES:
         locations.append({"location_id": lid, "location_type": "STORE_OFFLINE", "wh_id": 1,
-                          "name": name, "size": size, "region": "Sudogwon",
+                          "name": name, "size": size, "region": "수도권",
                           "is_virtual": "false", "active": "true"})
         lid += 1
     for name, size in YEONG_STORES:
         locations.append({"location_id": lid, "location_type": "STORE_OFFLINE", "wh_id": 2,
-                          "name": name, "size": size, "region": "Yeongnam",
+                          "name": name, "size": size, "region": "영남",
                           "is_virtual": "false", "active": "true"})
         lid += 1
-    # 온라인 가상 (각 WH 1 개씩)
+    # 온라인 가상 (각 WH 1 개) — id=13/14
     locations.append({"location_id": lid, "location_type": "STORE_ONLINE", "wh_id": 1,
-                      "name": "Online Sudogwon", "size": "L", "region": "Sudogwon",
+                      "name": "수도권 온라인", "size": "L", "region": "수도권",
                       "is_virtual": "true", "active": "true"})
     lid += 1
     locations.append({"location_id": lid, "location_type": "STORE_ONLINE", "wh_id": 2,
-                      "name": "Online Yeongnam", "size": "L", "region": "Yeongnam",
+                      "name": "영남 온라인", "size": "L", "region": "영남",
                       "is_virtual": "true", "active": "true"})
+    lid += 1
+    # WH 본체 (Notion 1.1 · 온라인 매장 재고 출처) — id=15/16
+    locations.append({"location_id": lid, "location_type": "WH", "wh_id": 1,
+                      "name": "수도권 거점창고", "size": "XL", "region": "수도권",
+                      "is_virtual": "false", "active": "true"})
+    lid += 1
+    locations.append({"location_id": lid, "location_type": "WH", "wh_id": 2,
+                      "name": "영남 거점창고", "size": "XL", "region": "영남",
+                      "is_virtual": "false", "active": "true"})
     return warehouses, locations
 
 
@@ -277,10 +286,11 @@ def gen_forecast_cache(books) -> list[dict]:
 # =========================================================================
 def gen_pending_orders(books, locations) -> list[dict]:
     rows = []
-    types = ["REBALANCE", "WH_TRANSFER", "PUBLISHER_ORDER", "MANUAL"]
-    statuses = ["PENDING"] * 10 + ["APPROVED"] * 12 + ["REJECTED"] * 5 + ["AUTO_EXECUTED"] * 3
-    urgencies = ["NORMAL"] * 22 + ["URGENT_SOLDOUT"] * 5 + ["URGENT_SPIKE"] * 3
-    target_locs = [l for l in locations if not (l.get("is_virtual") in ("true", True))]
+    # 2026-05-12 schema 정합: 3-stage cascade · MANUAL 제거 · AUTO_EXECUTED→EXECUTED · URGENT_*→URGENT/CRITICAL
+    types = ["REBALANCE", "WH_TRANSFER", "PUBLISHER_ORDER"]
+    statuses = ["PENDING"] * 10 + ["APPROVED"] * 12 + ["REJECTED"] * 5 + ["EXECUTED"] * 3
+    urgencies = ["NORMAL"] * 22 + ["URGENT"] * 5 + ["CRITICAL"] * 3
+    target_locs = [l for l in locations if not (l.get("is_virtual") in ("true", True)) and l["location_type"] != "WH"]
     for i in range(30):
         b = random.choice(books)
         src = random.choice(target_locs)
@@ -290,9 +300,9 @@ def gen_pending_orders(books, locations) -> list[dict]:
         created = NOW - timedelta(hours=random.randint(1, 72))
         approved_at = ""
         executed_at = ""
-        if status in ("APPROVED", "AUTO_EXECUTED"):
+        if status in ("APPROVED", "EXECUTED"):
             approved_at = (created + timedelta(hours=1)).isoformat()
-        if status == "AUTO_EXECUTED":
+        if status == "EXECUTED":
             executed_at = (created + timedelta(hours=2)).isoformat()
         rows.append({
             "order_id": str(uuid.uuid4()),
@@ -310,7 +320,7 @@ def gen_pending_orders(books, locations) -> list[dict]:
             "demand_confidence_ratio": round(random.uniform(0.1, 0.5), 2),
             "demand_cv": round(random.uniform(0.1, 0.5), 2),
             "status": status,
-            "execution_reason": "AUTO_CRON_URGENT" if status == "AUTO_EXECUTED" else "",
+            "execution_reason": "AUTO_CRON_URGENT" if status == "EXECUTED" else "",
             "reject_reason": "WRONG_QUANTITY" if status == "REJECTED" else "",
             "reject_count": random.randint(0, 2) if status == "REJECTED" else 0,
             "created_at": created.isoformat(),
@@ -321,22 +331,96 @@ def gen_pending_orders(books, locations) -> list[dict]:
 
 
 # =========================================================================
+# 9b. pending_orders 의 historical 7d (사용자 요구 2026-05-12)
+#     일자별 status 분포 · 과거일수록 모두 APPROVED/EXECUTED ("최종 계획안" 배지 표시)
+#     오늘 = PENDING 비율 높음 · 어제 = 일부 PENDING · D-2 이전 = 처리 완료
+# =========================================================================
+def gen_pending_orders_history(books, locations, days: int = 7, per_day: int = 80) -> list[dict]:
+    rows = []
+    types = ["REBALANCE"] * 5 + ["WH_TRANSFER"] * 3 + ["PUBLISHER_ORDER"] * 2  # 50/30/20
+    target_locs = [l for l in locations if l["location_type"] in ("STORE_OFFLINE", "STORE_ONLINE")]
+    for day_offset in range(days):
+        day_base = NOW - timedelta(days=day_offset)
+        # 일자별 status 분포
+        if day_offset == 0:
+            #  60% PENDING · 25% APPROVED · 10% REJECTED · 5% EXECUTED
+            status_pool = ["PENDING"] * 60 + ["APPROVED"] * 25 + ["REJECTED"] * 10 + ["EXECUTED"] * 5
+        elif day_offset == 1:
+            # D-1: 10% PENDING (auto-reject 직전) · 60% APPROVED · 20% REJECTED · 10% EXECUTED
+            status_pool = ["PENDING"] * 10 + ["APPROVED"] * 60 + ["REJECTED"] * 20 + ["EXECUTED"] * 10
+        else:
+            # D-2 이전: 모두 처리 완료 (PENDING 0% — auto-reject 끝)
+            status_pool = ["APPROVED"] * 55 + ["REJECTED"] * 20 + ["EXECUTED"] * 25
+        for _ in range(per_day):
+            order_type = random.choice(types)
+            src = random.choice(target_locs)
+            tgt = random.choice([l for l in target_locs if l["location_id"] != src["location_id"]])
+            status = random.choice(status_pool)
+            # urgency
+            r = random.random()
+            urgency = "NEWBOOK" if order_type == "PUBLISHER_ORDER" and r < 0.05 else \
+                      "CRITICAL" if r < 0.05 else "URGENT" if r < 0.25 else "NORMAL"
+            created = day_base.replace(
+                hour=random.randint(3, 7),  # batch cascade 발의는 03:30~07:00 사이
+                minute=random.randint(0, 59),
+                second=random.randint(0, 59),
+            )
+            if created > NOW:
+                created = NOW - timedelta(seconds=random.randint(60, 7200))
+            approved_at = ""
+            executed_at = ""
+            if status in ("APPROVED", "EXECUTED"):
+                approved_at = (created + timedelta(hours=random.randint(1, 8))).isoformat()
+            if status == "EXECUTED":
+                executed_at = (created + timedelta(hours=random.randint(8, 24))).isoformat()
+            b = random.choice(books)
+            rows.append({
+                "order_id": str(uuid.uuid4()),
+                "order_type": order_type,
+                "isbn13": b["isbn13"],
+                "source_location_id": src["location_id"] if order_type != "PUBLISHER_ORDER" else "",
+                "target_location_id": tgt["location_id"],
+                "qty": random.randint(5, 80),
+                "est_lead_time_hours": random.choice([6, 12, 24, 48]),
+                "est_cost": random.randint(50000, 300000),
+                "forecast_rationale": json.dumps({
+                    "stage": 1 if order_type == "REBALANCE" else 2 if order_type == "WH_TRANSFER" else 3,
+                    "reason": "auto_cascade",
+                    "ratio": round(random.uniform(0.2, 0.6), 2),
+                }),
+                "urgency_level": urgency,
+                "auto_execute_eligible": "true" if urgency in ("URGENT", "CRITICAL") else "false",
+                "stock_days_remaining": round(random.uniform(0.5, 5.0), 2),
+                "demand_confidence_ratio": round(random.uniform(0.6, 0.95), 2),
+                "demand_cv": round(random.uniform(0.1, 0.4), 2),
+                "status": status,
+                "execution_reason": "AUTO_CRON_URGENT" if status == "EXECUTED" and urgency != "NORMAL" else "",
+                "reject_reason": "WRONG_QUANTITY" if status == "REJECTED" else "",
+                "reject_count": 1 if status == "REJECTED" else 0,
+                "created_at": created.isoformat(),
+                "approved_at": approved_at,
+                "executed_at": executed_at,
+            })
+    return rows
+
+
+# =========================================================================
 # 10. order_approvals (per APPROVED/REJECTED order · 1-2 rows)
 # =========================================================================
 def gen_order_approvals(pending_orders) -> list[dict]:
     rows = []
     for o in pending_orders:
-        if o["status"] not in ("APPROVED", "REJECTED", "AUTO_EXECUTED"):
+        if o["status"] not in ("APPROVED", "REJECTED", "EXECUTED"):
             continue
-        # WH_TRANSFER => 2 sides, else 1 SINGLE
-        sides = ["SOURCE", "TARGET"] if o["order_type"] == "WH_TRANSFER" else ["SINGLE"]
+        # WH_TRANSFER => 2 sides (SOURCE/TARGET) · else FINAL (단독 승인 · backend ApprovalSide Literal)
+        sides = ["SOURCE", "TARGET"] if o["order_type"] == "WH_TRANSFER" else ["FINAL"]
         for side in sides:
-            decision = "APPROVED" if o["status"] in ("APPROVED", "AUTO_EXECUTED") else "REJECTED"
+            decision = "APPROVED" if o["status"] in ("APPROVED", "EXECUTED") else "REJECTED"
             rows.append({
                 "approval_id": str(uuid.uuid4()),
                 "order_id": o["order_id"],
                 "approver_id": str(uuid.uuid5(uuid.NAMESPACE_OID, f"approver-{side}")),
-                "approver_role": "wh-manager" if side != "SINGLE" else "hq-admin",
+                "approver_role": "wh-manager" if side != "FINAL" else "hq-admin",
                 "approver_wh_id": random.choice([1, 2]),
                 "approval_side": side,
                 "decision": decision,
@@ -432,9 +516,10 @@ def gen_notifications_log() -> list[dict]:
     event_types = ["OrderPending", "OrderApproved", "OrderRejected", "AutoExecutedUrgent",
                    "AutoRejectedBatch", "SpikeUrgent", "StockDepartPending", "StockArrivalPending",
                    "NewBookRequest", "ReturnPending", "LambdaAlarm", "DeploymentRollback"]
+    # backend Severity Literal: INFO / WARNING / CRITICAL (notification-svc/models.py)
     severities = {
-        "SpikeUrgent": "CRITICAL", "AutoExecutedUrgent": "WARN", "OrderPending": "WARN",
-        "LambdaAlarm": "ERROR", "DeploymentRollback": "WARN",
+        "SpikeUrgent": "CRITICAL", "AutoExecutedUrgent": "WARNING", "OrderPending": "WARNING",
+        "LambdaAlarm": "CRITICAL", "DeploymentRollback": "WARNING",
     }
     for i in range(50):
         et = random.choice(event_types)
@@ -595,7 +680,8 @@ def main() -> None:
     inventory = gen_inventory(books, locations)
     reservations = gen_reservations(books, locations)
     forecast_cache = gen_forecast_cache(books)
-    pending_orders = gen_pending_orders(books, locations)
+    # pending_orders = 기존 30 fixture (다양 status/urgency) + historical 7d × 80 = 560 (날짜별 status 분포 · 과거일수록 모두 완료 · "최종 계획안" 시연)
+    pending_orders = gen_pending_orders(books, locations) + gen_pending_orders_history(books, locations, days=7, per_day=80)
     order_approvals = gen_order_approvals(pending_orders)
     returns_ = gen_returns(books, locations)
     new_book_requests = gen_new_book_requests(publishers)
