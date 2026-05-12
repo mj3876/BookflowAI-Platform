@@ -26,8 +26,11 @@
         "location_id",
         "location_type",
         "wh_id",
+        "name",
         "size",
-        "is_virtual"
+        "region",
+        "is_virtual",
+        "active"
       ]
     },
     "store_location_map": {

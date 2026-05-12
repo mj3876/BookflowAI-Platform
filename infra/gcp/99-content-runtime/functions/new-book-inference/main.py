@@ -66,9 +66,12 @@ def handler(request):
                   COALESCE(b.author_experience_years, 0)                  AS author_experience_years,
                   COALESCE(b.author_past_books_count, 0)                  AS author_past_books_count,
                   COALESCE(b.item_page, 0)                                AS item_page,
-                  slm.store_id
+                  slm.store_id,
+                  COALESCE(ls.wh_id, 1)                                   AS region_code,
+                  COALESCE(CASE ls.size WHEN 'L' THEN 3 WHEN 'M' THEN 2 WHEN 'S' THEN 1 ELSE 2 END, 2) AS size_numeric
                 FROM {p('books_static')} b
                 CROSS JOIN {p('store_location_map')} slm
+                LEFT JOIN {p('locations_static')} ls ON ls.location_id = slm.location_id
                 WHERE b.isbn13 = @isbn13
               )
             ) AS pred

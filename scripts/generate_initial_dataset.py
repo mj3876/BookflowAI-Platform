@@ -54,24 +54,26 @@ DEFAULT_SCHEMA_PATH = Path(__file__).resolve().parent / "gcp" / "config" / "init
 # ── 고정 마스터 데이터 ─────────────────────────────────────────────────────────
 
 STORES = [
-    # store_id, location_id, wh_id, name,        size, region,    is_online
-    (1,  3,  1, "강남점",   "L", "서울 강남구",  False),
-    (2,  4,  1, "홍대점",   "M", "서울 마포구",  False),
-    (3,  5,  1, "잠실점",   "M", "서울 송파구",  False),
-    (4,  6,  1, "신촌점",   "S", "서울 서대문구", False),
-    (5,  7,  1, "수원점",   "S", "경기 수원시",  False),
-    (6,  8,  1, "WH1온라인", None, "서울",        True),   # 가상 · WH1 재고 참조
-    (7,  9,  2, "부산점",   "L", "부산 해운대구", False),
-    (8,  10, 2, "대구점",   "M", "대구 중구",    False),
-    (9,  11, 2, "광주점",   "M", "광주 동구",    False),
-    (10, 12, 2, "대전점",   "S", "대전 서구",    False),
-    (11, 13, 2, "울산점",   "S", "울산 남구",    False),
-    (12, 14, 2, "WH2온라인", None, "부산",        True),   # 가상 · WH2 재고 참조
+    # store_id=location_id (RDS 정합), wh_id, name, size, region, is_online
+    (1,  1,  1, "강남점",        "L", "수도권", False),
+    (2,  2,  1, "광화문점",      "L", "수도권", False),
+    (3,  3,  1, "잠실점",        "M", "수도권", False),
+    (4,  4,  1, "홍대점",        "M", "수도권", False),
+    (5,  5,  1, "신촌점",        "S", "수도권", False),
+    (6,  6,  1, "용산점",        "S", "수도권", False),
+    (7,  7,  2, "부산 서면점",   "L", "영남",   False),
+    (8,  8,  2, "대구 동성점",   "L", "영남",   False),
+    (9,  9,  2, "울산 삼산점",   "M", "영남",   False),
+    (10, 10, 2, "대구 교대점",   "M", "영남",   False),
+    (11, 11, 2, "부산 센텀점",   "S", "영남",   False),
+    (12, 12, 2, "포항 양덕점",   "S", "영남",   False),
+    (13, 13, 1, "수도권 온라인", None, "수도권", True),   # 가상 · WH1(loc 15) 재고 참조
+    (14, 14, 2, "영남 온라인",   None, "영남",   True),   # 가상 · WH2(loc 16) 재고 참조
 ]
 
 WAREHOUSES = [
-    (1, "수도권 물류센터", "수도권"),
-    (2, "영남 물류센터",   "영남"),
+    (1, "수도권 거점창고", "수도권", 50000),
+    (2, "영남 거점창고",   "영남",   40000),
 ]
 
 # ── 알라딘 API ─────────────────────────────────────────────────────────────────
@@ -349,28 +351,8 @@ def build_stores_seed() -> pd.DataFrame:
 
 
 def build_locations_seed() -> pd.DataFrame:
-    rows = [
-        {
-            "location_id":   1,
-            "location_type": "WH",
-            "wh_id":         1,
-            "name":          "수도권 물류센터",
-            "size":          "L",
-            "region":        "경기 이천시",
-            "is_virtual":    False,
-            "active":        True,
-        },
-        {
-            "location_id":   2,
-            "location_type": "WH",
-            "wh_id":         2,
-            "name":          "영남 물류센터",
-            "size":          "L",
-            "region":        "경남 양산시",
-            "is_virtual":    False,
-            "active":        True,
-        },
-    ]
+    """16 rows: loc 1-12 오프라인, 13-14 온라인, 15-16 WH (RDS 정합)"""
+    rows = []
     for sid, lid, wh, name, size, region, online in STORES:
         rows.append({
             "location_id":   lid,
@@ -382,6 +364,27 @@ def build_locations_seed() -> pd.DataFrame:
             "is_virtual":    online,
             "active":        True,
         })
+    # WH 본체 (loc 15, 16) — 출판사 입고 및 매장 배분 거점
+    rows.append({
+        "location_id":   15,
+        "location_type": "WH",
+        "wh_id":         1,
+        "name":          "수도권 거점창고",
+        "size":          "XL",
+        "region":        "수도권",
+        "is_virtual":    False,
+        "active":        True,
+    })
+    rows.append({
+        "location_id":   16,
+        "location_type": "WH",
+        "wh_id":         2,
+        "name":          "영남 거점창고",
+        "size":          "XL",
+        "region":        "영남",
+        "is_virtual":    False,
+        "active":        True,
+    })
     return pd.DataFrame(rows)
 
 
@@ -391,7 +394,8 @@ def build_store_location_map(stores: pd.DataFrame) -> pd.DataFrame:
         store_id = int(row["store_id"])
         location_id = int(row["location_id"])
         wh_id = int(row["wh_id"])
-        inventory_location_id = wh_id if bool(row["is_online"]) else location_id
+        # 온라인 가상 매장: WH 본체(loc 15=수도권, 16=영남)에서 재고 참조
+        inventory_location_id = (14 + wh_id) if bool(row["is_online"]) else location_id
         rows.append({
             "store_id": store_id,
             "location_id": location_id,
@@ -467,8 +471,8 @@ def build_inventory_daily(books: pd.DataFrame, date_range: list[date]) -> pd.Dat
     """
     print("  inventory_daily 생성 중 ...")
     isbn_list     = books["isbn13"].tolist()
-    # 물리 location (가상 location 8, 14 제외)
-    phys_locs     = [(sid, lid, wh) for sid, lid, wh, *_ in STORES if lid not in (8, 14)]
+    # 물리 location (온라인 가상 13,14 및 WH 15,16 제외 — 오프라인 매장만)
+    phys_locs     = [(sid, lid, wh) for sid, lid, wh, *_ in STORES if lid not in (13, 14)]
 
     rows = []
     for d in date_range:

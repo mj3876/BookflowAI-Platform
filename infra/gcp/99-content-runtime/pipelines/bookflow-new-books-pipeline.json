@@ -4,45 +4,87 @@
       "executorLabel": "exec-build-new-book-training-dataset",
       "inputDefinitions": {
         "parameters": {
-          "books_table": { "parameterType": "STRING" },
-          "dataset_id":  { "parameterType": "STRING" },
-          "location":    { "parameterType": "STRING" },
-          "project_id":  { "parameterType": "STRING" },
-          "sales_table": { "parameterType": "STRING" },
-          "training_table": { "parameterType": "STRING" }
+          "books_table": {
+            "parameterType": "STRING"
+          },
+          "dataset_id": {
+            "parameterType": "STRING"
+          },
+          "location": {
+            "parameterType": "STRING"
+          },
+          "project_id": {
+            "parameterType": "STRING"
+          },
+          "sales_table": {
+            "parameterType": "STRING"
+          },
+          "training_table": {
+            "parameterType": "STRING"
+          }
         }
       },
       "outputDefinitions": {
-        "parameters": { "Output": { "parameterType": "STRING" } }
+        "parameters": {
+          "Output": {
+            "parameterType": "STRING"
+          }
+        }
       }
     },
     "comp-evaluate-new-book-model": {
       "executorLabel": "exec-evaluate-new-book-model",
       "inputDefinitions": {
         "parameters": {
-          "dataset_id": { "parameterType": "STRING" },
-          "location":   { "parameterType": "STRING" },
-          "model_name": { "parameterType": "STRING" },
-          "project_id": { "parameterType": "STRING" }
+          "dataset_id": {
+            "parameterType": "STRING"
+          },
+          "location": {
+            "parameterType": "STRING"
+          },
+          "model_name": {
+            "parameterType": "STRING"
+          },
+          "project_id": {
+            "parameterType": "STRING"
+          }
         }
       },
       "outputDefinitions": {
-        "parameters": { "Output": { "parameterType": "STRING" } }
+        "parameters": {
+          "Output": {
+            "parameterType": "STRING"
+          }
+        }
       }
     },
     "comp-train-new-book-model": {
       "executorLabel": "exec-train-new-book-model",
       "inputDefinitions": {
         "parameters": {
-          "dataset_id":     { "parameterType": "STRING" },
-          "location":       { "parameterType": "STRING" },
-          "model_name":     { "parameterType": "STRING" },
-          "project_id":     { "parameterType": "STRING" },
-          "training_table": { "parameterType": "STRING" }
+          "dataset_id": {
+            "parameterType": "STRING"
+          },
+          "location": {
+            "parameterType": "STRING"
+          },
+          "model_name": {
+            "parameterType": "STRING"
+          },
+          "project_id": {
+            "parameterType": "STRING"
+          },
+          "training_table": {
+            "parameterType": "STRING"
+          }
         }
       },
       "outputDefinitions": {
-        "parameters": { "Output": { "parameterType": "STRING" } }
+        "parameters": {
+          "Output": {
+            "parameterType": "STRING"
+          }
+        }
       }
     }
   },
@@ -51,15 +93,19 @@
       "exec-build-new-book-training-dataset": {
         "container": {
           "args": [
-            "--executor_input", "{{$}}",
-            "--function_to_execute", "build_new_book_training_dataset"
+            "--executor_input",
+            "{{$}}",
+            "--function_to_execute",
+            "build_new_book_training_dataset"
           ],
           "command": [
-            "sh", "-c",
+            "sh",
+            "-c",
             "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery'  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
-            "sh", "-ec",
+            "sh",
+            "-ec",
             "program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
-            "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import *\n\ndef build_new_book_training_dataset(\n    project_id: str,\n    dataset_id: str,\n    sales_table: str,\n    books_table: str,\n    location: str,\n    training_table: str,\n) -> str:\n    from google.cloud import bigquery\n\n    client = bigquery.Client(project=project_id, location=location)\n    table_id = f\"{project_id}.{dataset_id}.{training_table}\"\n\n    query = f\"\"\"\n    CREATE OR REPLACE TABLE `{table_id}` AS\n    WITH first_sale AS (\n      SELECT isbn13, MIN(SAFE_CAST(sale_date AS DATE)) AS first_sale_date\n      FROM `{project_id}.{dataset_id}.{sales_table}`\n      GROUP BY isbn13\n    ),\n    early_demand AS (\n      SELECT\n        s.isbn13,\n        s.store_id,\n        AVG(COALESCE(CAST(s.qty_sold AS FLOAT64), 0)) AS avg_daily_demand\n      FROM `{project_id}.{dataset_id}.{sales_table}` s\n      JOIN first_sale fs ON s.isbn13 = fs.isbn13\n      WHERE SAFE_CAST(s.sale_date AS DATE)\n            BETWEEN fs.first_sale_date\n            AND DATE_ADD(fs.first_sale_date, INTERVAL 30 DAY)\n      GROUP BY s.isbn13, s.store_id\n    )\n    SELECT\n      b.category_id,\n      b.price_tier,\n      COALESCE(b.sales_point, 0)                           AS sales_point,\n      CAST(COALESCE(b.is_bestseller_flag, FALSE) AS INT64) AS is_bestseller_flag,\n      COALESCE(b.author_experience_years, 0)               AS author_experience_years,\n      COALESCE(b.author_past_books_count, 0)               AS author_past_books_count,\n      COALESCE(b.item_page, 0)                             AS item_page,\n      ed.store_id,\n      ed.avg_daily_demand                                  AS label\n    FROM early_demand ed\n    JOIN `{project_id}.{dataset_id}.{books_table}` b ON b.isbn13 = ed.isbn13\n    WHERE ed.avg_daily_demand IS NOT NULL\n    \"\"\"\n\n    client.query(query).result()\n    return table_id\n\n"
+            "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import *\n\ndef build_new_book_training_dataset(\n    project_id: str,\n    dataset_id: str,\n    sales_table: str,\n    books_table: str,\n    location: str,\n    training_table: str,\n) -> str:\n    from google.cloud import bigquery\n\n    client = bigquery.Client(project=project_id, location=location)\n    table_id = f\"{project_id}.{dataset_id}.{training_table}\"\n\n    query = f\"\"\"\n    CREATE OR REPLACE TABLE `{table_id}` AS\n    WITH first_sale AS (\n      SELECT isbn13, MIN(SAFE_CAST(sale_date AS DATE)) AS first_sale_date\n      FROM `{project_id}.{dataset_id}.{sales_table}`\n      GROUP BY isbn13\n    ),\n    early_demand AS (\n      SELECT\n        s.isbn13,\n        s.store_id,\n        AVG(COALESCE(CAST(s.qty_sold AS FLOAT64), 0)) AS avg_daily_demand\n      FROM `{project_id}.{dataset_id}.{sales_table}` s\n      JOIN first_sale fs ON s.isbn13 = fs.isbn13\n      WHERE SAFE_CAST(s.sale_date AS DATE)\n            BETWEEN fs.first_sale_date\n            AND DATE_ADD(fs.first_sale_date, INTERVAL 30 DAY)\n      GROUP BY s.isbn13, s.store_id\n    )\n    SELECT\n      b.category_id,\n      b.price_tier,\n      COALESCE(b.sales_point, 0)                           AS sales_point,\n      CAST(COALESCE(b.is_bestseller_flag, FALSE) AS INT64) AS is_bestseller_flag,\n      COALESCE(b.author_experience_years, 0)               AS author_experience_years,\n      COALESCE(b.author_past_books_count, 0)               AS author_past_books_count,\n      COALESCE(b.item_page, 0)                             AS item_page,\n      ed.store_id,\n      COALESCE(ls.wh_id, 1)                                AS region_code,\n      COALESCE(CASE ls.size WHEN 'L' THEN 3 WHEN 'M' THEN 2 WHEN 'S' THEN 1 ELSE 2 END, 2) AS size_numeric,\n      ed.avg_daily_demand                                  AS label\n    FROM early_demand ed\n    JOIN `{project_id}.{dataset_id}.{books_table}` b ON b.isbn13 = ed.isbn13\n    LEFT JOIN `{project_id}.{dataset_id}.store_location_map` slm ON slm.store_id = ed.store_id\n    LEFT JOIN `{project_id}.{dataset_id}.locations_static` ls ON ls.location_id = slm.location_id\n    WHERE ed.avg_daily_demand IS NOT NULL\n    \"\"\"\n\n    client.query(query).result()\n    return table_id\n\n"
           ],
           "image": "python:3.12-slim"
         }
@@ -67,13 +113,17 @@
       "exec-evaluate-new-book-model": {
         "container": {
           "args": [
-            "--executor_input", "{{$}}",
-            "--function_to_execute", "evaluate_new_book_model"
+            "--executor_input",
+            "{{$}}",
+            "--function_to_execute",
+            "evaluate_new_book_model"
           ],
           "command": [
-            "sh", "-c",
+            "sh",
+            "-c",
             "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery'  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
-            "sh", "-ec",
+            "sh",
+            "-ec",
             "program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
             "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import *\n\ndef evaluate_new_book_model(\n    project_id: str,\n    dataset_id: str,\n    location: str,\n    model_name: str,\n) -> str:\n    from google.cloud import bigquery\n\n    client = bigquery.Client(project=project_id, location=location)\n    model_id = f\"{project_id}.{dataset_id}.{model_name}\"\n    eval_table_id = f\"{project_id}.{dataset_id}.{model_name}_evaluation\"\n\n    query = f\"\"\"\n    CREATE OR REPLACE TABLE `{eval_table_id}` AS\n    SELECT * FROM ML.EVALUATE(MODEL `{model_id}`)\n    \"\"\"\n\n    client.query(query).result()\n    return eval_table_id\n\n"
           ],
@@ -83,15 +133,19 @@
       "exec-train-new-book-model": {
         "container": {
           "args": [
-            "--executor_input", "{{$}}",
-            "--function_to_execute", "train_new_book_model"
+            "--executor_input",
+            "{{$}}",
+            "--function_to_execute",
+            "train_new_book_model"
           ],
           "command": [
-            "sh", "-c",
+            "sh",
+            "-c",
             "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery'  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
-            "sh", "-ec",
+            "sh",
+            "-ec",
             "program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
-            "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import *\n\ndef train_new_book_model(\n    project_id: str,\n    dataset_id: str,\n    location: str,\n    training_table: str,\n    model_name: str,\n) -> str:\n    from google.cloud import bigquery\n\n    client = bigquery.Client(project=project_id, location=location)\n    model_id = f\"{project_id}.{dataset_id}.{model_name}\"\n    source_table_id = f\"{project_id}.{dataset_id}.{training_table}\"\n\n    query = f\"\"\"\n    CREATE OR REPLACE MODEL `{model_id}`\n    OPTIONS(\n      MODEL_TYPE = 'BOOSTED_TREE_REGRESSOR',\n      INPUT_LABEL_COLS = ['label'],\n      MAX_ITERATIONS = 25\n    ) AS\n    SELECT\n      label,\n      category_id,\n      price_tier,\n      sales_point,\n      is_bestseller_flag,\n      author_experience_years,\n      author_past_books_count,\n      item_page,\n      store_id\n    FROM `{source_table_id}`\n    WHERE label IS NOT NULL\n    \"\"\"\n\n    client.query(query).result()\n    return model_id\n\n"
+            "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import *\n\ndef train_new_book_model(\n    project_id: str,\n    dataset_id: str,\n    location: str,\n    training_table: str,\n    model_name: str,\n) -> str:\n    from google.cloud import bigquery\n\n    client = bigquery.Client(project=project_id, location=location)\n    model_id = f\"{project_id}.{dataset_id}.{model_name}\"\n    source_table_id = f\"{project_id}.{dataset_id}.{training_table}\"\n\n    query = f\"\"\"\n    CREATE OR REPLACE MODEL `{model_id}`\n    OPTIONS(\n      MODEL_TYPE = 'BOOSTED_TREE_REGRESSOR',\n      INPUT_LABEL_COLS = ['label'],\n      MAX_ITERATIONS = 25\n    ) AS\n    SELECT\n      label,\n      category_id,\n      price_tier,\n      sales_point,\n      is_bestseller_flag,\n      author_experience_years,\n      author_past_books_count,\n      item_page,\n      store_id,\n      region_code,\n      size_numeric\n    FROM `{source_table_id}`\n    WHERE label IS NOT NULL\n    \"\"\"\n\n    client.query(query).result()\n    return model_id\n\n"
           ],
           "image": "python:3.12-slim"
         }
@@ -106,62 +160,132 @@
     "dag": {
       "tasks": {
         "build-new-book-training-dataset": {
-          "cachingOptions": { "enableCache": true },
-          "componentRef": { "name": "comp-build-new-book-training-dataset" },
+          "cachingOptions": {
+            "enableCache": true
+          },
+          "componentRef": {
+            "name": "comp-build-new-book-training-dataset"
+          },
           "inputs": {
             "parameters": {
-              "books_table":    { "componentInputParameter": "books_table" },
-              "dataset_id":     { "componentInputParameter": "dataset_id" },
-              "location":       { "componentInputParameter": "bq_location" },
-              "project_id":     { "componentInputParameter": "project_id" },
-              "sales_table":    { "componentInputParameter": "sales_table" },
-              "training_table": { "componentInputParameter": "new_book_training_table" }
+              "books_table": {
+                "componentInputParameter": "books_table"
+              },
+              "dataset_id": {
+                "componentInputParameter": "dataset_id"
+              },
+              "location": {
+                "componentInputParameter": "bq_location"
+              },
+              "project_id": {
+                "componentInputParameter": "project_id"
+              },
+              "sales_table": {
+                "componentInputParameter": "sales_table"
+              },
+              "training_table": {
+                "componentInputParameter": "new_book_training_table"
+              }
             }
           },
-          "taskInfo": { "name": "build-new-book-training-dataset" }
+          "taskInfo": {
+            "name": "build-new-book-training-dataset"
+          }
         },
         "evaluate-new-book-model": {
-          "cachingOptions": { "enableCache": true },
-          "componentRef": { "name": "comp-evaluate-new-book-model" },
-          "dependentTasks": ["train-new-book-model"],
+          "cachingOptions": {
+            "enableCache": true
+          },
+          "componentRef": {
+            "name": "comp-evaluate-new-book-model"
+          },
+          "dependentTasks": [
+            "train-new-book-model"
+          ],
           "inputs": {
             "parameters": {
-              "dataset_id": { "componentInputParameter": "dataset_id" },
-              "location":   { "componentInputParameter": "bq_location" },
-              "model_name": { "componentInputParameter": "model_name" },
-              "project_id": { "componentInputParameter": "project_id" }
+              "dataset_id": {
+                "componentInputParameter": "dataset_id"
+              },
+              "location": {
+                "componentInputParameter": "bq_location"
+              },
+              "model_name": {
+                "componentInputParameter": "model_name"
+              },
+              "project_id": {
+                "componentInputParameter": "project_id"
+              }
             }
           },
-          "taskInfo": { "name": "evaluate-new-book-model" }
+          "taskInfo": {
+            "name": "evaluate-new-book-model"
+          }
         },
         "train-new-book-model": {
-          "cachingOptions": { "enableCache": true },
-          "componentRef": { "name": "comp-train-new-book-model" },
-          "dependentTasks": ["build-new-book-training-dataset"],
+          "cachingOptions": {
+            "enableCache": true
+          },
+          "componentRef": {
+            "name": "comp-train-new-book-model"
+          },
+          "dependentTasks": [
+            "build-new-book-training-dataset"
+          ],
           "inputs": {
             "parameters": {
-              "dataset_id":     { "componentInputParameter": "dataset_id" },
-              "location":       { "componentInputParameter": "bq_location" },
-              "model_name":     { "componentInputParameter": "model_name" },
-              "project_id":     { "componentInputParameter": "project_id" },
-              "training_table": { "componentInputParameter": "new_book_training_table" }
+              "dataset_id": {
+                "componentInputParameter": "dataset_id"
+              },
+              "location": {
+                "componentInputParameter": "bq_location"
+              },
+              "model_name": {
+                "componentInputParameter": "model_name"
+              },
+              "project_id": {
+                "componentInputParameter": "project_id"
+              },
+              "training_table": {
+                "componentInputParameter": "new_book_training_table"
+              }
             }
           },
-          "taskInfo": { "name": "train-new-book-model" }
+          "taskInfo": {
+            "name": "train-new-book-model"
+          }
         }
       }
     },
     "inputDefinitions": {
       "parameters": {
-        "bq_location":          { "parameterType": "STRING" },
-        "books_table":          { "parameterType": "STRING" },
-        "dataset_id":           { "parameterType": "STRING" },
-        "model_name":           { "parameterType": "STRING" },
-        "models_bucket":        { "parameterType": "STRING" },
-        "new_book_training_table": { "parameterType": "STRING" },
-        "project_id":           { "parameterType": "STRING" },
-        "sales_table":          { "parameterType": "STRING" },
-        "staging_bucket":       { "parameterType": "STRING" }
+        "bq_location": {
+          "parameterType": "STRING"
+        },
+        "books_table": {
+          "parameterType": "STRING"
+        },
+        "dataset_id": {
+          "parameterType": "STRING"
+        },
+        "model_name": {
+          "parameterType": "STRING"
+        },
+        "models_bucket": {
+          "parameterType": "STRING"
+        },
+        "new_book_training_table": {
+          "parameterType": "STRING"
+        },
+        "project_id": {
+          "parameterType": "STRING"
+        },
+        "sales_table": {
+          "parameterType": "STRING"
+        },
+        "staging_bucket": {
+          "parameterType": "STRING"
+        }
       }
     }
   },
