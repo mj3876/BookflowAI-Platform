@@ -44,7 +44,14 @@ locals {
         BOOKFLOW_DATASET_ID     = var.dataset_id
         BOOKFLOW_BQ_LOCATION    = var.bigquery_location
         BOOKFLOW_STAGING_BUCKET = local.staging_bucket_name
-        BOOKFLOW_LOAD_TABLES = var.features_table
+        BOOKFLOW_LOAD_TABLES = join(",", [
+          var.sales_table,
+          var.inventory_daily_table,
+          var.features_table,
+          var.books_static_table,
+          var.locations_static_table,
+          var.store_location_map_table,
+        ])
         BOOKFLOW_LOAD_TABLE_ALIASES = join(",", [
           for source_name, table_name in var.load_table_aliases : "${source_name}:${table_name}"
         ])
@@ -87,6 +94,25 @@ locals {
         BOOKFLOW_VERTEX_LOCATION    = local.region
         BOOKFLOW_DATASET_ID         = var.dataset_id
         BOOKFLOW_VERTEX_INVOKE_MODE = var.vertex_invoke_mode
+      }
+    }
+    new_book_inference = {
+      name         = "bookflow-new-book-inference"
+      description  = "Runs BigQuery ML.PREDICT for a new-book isbn13 and writes store-level demand to new_book_forecast."
+      entry_point  = "handler"
+      runtime      = "python312"
+      memory       = "512M"
+      timeout      = 540
+      min_instance = 0
+      max_instance = var.function_max_instance_count
+      source_dir   = "new-book-inference"
+      zip_name     = "bookflow-new-book-inference.zip"
+      env = {
+        BOOKFLOW_DATASET_ID              = var.dataset_id
+        BOOKFLOW_BQ_LOCATION             = var.bigquery_location
+        BOOKFLOW_NEW_BOOK_MODEL_NAME     = var.new_book_model_name
+        BOOKFLOW_NEW_BOOK_FORECAST_TABLE = var.new_book_forecast_table
+        BOOKFLOW_FORECAST_LEAD_DAYS      = "30"
       }
     }
   }

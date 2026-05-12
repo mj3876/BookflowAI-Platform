@@ -32,6 +32,7 @@ output "bigquery_view_ids" {
     existing_books_training_features = google_bigquery_table.existing_books_training_features_view.table_id
     new_book_feature_candidates      = google_bigquery_table.new_book_feature_candidates_view.table_id
     batch_prediction_input           = google_bigquery_table.batch_prediction_input_view.table_id
+    wh_forecast                      = google_bigquery_table.wh_forecast_view.table_id
   }
 }
 
