@@ -700,12 +700,19 @@ def gen_sales_realtime(books, locations) -> list[dict]:
                 minute=random.randint(0, 59),
                 second=random.randint(0, 59),
             )
+            # Guard: 미래 시각 cap (today row 의 random hour 8~22 가 현재 시각보다 미래일 때
+            # ORDER BY event_ts DESC LIMIT 12 가 seed 미래 row 만 표시 → sim 새 INSERT 가
+            # 화면에 안 보이는 버그 방지)
+            if event_ts > NOW:
+                event_ts = NOW - timedelta(seconds=random.randint(60, 3600))
             rows.append({
                 "txn_id": str(uuid.uuid4()),
                 "event_ts": event_ts.isoformat(),
                 "store_id": l["location_id"],
                 "wh_id":    l["wh_id"],
-                "channel":  "online" if is_online else "offline",
+                # ECS sim 정합 — sim 은 'ONLINE_APP'/'ONLINE_WEB'/'OFFLINE' (대문자) emit.
+                # backend SQL (master.py) 가 `channel LIKE 'ONLINE%'` / `= 'OFFLINE'` 으로 정확 match.
+                "channel":  ("ONLINE_APP" if random.random() < 0.7 else "ONLINE_WEB") if is_online else "OFFLINE",
                 "isbn13":   b["isbn13"],
                 "qty":      qty,
                 "unit_price": unit_price,

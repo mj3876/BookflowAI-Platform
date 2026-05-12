@@ -1,4 +1,4 @@
-psycopg[binary]==3.2.13
+psycopg2-binary==2.9.10
 redis==5.2.1
 typing-extensions>=4.6
 
