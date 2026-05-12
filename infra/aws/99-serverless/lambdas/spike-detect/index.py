@@ -119,19 +119,21 @@ def lambda_handler(event, context):
     counts = _read_sns_last_hour(s3, raw_bucket, now)
 
     # Step 3-② 각 추적 ISBN에 대해 Z-score 계산 → 임계값 초과 시 spike 목록에 추가
+    # schema: spike_events(event_id UUID PK, detected_at, isbn13, z_score NUMERIC(5,2),
+    #                      mentions_count INT, triggered_order_id, resolved_at)
+    import uuid as _uuid
     spikes = []
     for isbn13, book in tracked.items():
-        lam   = float(book.get("baseline_lam", 5.0))  # 해당 ISBN의 평소 기대 언급 수
-        count = counts.get(isbn13, 0)                  # 실제 집계된 언급 수
+        lam   = float(book.get("baseline_lam", 5.0))
+        count = counts.get(isbn13, 0)
         z     = _z_score(count, lam)
-        if z >= Z_THRESHOLD:  # Z ≥ 3.0: 통계적 급등 판정
+        if z >= Z_THRESHOLD:
             spikes.append({
+                "event_id":       str(_uuid.uuid4()),
                 "isbn13":         isbn13,
                 "detected_at":    now.isoformat(),
-                "z_score":        round(z, 4),
-                "mention_count":  count,
-                "baseline_count": round(lam, 2),
-                "is_resolved":    False,  # intervention-svc가 처리 완료 시 True로 업데이트
+                "z_score":        round(z, 2),  # NUMERIC(5,2)
+                "mentions_count": count,
             })
 
     print(f"[spike-detect] {len(counts)} ISBNs · {len(spikes)} spikes (Z≥{Z_THRESHOLD})")
@@ -139,9 +141,8 @@ def lambda_handler(event, context):
     if not spikes:
         return {"statusCode": 200, "spikes": 0}
 
-    # Step 4. 급등 도서를 RDS spike_events 테이블에 기록
-    # intervention-svc(EKS Pod)가 이 테이블을 읽어 자동 발주(Step 5) 실행
-    # ON CONFLICT DO NOTHING: 같은 (isbn13, detected_at) 조합 중복 삽입 방지
+    # Step 4. RDS spike_events INSERT
+    # PK 가 event_id UUID 라 ON CONFLICT 는 event_id 기준 (사실상 발생 안 함 · 매 invocation 새 UUID)
     conn = _db_connect(rds_sec)
     try:
         with conn:
@@ -149,10 +150,10 @@ def lambda_handler(event, context):
                 cur.executemany(
                     """
                     INSERT INTO spike_events
-                        (isbn13, detected_at, z_score, mention_count, baseline_count, is_resolved)
-                    VALUES (%(isbn13)s, %(detected_at)s, %(z_score)s,
-                            %(mention_count)s, %(baseline_count)s, %(is_resolved)s)
-                    ON CONFLICT (isbn13, detected_at) DO NOTHING
+                        (event_id, detected_at, isbn13, z_score, mentions_count)
+                    VALUES (%(event_id)s, %(detected_at)s, %(isbn13)s,
+                            %(z_score)s, %(mentions_count)s)
+                    ON CONFLICT (event_id) DO NOTHING
                     """,
                     spikes,
                 )
