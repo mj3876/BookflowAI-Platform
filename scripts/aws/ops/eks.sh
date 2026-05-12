@@ -28,11 +28,13 @@ bookflow-30-eks-eso-irsa|$INFRA/30-compute-cluster/eks-eso-irsa.yaml
 bookflow-30-eks-alb-controller-irsa|$INFRA/30-compute-cluster/eks-alb-controller-irsa.yaml
 EOF
 
-  step "3. eks-nodegroup"
-  cfn_deploy bookflow-40-eks-nodegroup "$INFRA/40-compute-runtime/eks-nodegroup.yaml"
-
-  step "4. eks-addons CFN (VPC CNI · CoreDNS)"
-  cfn_deploy bookflow-40-eks-addons "$INFRA/40-compute-runtime/eks-addons.yaml"
+  # nodegroup + addons 병렬 — VPC CNI 가 없으면 nodes NotReady 로 nodegroup CFN deadlock.
+  # cluster recreate 안 한 경우(원래 addon detach 상태) 특히 critical. 둘 다 EKS cluster 만 의존.
+  step "3+4. eks-nodegroup + eks-addons 병렬 (CNI 가 nodes Ready 보장)"
+  cfn_parallel_deploy <<EOF
+bookflow-40-eks-nodegroup|$INFRA/40-compute-runtime/eks-nodegroup.yaml
+bookflow-40-eks-addons|$INFRA/40-compute-runtime/eks-addons.yaml
+EOF
 
   step "5. kubectl 인증 + helm + manifests + Secret sync"
   py "$PROJECT_ROOT/scripts/aws/bookflow.py" task eks-addons
