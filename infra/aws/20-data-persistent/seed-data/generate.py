@@ -438,15 +438,15 @@ def gen_pending_orders(books, locations, scenario_b_isbns) -> list[dict]:
                             urgency=urg, status="PENDING",
                             auto_exec=True, hours_ago=2 + i, reason="forecast_shortage"))
 
-    # ── C. 권역 이동 양측 승인 — 4건 (다양 status · order_approvals 정합) ──
-    for i, (isbn, src, tgt, status) in enumerate([
-        (isbns[40], 2, 8,  "PENDING"),   # 광화문 → 대구 동성
-        (isbns[41], 3, 11, "APPROVED"),  # 잠실 → 부산 센텀 (양측 APPROVED)
-        (isbns[42], 7, 1,  "APPROVED"),  # 부산 서면 → 강남 (역방향)
-        (isbns[43], 10, 4, "PENDING"),   # 대구 교대 → 홍대
+    # ── C. 권역 이동 4건 — 시연 정합으로 모두 PENDING 시작 ──
+    for i, (isbn, src, tgt) in enumerate([
+        (isbns[40], 2, 8),   # 광화문 → 대구 동성
+        (isbns[41], 3, 11),  # 잠실 → 부산 센텀
+        (isbns[42], 7, 1),   # 부산 서면 → 강남
+        (isbns[43], 10, 4),  # 대구 교대 → 홍대
     ]):
         rows.append(_po_row("WH_TRANSFER", isbn, src, tgt, qty=30,
-                            urgency="NORMAL", status=status,
+                            urgency="NORMAL", status="PENDING",
                             hours_ago=12 + i * 6, reason="capacity_balance"))
 
     return rows
@@ -456,6 +456,10 @@ def gen_pending_orders(books, locations, scenario_b_isbns) -> list[dict]:
 # 9b. pending_orders daily-generated (시연 fixture + 운영 mimic)
 # =========================================================================
 def gen_pending_orders_daily(books, locations, days: int = 7, per_day: int = 100) -> list[dict]:
+    """시연 정합 (2026-05-12 v2):
+      - D-1 ~ D-6 (과거): 모두 batch 처리완료 (APPROVED / REJECTED / AUTO_EXECUTED) → 일자별 기록
+      - D-0 (오늘): 0 row — 사용자가 'BQ cascade 발의' 버튼 누르면 decision-svc 가 PENDING 생성
+    """
     """매일 ~100건 daily-generated · batch 시각성 반영.
 
     하루 batch 흐름:
@@ -483,6 +487,9 @@ def gen_pending_orders_daily(books, locations, days: int = 7, per_day: int = 100
     for d in range(days):
         day_offset = days - 1 - d   # day_offset=0 이 오늘 (D-0), days-1 이 가장 과거 (D-6)
         is_today = day_offset == 0
+        # D-0 (오늘) skip — cascade 발의 버튼이 동적 생성 (decision-svc)
+        if is_today:
+            continue
         for i in range(per_day):
             order_type = random.choices(
                 ["REBALANCE", "WH_TRANSFER", "PUBLISHER_ORDER"],
@@ -490,22 +497,11 @@ def gen_pending_orders_daily(books, locations, days: int = 7, per_day: int = 100
             )[0]
             urgency = random.choices(["NORMAL", "URGENT", "CRITICAL"], weights=[70, 25, 5])[0]
             auto_exec = urgency in ("URGENT", "CRITICAL")
-
-            # 시점 별 status 결정 (batch 시간성 반영)
-            if is_today:
-                # 오늘: URGENT/CRITICAL 자동 승인 완료 (07:00 batch · 시연 시점 09:00+ 가정)
-                #       NORMAL 은 대부분 PENDING + 일부 APPROVED (사람이 처리)
-                if auto_exec:
-                    status = "APPROVED"   # 07:00 batch 결과
-                else:
-                    status = random.choices(["PENDING", "APPROVED"], weights=[85, 15])[0]
+            # 과거 batch 처리 완료 분포
+            if auto_exec:
+                status = "AUTO_EXECUTED"   # 07:00 batch
             else:
-                # 과거: 모두 batch 처리 완료
-                if auto_exec:
-                    status = "APPROVED"   # 07:00 batch
-                else:
-                    # NORMAL: 18:00 batch 가 거절 vs 그날 사람이 처리한 일부 APPROVED
-                    status = random.choices(["REJECTED", "APPROVED"], weights=[75, 25])[0]
+                status = random.choices(["APPROVED", "REJECTED"], weights=[55, 45])[0]
 
             isbn = random.choice(isbns[50:500])
             qty = random.randint(10, 80)
@@ -817,9 +813,9 @@ def main() -> None:
     inventory = gen_inventory(books, locations, scenario_b_isbns)
     reservations = gen_reservations(books, locations)
     forecast_cache = gen_forecast_cache(books, scenario_b_isbns, days=7)
-    # 시연 fixture 16 + daily-generated 700 = 716
-    pending_orders = gen_pending_orders(books, locations, scenario_b_isbns)
-    pending_orders += gen_pending_orders_daily(books, locations, days=7, per_day=100)
+    # 시연 정합: D-1~D-6 처리완료 (600 row) · D-0 0 row (cascade 발의 버튼이 동적 생성)
+    # 기존 scenario fixture (gen_pending_orders) 는 D-0 PENDING 포함이라 제외.
+    pending_orders = gen_pending_orders_daily(books, locations, days=7, per_day=100)
     order_approvals = gen_order_approvals(pending_orders)
     returns_ = gen_returns(books, locations)
     new_book_requests = gen_new_book_requests(publishers)
