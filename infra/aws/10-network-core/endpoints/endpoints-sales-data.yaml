@@ -1,5 +1,5 @@
 ﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: "BOOKFLOW - Tier 10 - Sales Data VPC Interface Endpoints (3): ECR api/dkr (ECS Fargate image pull) + Kinesis (POS put_records) + S3 Gateway Endpoint (single AZ for cost optimization)"
+Description: "BOOKFLOW - Tier 10 - Sales Data VPC Interface Endpoints: ECR api/dkr + Kinesis + Logs + ECS (sim discover_api_url) + S3 Gateway"
 Parameters:
   ProjectName:
     Type: String
@@ -55,6 +55,18 @@ Resources:
     Type: AWS::EC2::VPCEndpoint
     Properties:
       ServiceName: !Sub com.amazonaws.${AWS::Region}.logs
+      VpcId: !ImportValue { 'Fn::Sub': '${ProjectName}-vpc-sales-data-id' }
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !ImportValue { 'Fn::Sub': '${ProjectName}-subnet-sales-data-private-az1' }
+      SecurityGroupIds: [!Ref EndpointSg]
+
+  # ECS control plane endpoint — online-sim 의 _discover_api_url() 이 ecs.list_tasks 호출
+  Ecs:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ecs
       VpcId: !ImportValue { 'Fn::Sub': '${ProjectName}-vpc-sales-data-id' }
       VpcEndpointType: Interface
       PrivateDnsEnabled: true

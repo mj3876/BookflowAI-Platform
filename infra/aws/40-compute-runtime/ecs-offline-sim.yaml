@@ -65,6 +65,16 @@ Resources:
               - Effect: Allow
                 Action: secretsmanager:GetSecretValue
                 Resource: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ProjectName}/*
+        # sim app.py 의 _discover_api_url() 가 inventory-api task IP 검색 시 호출
+        - PolicyName: EcsDescribe
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecs:ListTasks
+                  - ecs:DescribeTasks
+                Resource: '*'
 
   TaskSecurityGroup:
     Type: AWS::EC2::SecurityGroup
