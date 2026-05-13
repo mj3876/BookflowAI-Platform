@@ -31,6 +31,8 @@ LOAD_ORDER = [
     "order_approvals", "returns", "new_book_requests", "notifications_log",
     "spike_events", "sales_realtime", "audit_log",
 ]
+# kpi_daily 는 sales_realtime aggregation 으로 도출 (실 운영도 BQ kpi_daily_view sync).
+# generate.py 의 kpi_daily.csv 는 무시 · REMOTE_SQL 의 aggregation 단계가 source.
 
 REMOTE_SQL = """\
 #!/bin/bash
@@ -72,7 +74,42 @@ SELECT setval('publishers_publisher_id_seq', COALESCE((SELECT MAX(publisher_id) 
 SELECT setval('audit_log_log_id_seq',        COALESCE((SELECT MAX(log_id)       FROM audit_log),  1), true);
 SELECT setval('new_book_requests_id_seq',    COALESCE((SELECT MAX(id)           FROM new_book_requests), 1), true);
 "
-echo "=== ALL DONE ==="
+
+echo "=== Aggregate kpi_daily from sales_realtime (sales_realtime 이 단일 truth source) ==="
+$PSQL -c "
+TRUNCATE TABLE kpi_daily;
+WITH agg AS (
+    SELECT (event_ts AT TIME ZONE 'Asia/Seoul')::date AS kpi_date,
+           store_id, channel,
+           SUM(qty)::int                    AS qty_sold,
+           SUM(revenue)::bigint             AS revenue,
+           COUNT(*)::int                    AS tx_count,
+           COUNT(DISTINCT isbn13)::int      AS unique_isbn,
+           (SUM(revenue) / NULLIF(SUM(qty),0))::int AS avg_price
+      FROM sales_realtime
+     GROUP BY 1, 2, 3
+),
+top_per AS (
+    SELECT (event_ts AT TIME ZONE 'Asia/Seoul')::date AS kpi_date,
+           store_id, channel, isbn13,
+           SUM(qty) AS q,
+           ROW_NUMBER() OVER (
+               PARTITION BY (event_ts AT TIME ZONE 'Asia/Seoul')::date, store_id, channel
+               ORDER BY SUM(qty) DESC
+           ) AS rn
+      FROM sales_realtime
+     GROUP BY 1, 2, 3, isbn13
+)
+INSERT INTO kpi_daily (kpi_date, store_id, category_id, channel, qty_sold, revenue, tx_count, avg_price, unique_isbn_count, top_isbn, synced_from_bq_at)
+SELECT a.kpi_date, a.store_id, 0, a.channel, a.qty_sold, a.revenue, a.tx_count, a.avg_price, a.unique_isbn, t.isbn13, NOW()
+  FROM agg a
+  LEFT JOIN top_per t
+    ON t.kpi_date = a.kpi_date AND t.store_id = a.store_id AND t.channel = a.channel AND t.rn = 1;
+"
+n_kpi=$($PSQL -At -c "SELECT count(*) FROM kpi_daily")
+echo \"  kpi_daily (aggregated from sales_realtime) -> $n_kpi\"
+
+echo \"=== ALL DONE ===\"
 """
 
 
