@@ -211,8 +211,16 @@ def gen_users(locations: list[dict]) -> list[dict]:
 # 6. inventory (book x non-virtual location); virtual STORE_ONLINE row 미생성
 #    → v_online_store_available view 가 WH 재고 참조
 # =========================================================================
-def gen_inventory(books: list[dict], locations: list[dict], scenario_b_isbns: list[str]) -> list[dict]:
+def gen_inventory(
+    books: list[dict],
+    locations: list[dict],
+    scenario_b_isbns: list[str],
+    forecast_cache: list[dict] | None = None,
+) -> list[dict]:
     """inventory 시드 + 시나리오 B 8 도서 의도적 부족 (cascade 시연용).
+
+    safety_stock = forecast D+1 predicted_demand × 5 (사용자 결정 2026-05-13).
+    forecast 가 없는 (book, store) 또는 WH 는 fallback 값.
 
     SHORT_PAIRS = pending_orders 의 시나리오 B fixture 와 정합하는 매장 부족 매핑.
     """
@@ -226,6 +234,17 @@ def gen_inventory(books: list[dict], locations: list[dict], scenario_b_isbns: li
         scenario_b_isbns[6]: [7],      # 부산 서면 부족 → PUBLISHER CRITICAL
         scenario_b_isbns[7]: [2],      # 광화문 부족 → PUBLISHER URGENT
     }
+    # (isbn13, store_id) → D+1 predicted_demand lookup
+    target_d1 = (TODAY + timedelta(days=1)).isoformat()
+    fc_d1: dict[tuple[str, int], float] = {}
+    if forecast_cache:
+        for r in forecast_cache:
+            if r.get("snapshot_date") == target_d1:
+                try:
+                    fc_d1[(r["isbn13"], int(r["store_id"]))] = float(r["predicted_demand"])
+                except (TypeError, ValueError):
+                    pass
+
     rows = []
     target_locs = [l for l in locations if not (l.get("is_virtual") in ("true", True))]
     for b in books:
@@ -233,15 +252,46 @@ def gen_inventory(books: list[dict], locations: list[dict], scenario_b_isbns: li
         short_locs = SHORT_PAIRS.get(isbn, [])
         for l in target_locs:
             if l["location_type"] == "WH":
-                on_hand = random.randint(50, 500)
-                safety = 30
+                # WH 안전재고 = 자기 권역 매장들의 forecast 합 × 5 (없으면 fallback 100)
+                wh_id = l.get("wh_id")
+                wh_stores = [
+                    (b_isbn, sid) for (b_isbn, sid) in fc_d1.keys()
+                    if b_isbn == isbn and any(
+                        s.get("location_id") == sid and s.get("wh_id") == wh_id
+                        for s in target_locs if s["location_type"] != "WH"
+                    )
+                ]
+                wh_demand_5d = sum(fc_d1[k] for k in wh_stores) * 5
+                safety = max(int(wh_demand_5d), 100) if wh_stores else 100
+                # WH on_hand 도 다양화 — Stage 2 partner_surplus 가능하도록
+                # 70% 충분 (safety × 2~4 · partner_surplus 양수) · 20% 빠듯 (safety × 0.8~1.2) · 10% 부족 (Stage 3 강제)
+                wh_bucket = random.random()
+                if wh_bucket < 0.70:
+                    on_hand = random.randint(safety * 2, safety * 4 + 1)
+                elif wh_bucket < 0.90:
+                    on_hand = random.randint(int(safety * 0.8), int(safety * 1.2) + 1)
+                else:
+                    on_hand = random.randint(0, max(1, int(safety * 0.5)))
             elif l["location_id"] in short_locs:
-                # 시나리오 B 의도 부족 — safety_stock 미만 (cascade 시연용)
+                # 시나리오 B 의도 부족 — on_hand 0~2, safety 는 forecast × 5 (재고 < 안전재고 보장)
                 on_hand = random.randint(0, 2)
-                safety = 5
+                pred = fc_d1.get((isbn, l["location_id"]), 1.0)
+                safety = max(int(pred * 5), 5)
             else:
-                on_hand = random.randint(0, 30)
-                safety = 5
+                # cascade 시연 다양성 — 매장별로 분포 다양화 (사용자 결정 2026-05-13).
+                # 60% 충분 (Stage 1 source 후보) · 25% 약간 부족 (Stage 1 target 후보) · 15% 심각 부족 (Stage 2/3 trigger)
+                pred = fc_d1.get((isbn, l["location_id"]), 1.0)
+                safety = max(int(pred * 5), 5)
+                bucket = random.random()
+                if bucket < 0.60:
+                    # 충분 — safety_stock 의 1.5~3배 (Stage 1 에서 다른 매장으로 보낼 수 있음)
+                    on_hand = random.randint(int(safety * 1.5), int(safety * 3) + 1)
+                elif bucket < 0.85:
+                    # 약간 부족 — safety_stock 의 0.4~0.9배 (Stage 1 trigger 후보)
+                    on_hand = random.randint(int(safety * 0.4), max(int(safety * 0.4) + 1, int(safety * 0.9)))
+                else:
+                    # 심각 부족 — safety_stock 의 0~0.3배 (Stage 2/3 trigger)
+                    on_hand = random.randint(0, max(1, int(safety * 0.3)))
             reserved = random.randint(0, max(0, on_hand // 10))
             rows.append({
                 "isbn13": isbn,
@@ -330,10 +380,11 @@ def gen_forecast_cache(books, scenario_b_isbns: list[str], days: int = 7) -> lis
                 day_rows += 1
 
         # 일반 random fill — day 별 target_per_day 까지
+        # store_id 1~12 (오프라인) + 13,14 (온라인 가상) — WH 합산 base
         for b in books[:200]:
             if day_rows >= target_per_day:
                 break
-            for store_id in range(1, 13):
+            for store_id in range(1, 15):
                 if day_rows >= target_per_day:
                     break
                 key = (snap_date.isoformat(), b["isbn13"], store_id)
@@ -353,6 +404,49 @@ def gen_forecast_cache(books, scenario_b_isbns: list[str], days: int = 7) -> lis
                 })
                 day_rows += 1
     return rows
+
+
+def append_wh_forecast(forecast_rows: list[dict], locations: list[dict]) -> None:
+    """WH row 추가 (in-place) — 자기 권역 매장 (오프라인+온라인) predicted_demand 합산.
+
+    물류센터별 수요예측 = 권역 매장 수요의 sum (사용자 결정 2026-05-13).
+    store_id = WH 의 location_id (15, 16) · model_version='demo-v1-wh-aggregate'.
+    """
+    wh_locs = [l for l in locations if l["location_type"] == "WH"]
+    store_wh_map = {
+        l["location_id"]: l.get("wh_id")
+        for l in locations if l["location_type"] != "WH"
+    }
+
+    by_date: dict[str, list[dict]] = {}
+    for r in forecast_rows:
+        by_date.setdefault(r["snapshot_date"], []).append(r)
+
+    new_rows: list[dict] = []
+    for snap_date, rows in by_date.items():
+        per_book_wh: dict[tuple[str, int], float] = {}
+        for r in rows:
+            wh = store_wh_map.get(r["store_id"])
+            if wh is None:
+                continue
+            key = (r["isbn13"], wh)
+            per_book_wh[key] = per_book_wh.get(key, 0.0) + float(r["predicted_demand"])
+
+        for (isbn, wh), total in per_book_wh.items():
+            wh_loc = next((w for w in wh_locs if w.get("wh_id") == wh), None)
+            if wh_loc is None:
+                continue
+            new_rows.append({
+                "snapshot_date":    snap_date,
+                "isbn13":           isbn,
+                "store_id":         wh_loc["location_id"],
+                "predicted_demand": round(total, 2),
+                "confidence_low":   round(total * 0.85, 2),
+                "confidence_high":  round(total * 1.15, 2),
+                "model_version":    "demo-v1-wh-aggregate",
+                "synced_at":        NOW.isoformat(),
+            })
+    forecast_rows.extend(new_rows)
 
 
 # =========================================================================
@@ -400,12 +494,14 @@ def gen_pending_orders(books, locations, scenario_b_isbns) -> list[dict]:
     isbns = [b["isbn13"] for b in books]
 
     # ── A. 신간 추론 — PUBLISHER_ORDER + urgency=NEWBOOK (출판사 신간 신청 결정) ──
+    # V6.2: 출판사 → WH 본체 → 매장 분배. target 은 WH 본체 (15/16) 만.
+    wh_locs = [l["location_id"] for l in locations if l["location_type"] == "WH"]
     # 4건: 2 권역 × 2 status (APPROVED / PENDING)
     for i, (isbn, status, hours) in enumerate([
         (isbns[20], "APPROVED", 30), (isbns[21], "APPROVED", 28),  # WH-1 & WH-2 분배
         (isbns[22], "PENDING",  10), (isbns[23], "PENDING",  6),
     ]):
-        target_wh_loc = 1 if i % 2 == 0 else 7  # WH 인근 매장 (강남점 / 부산서면점)
+        target_wh_loc = wh_locs[i % 2] if len(wh_locs) >= 2 else wh_locs[0]
         rows.append(_po_row("PUBLISHER_ORDER", isbn, None, target_wh_loc,
                             qty=80, urgency="NEWBOOK", status=status,
                             auto_exec=False, hours_ago=hours, reason="new_book_distribution"))
@@ -419,35 +515,41 @@ def gen_pending_orders(books, locations, scenario_b_isbns) -> list[dict]:
                             urgency="NORMAL", status="PENDING" if i < 2 else "APPROVED",
                             hours_ago=8 + i * 4, reason="rebalance_low_stock"))
 
-    # B2. WH_TRANSFER 2건 (수도권 → 영남 양측 — 양 wh 매장)
-    for i, (isbn, src, tgt) in enumerate([
-        (scenario_b_isbns[3], 1, 7),  # 강남점 → 부산 서면점
-        (scenario_b_isbns[4], 4, 9),  # 홍대점 → 울산 삼산점
-    ]):
-        rows.append(_po_row("WH_TRANSFER", isbn, src, tgt, qty=50,
-                            urgency="NORMAL", status="PENDING",
-                            hours_ago=4 + i * 2, reason="cross_region_balance"))
+    # B2. WH_TRANSFER 2건 (수도권 WH ↔ 영남 WH — V6.2 정의: WH 본체 간만)
+    wh1_loc = next((l["location_id"] for l in locations if l["location_type"] == "WH" and l["wh_id"] == 1), None)
+    wh2_loc = next((l["location_id"] for l in locations if l["location_type"] == "WH" and l["wh_id"] == 2), None)
+    if wh1_loc and wh2_loc:
+        for i, (isbn, src, tgt) in enumerate([
+            (scenario_b_isbns[3], wh1_loc, wh2_loc),  # 수도권 WH → 영남 WH
+            (scenario_b_isbns[4], wh1_loc, wh2_loc),  # 수도권 WH → 영남 WH
+        ]):
+            rows.append(_po_row("WH_TRANSFER", isbn, src, tgt, qty=50,
+                                urgency="NORMAL", status="PENDING",
+                                hours_ago=4 + i * 2, reason="cross_region_balance"))
 
     # B3. PUBLISHER_ORDER 3건 (URGENT/CRITICAL · auto_execute_eligible)
-    for i, (isbn, urg, tgt) in enumerate([
-        (scenario_b_isbns[5], "URGENT",   1),  # WH 인근 강남점
-        (scenario_b_isbns[6], "CRITICAL", 7),  # 부산 서면점
-        (scenario_b_isbns[7], "URGENT",   2),  # 광화문점
-    ]):
-        rows.append(_po_row("PUBLISHER_ORDER", isbn, None, tgt, qty=100,
-                            urgency=urg, status="PENDING",
-                            auto_exec=True, hours_ago=2 + i, reason="forecast_shortage"))
+    # V6.2: 출판사 → WH 본체. target 은 WH 본체 (15/16) 만.
+    if wh1_loc and wh2_loc:
+        for i, (isbn, urg, tgt) in enumerate([
+            (scenario_b_isbns[5], "URGENT",   wh1_loc),  # 수도권 WH
+            (scenario_b_isbns[6], "CRITICAL", wh2_loc),  # 영남 WH
+            (scenario_b_isbns[7], "URGENT",   wh1_loc),  # 수도권 WH
+        ]):
+            rows.append(_po_row("PUBLISHER_ORDER", isbn, None, tgt, qty=100,
+                                urgency=urg, status="PENDING",
+                                auto_exec=True, hours_ago=2 + i, reason="forecast_shortage"))
 
-    # ── C. 권역 이동 4건 — 시연 정합으로 모두 PENDING 시작 ──
-    for i, (isbn, src, tgt) in enumerate([
-        (isbns[40], 2, 8),   # 광화문 → 대구 동성
-        (isbns[41], 3, 11),  # 잠실 → 부산 센텀
-        (isbns[42], 7, 1),   # 부산 서면 → 강남
-        (isbns[43], 10, 4),  # 대구 교대 → 홍대
-    ]):
-        rows.append(_po_row("WH_TRANSFER", isbn, src, tgt, qty=30,
-                            urgency="NORMAL", status="PENDING",
-                            hours_ago=12 + i * 6, reason="capacity_balance"))
+    # ── C. 권역 이동 4건 — V6.2 정의: WH 본체 간만. 시연 정합으로 모두 PENDING 시작 ──
+    if wh1_loc and wh2_loc:
+        for i, (isbn, src, tgt) in enumerate([
+            (isbns[40], wh1_loc, wh2_loc),  # 수도권 → 영남
+            (isbns[41], wh1_loc, wh2_loc),
+            (isbns[42], wh2_loc, wh1_loc),  # 영남 → 수도권
+            (isbns[43], wh2_loc, wh1_loc),
+        ]):
+            rows.append(_po_row("WH_TRANSFER", isbn, src, tgt, qty=30,
+                                urgency="NORMAL", status="PENDING",
+                                hours_ago=12 + i * 6, reason="capacity_balance"))
 
     return rows
 
@@ -516,13 +618,20 @@ def gen_pending_orders_daily(books, locations, days: int = 7, per_day: int = 100
                 wh = random.choice([1, 2])
                 src, tgt = random.sample(wh_groups[wh], 2)
             elif order_type == "WH_TRANSFER":
+                # V6.2 Notion: WH_TRANSFER 는 WH 본체 (location_type='WH') 간 이동만
+                # wh_locs = [{wh1 location_id}, {wh2 location_id}] 형태로 함수 위에 정의 가정
+                wh_locs = [l["location_id"] for l in locations if l["location_type"] == "WH"]
+                if len(wh_locs) < 2:
+                    continue
                 if random.random() < 0.5:
-                    src = random.choice(wh_groups[1]); tgt = random.choice(wh_groups[2])
+                    src, tgt = wh_locs[0], wh_locs[1]
                 else:
-                    src = random.choice(wh_groups[2]); tgt = random.choice(wh_groups[1])
+                    src, tgt = wh_locs[1], wh_locs[0]
             else:  # PUBLISHER_ORDER
                 src = None
-                tgt = random.choice(store_ids)
+                # V6.2: 출판사 → WH 분배 (지점 직접 X)
+                wh_locs = [l["location_id"] for l in locations if l["location_type"] == "WH"]
+                tgt = random.choice(wh_locs) if wh_locs else random.choice(store_ids)
 
             rows.append(_po_row(
                 order_type, isbn, src, tgt, qty,
@@ -810,12 +919,19 @@ def main() -> None:
     # gen_inventory · gen_forecast_cache · gen_pending_orders 모두 같은 list 사용 → 정합 보장.
     scenario_b_isbns = [b["isbn13"] for b in books[:8]]
 
-    inventory = gen_inventory(books, locations, scenario_b_isbns)
-    reservations = gen_reservations(books, locations)
+    # forecast 가 먼저 — inventory.safety_stock 이 forecast D+1 × 5 (사용자 결정 2026-05-13)
     forecast_cache = gen_forecast_cache(books, scenario_b_isbns, days=7)
+    # WH row 추가 (자기 권역 매장 합산 · 오프라인+온라인) — 사용자 결정 2026-05-13
+    append_wh_forecast(forecast_cache, locations)
+    inventory = gen_inventory(books, locations, scenario_b_isbns, forecast_cache)
+    reservations = gen_reservations(books, locations)
     # 시연 정합: D-1~D-6 처리완료 (600 row) · D-0 0 row (cascade 발의 버튼이 동적 생성)
+    # D-7 ~ D-365 history (~17950 row) — 일자별 상세 history view 용.
     # 기존 scenario fixture (gen_pending_orders) 는 D-0 PENDING 포함이라 제외.
-    pending_orders = gen_pending_orders_daily(books, locations, days=7, per_day=100)
+    from gen_history_365 import gen_pending_orders_history_365
+    pending_recent  = gen_pending_orders_daily(books, locations, days=7, per_day=100)
+    pending_history = gen_pending_orders_history_365(books, locations, per_day=50)
+    pending_orders  = pending_recent + pending_history
     order_approvals = gen_order_approvals(pending_orders)
     returns_ = gen_returns(books, locations)
     new_book_requests = gen_new_book_requests(publishers)
