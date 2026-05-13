@@ -334,12 +334,15 @@ def gen_reservations(books, locations) -> list[dict]:
 # 8. forecast_cache (D+1 only · book × store, store_id 1~12)
 # =========================================================================
 def gen_forecast_cache(books, scenario_b_isbns: list[str], days: int = 7) -> list[dict]:
-    """forecast_cache · 7d rolling (D+0 ~ D+6) × 약 1000 row/day = 7000 row.
+    """forecast_cache · 7d rolling (D+0 ~ D+6) × 전 책 × 전 매장 = 1000×14×7 ≈ 98k row.
 
-    각 day 마다:
-      - 시나리오 B fixture 8 도서 (SHORT_PAIRS) 의도적 high predicted_demand
-      - 일반 random fill (books[:~85] × 12 store ≈ 1000 row)
+    매일 Vertex AI 가 모든 (book, store) 페어 예측 출력 — frontend AI 수요예측 컬럼
+    빈 셀 없어야 함 (`branch10` 등 매장 재고 화면 정합).
 
+    분포:
+      - 시나리오 B fixture 8 도서 × SHORT_PAIRS 매장 = 의도적 high spike (50~80권/day)
+      - 인기 도서 (~15%): 5~25권/day random
+      - 일반 도서 (~85%): 0~3권/day random (대부분 낮음 — 현실 long-tail)
     PK (snapshot_date, isbn13, store_id) seen check 로 중복 방지.
     """
     SHORT_PAIRS: dict[str, list[int]] = {
@@ -355,12 +358,16 @@ def gen_forecast_cache(books, scenario_b_isbns: list[str], days: int = 7) -> lis
     rows: list[dict] = []
     seen: set[tuple[str, str, int]] = set()
 
+    # 책 인기도 결정 (~15% popular) — 모든 day 일관 유지
+    popular_isbns: set[str] = set()
+    for b in books:
+        if random.random() < 0.15:
+            popular_isbns.add(b["isbn13"])
+
     for d in range(days):
         snap_date = TODAY + timedelta(days=d)
-        day_rows = 0
-        target_per_day = 1000
 
-        # 시나리오 B fixture 먼저 (모든 day 동일 패턴)
+        # 시나리오 B fixture 먼저 (high spikes — 모든 day 동일 패턴)
         for isbn, locs in SHORT_PAIRS.items():
             for store_id in locs:
                 key = (snap_date.isoformat(), isbn, store_id)
@@ -377,32 +384,27 @@ def gen_forecast_cache(books, scenario_b_isbns: list[str], days: int = 7) -> lis
                     "model_version":    "automl-v1.0.0",
                     "synced_at": NOW.isoformat(),
                 })
-                day_rows += 1
 
-        # 일반 random fill — day 별 target_per_day 까지
-        # store_id 1~12 (오프라인) + 13,14 (온라인 가상) — WH 합산 base
-        for b in books[:200]:
-            if day_rows >= target_per_day:
-                break
+        # 일반 fill — 전 책 × 전 매장 (오프라인 1~12 + 온라인 13,14) 빠짐없이 row 생성
+        for b in books:
+            isbn = b["isbn13"]
+            is_popular = isbn in popular_isbns
             for store_id in range(1, 15):
-                if day_rows >= target_per_day:
-                    break
-                key = (snap_date.isoformat(), b["isbn13"], store_id)
+                key = (snap_date.isoformat(), isbn, store_id)
                 if key in seen:
                     continue
                 seen.add(key)
-                base = random.randint(1, 30)
+                base = random.uniform(5, 25) if is_popular else random.uniform(0, 3)
                 rows.append({
                     "snapshot_date": snap_date.isoformat(),
-                    "isbn13": b["isbn13"],
+                    "isbn13": isbn,
                     "store_id": store_id,
-                    "predicted_demand": round(base * random.uniform(0.8, 1.2), 2),
+                    "predicted_demand": round(base, 2),
                     "confidence_low":   round(base * 0.7, 2),
                     "confidence_high":  round(base * 1.3, 2),
                     "model_version":    "automl-v1.0.0",
                     "synced_at": NOW.isoformat(),
                 })
-                day_rows += 1
     return rows
 
 
