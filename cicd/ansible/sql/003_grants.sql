@@ -54,9 +54,10 @@ GRANT INSERT                ON audit_log        TO inventory_svc;
 GRANT INSERT, UPDATE, DELETE ON forecast_cache  TO forecast_svc;
 GRANT INSERT                ON audit_log        TO forecast_svc;
 
--- decision-svc: pending_orders creator
-GRANT INSERT, UPDATE        ON pending_orders   TO decision_svc;
-GRANT INSERT                ON audit_log        TO decision_svc;
+-- decision-svc: pending_orders creator + plan-daily 멱등성 (같은 snapshot_date 재호출 시 기존 plan rows cleanup)
+GRANT INSERT, UPDATE, DELETE ON pending_orders   TO decision_svc;
+GRANT DELETE                 ON order_approvals  TO decision_svc;
+GRANT INSERT                 ON audit_log        TO decision_svc;
 
 -- intervention-svc: approval + execute + returns finalizer + HQ master controls
 GRANT INSERT, UPDATE        ON pending_orders   TO intervention_svc;
@@ -75,9 +76,11 @@ GRANT INSERT                ON audit_log         TO notification_svc;
 -- (already covered by bookflow_app SELECT)
 
 -- auth-pod: OIDC self-provisioning · INSERT new users + UPDATE info on each login (Phase γ)
+-- UPN 패턴 매핑 (2026-05-13) — role/scope_wh_id/scope_store_id 도 매 로그인 refresh.
 GRANT SELECT                                            ON users     TO auth_pod;
 GRANT INSERT                                            ON users     TO auth_pod;
-GRANT UPDATE (email, display_name, last_login_at)       ON users     TO auth_pod;
+GRANT UPDATE (email, display_name, last_login_at,
+              role, scope_wh_id, scope_store_id)        ON users     TO auth_pod;
 GRANT INSERT                                            ON audit_log TO auth_pod;
 
 -- publish-watcher: new_book_requests writer (external publisher source)
