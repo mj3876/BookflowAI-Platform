@@ -71,11 +71,48 @@ def _process(cur, rc, rec: dict) -> None:
              unit_price, discount, revenue, payment_method)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (txn_id) DO NOTHING
+        RETURNING txn_id
         """,
         (txn_id, event_ts, store_id, wh_id, channel, isbn13, qty,
          unit_price, discount, revenue, payment_method),
     )
+    inserted = cur.fetchone() is not None
     location_id = store_id  # 아래 inventory UPDATE 에서 sim 의 location_id 그대로 사용
+
+    # kpi_daily UPSERT (sales_realtime 단일 truth source · seed 와 동일 aggregation 규약)
+    # PK: (kpi_date, store_id, category_id=0, channel). 시연 30일 차트 (sales/30days) 가 이 테이블을 읽음.
+    # 신규 record 만 집계 (ON CONFLICT DO NOTHING 으로 중복 record 제외 — sales_realtime 와 동일 idempotency).
+    if inserted:
+        cur.execute(
+            """
+            INSERT INTO kpi_daily
+                (kpi_date, store_id, category_id, channel,
+                 qty_sold, revenue, tx_count, avg_price,
+                 unique_isbn_count, top_isbn, synced_from_bq_at)
+            VALUES (
+                (%s::timestamptz AT TIME ZONE 'Asia/Seoul')::date,
+                %s, 0, %s,
+                %s, %s, 1,
+                CASE WHEN %s > 0 THEN (%s / %s)::int ELSE NULL END,
+                1, %s, NOW()
+            )
+            ON CONFLICT (kpi_date, store_id, category_id, channel) DO UPDATE
+              SET qty_sold  = kpi_daily.qty_sold + EXCLUDED.qty_sold,
+                  revenue   = kpi_daily.revenue  + EXCLUDED.revenue,
+                  tx_count  = kpi_daily.tx_count + 1,
+                  avg_price = CASE
+                                WHEN (kpi_daily.qty_sold + EXCLUDED.qty_sold) > 0
+                                THEN ((kpi_daily.revenue + EXCLUDED.revenue)
+                                      / (kpi_daily.qty_sold + EXCLUDED.qty_sold))::int
+                                ELSE kpi_daily.avg_price
+                              END,
+                  synced_from_bq_at = NOW()
+            """,
+            (event_ts, store_id, channel,
+             qty, revenue,
+             qty, revenue, qty,
+             isbn13),
+        )
 
     # Notion 명세: 온라인 매장 (location_type='STORE_ONLINE') 의 재고 출처 = WH 본체
     # → channel=ONLINE 또는 location.is_virtual=true 시 inventory 차감 대상 location 을 WH 본체로 substitute

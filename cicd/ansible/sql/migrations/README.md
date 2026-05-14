@@ -27,3 +27,4 @@ Re-running migrations on already-migrated DB must be a no-op.
 |---|---|---|
 | 001 | 001_init.sql | baseline marker + schema_versions table creation |
 | 002 | 002_returns_reject_columns.sql | A4 FR-A6.8: returns.rejected_at + reject_reason |
+| 005 | 005_wh_to_store_order_type.sql | Stage 0 WH_TO_STORE order_type 정합 코멘트 |

@@ -454,12 +454,29 @@ def append_wh_forecast(forecast_rows: list[dict], locations: list[dict]) -> None
 # =========================================================================
 # 9. pending_orders (30 · 다양 상태 · order_type 다양)
 # =========================================================================
+# Stage 별 LEAD_DAYS — decision-svc/src/routes/decision.py 의 LEAD_DAYS 와 동일.
+# WH_TO_STORE/REBALANCE=1 · WH_TRANSFER=2 · PUBLISHER_ORDER=4 (외부 3일 + 익일 처리).
+PO_LEAD_DAYS = {
+    "REBALANCE":       1,
+    "WH_TO_STORE":     1,
+    "WH_TRANSFER":     2,
+    "PUBLISHER_ORDER": 4,
+}
+
+
 def _po_row(order_type, isbn13, src, tgt, qty, urgency, status,
             auto_exec=False, hours_ago=12, reason="demand_growth"):
-    """pending_orders row helper — 시나리오 fixture 의 row 생성 단순화."""
+    """pending_orders row helper — 시나리오 fixture 의 row 생성 단순화.
+
+    forecast_rationale.expected_arrival_date: created_at + LEAD_DAYS[order_type] (date).
+    decision-svc /decide 와 /plan-daily 가 채우는 필드 정합.
+    """
     created = NOW - timedelta(hours=hours_ago)
     approved_at = (created + timedelta(hours=1)).isoformat() if status in ("APPROVED", "AUTO_EXECUTED", "EXECUTED") else ""
     executed_at = (created + timedelta(hours=2)).isoformat() if status in ("AUTO_EXECUTED", "EXECUTED") else ""
+    expected_arrival = (
+        created.date() + timedelta(days=PO_LEAD_DAYS.get(order_type, 1))
+    ).isoformat()
     return {
         "order_id": str(uuid.uuid4()),
         "order_type": order_type,
@@ -469,7 +486,11 @@ def _po_row(order_type, isbn13, src, tgt, qty, urgency, status,
         "qty": qty,
         "est_lead_time_hours": 24 if order_type == "PUBLISHER_ORDER" else 6,
         "est_cost": qty * 15000 if order_type == "PUBLISHER_ORDER" else qty * 500,
-        "forecast_rationale": json.dumps({"reason": reason, "ratio": 0.35}),
+        "forecast_rationale": json.dumps({
+            "reason": reason,
+            "ratio": 0.35,
+            "expected_arrival_date": expected_arrival,
+        }),
         "urgency_level": urgency,
         "auto_execute_eligible": "true" if auto_exec else "false",
         "stock_days_remaining": 1.5 if urgency in ("URGENT", "CRITICAL") else 4.0,
@@ -579,14 +600,20 @@ def gen_pending_orders_daily(books, locations, days: int = 7, per_day: int = 100
           · URGENT/CRITICAL → APPROVED (07:00 batch 완료)
           · NORMAL → PENDING (대부분 · 사용자가 처리할 ~14건) + 일부 APPROVED (사람이 이미 ~5건)
 
-    분포:
-      - order_type: REBALANCE 50% · WH_TRANSFER 30% · PUBLISHER_ORDER 20%
+    분포 (2026-05-14 WH_TO_STORE 추가):
+      - order_type: WH_TO_STORE 25% · REBALANCE 35% · WH_TRANSFER 20% · PUBLISHER_ORDER 20%
       - urgency: NORMAL 70% · URGENT 25% · CRITICAL 5%
     """
     rows: list[dict] = []
     isbns = [b["isbn13"] for b in books]
     store_ids = [l["location_id"] for l in locations if l["location_id"] <= 12]
     wh_groups = {1: [1, 2, 3, 4, 5, 6], 2: [7, 8, 9, 10, 11, 12]}
+    # WH 본체 (location_type='WH') wh_id → location_id 매핑
+    wh_body_by_id = {
+        l["wh_id"]: l["location_id"]
+        for l in locations
+        if l["location_type"] == "WH" and l.get("wh_id") is not None
+    }
 
     for d in range(days):
         day_offset = days - 1 - d   # day_offset=0 이 오늘 (D-0), days-1 이 가장 과거 (D-6)
@@ -596,8 +623,8 @@ def gen_pending_orders_daily(books, locations, days: int = 7, per_day: int = 100
             continue
         for i in range(per_day):
             order_type = random.choices(
-                ["REBALANCE", "WH_TRANSFER", "PUBLISHER_ORDER"],
-                weights=[50, 30, 20],
+                ["WH_TO_STORE", "REBALANCE", "WH_TRANSFER", "PUBLISHER_ORDER"],
+                weights=[25, 35, 20, 20],
             )[0]
             urgency = random.choices(["NORMAL", "URGENT", "CRITICAL"], weights=[70, 25, 5])[0]
             auto_exec = urgency in ("URGENT", "CRITICAL")
@@ -616,7 +643,14 @@ def gen_pending_orders_daily(books, locations, days: int = 7, per_day: int = 100
                                     hour=random.randint(9, 17), minute=random.randint(0, 59), second=0)
             hours_ago = max(1, int((NOW - target_dt).total_seconds() / 3600))
 
-            if order_type == "REBALANCE":
+            if order_type == "WH_TO_STORE":
+                # 자기 권역 wh 본체 → 자기 권역 매장 (2026-05-14 Stage 0)
+                wh = random.choice([1, 2])
+                src = wh_body_by_id.get(wh)
+                if src is None:
+                    continue
+                tgt = random.choice(wh_groups[wh])
+            elif order_type == "REBALANCE":
                 wh = random.choice([1, 2])
                 src, tgt = random.sample(wh_groups[wh], 2)
             elif order_type == "WH_TRANSFER":
