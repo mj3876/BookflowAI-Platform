@@ -94,6 +94,8 @@ GRANT INSERT                ON sales_realtime    TO pos_ingestor;
 GRANT UPDATE                ON inventory         TO pos_ingestor;
 GRANT INSERT, UPDATE        ON reservations      TO pos_ingestor;
 GRANT INSERT                ON audit_log         TO pos_ingestor;
+-- kpi_daily UPSERT (실시간 30일 차트 정합 · sales_realtime 와 같은 transaction)
+GRANT INSERT, UPDATE        ON kpi_daily         TO pos_ingestor;
 
 -- spike-detect (Lambda): spike_events + may trigger pending_orders
 GRANT INSERT, UPDATE        ON spike_events      TO spike_detect;
