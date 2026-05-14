@@ -69,11 +69,17 @@ for i, opt in enumerate(options[:2]):
     print(f'  Tunnel {i} Outside IP  : {outside_ip}')
     print(f'  Tunnel {i} Inside CIDR : {inside_cidr}  (AWS={aws_ip}  GCP={gcp_ip})')
 
-# ── PSK 추출 ──
-xml   = vpn.get('CustomerGatewayConfiguration', '')
-psks  = re.findall(r'<pre_shared_key>([^<]+)</pre_shared_key>', xml)
-psk   = psks[0] if psks else '<PSK_HERE>'
-print(f'\n  PSK : {psk}')
+# ── PSK 추출 (Options.TunnelOptions 사용 · XML은 IKEv2 적용시 갱신 안됨) ──
+tunnel_opts = vpn.get('Options', {}).get('TunnelOptions', [])
+psk0 = tunnel_opts[0].get('PreSharedKey', '<PSK_HERE>') if len(tunnel_opts) > 0 else '<PSK_HERE>'
+psk1 = tunnel_opts[1].get('PreSharedKey', psk0)         if len(tunnel_opts) > 1 else psk0
+psk  = psk0  # tfvars 단일값 출력용 (양쪽 동일하면 그대로, 다르면 tunnel0 기준)
+if psk0 != psk1:
+    print(f'\n  PSK tunnel0 : {psk0}')
+    print(f'  PSK tunnel1 : {psk1}')
+    print('  ※ PSK가 터널별로 다릅니다. GCP 재배포 시 터널별로 따로 설정 필요.')
+else:
+    print(f'\n  PSK : {psk0}')
 
 # ── AWS VPC CIDRs ──
 vpcs = ec2.describe_vpcs(
@@ -100,7 +106,7 @@ aws_peer_ips      = ["{t0['outside_ip']}", "{t1['outside_ip']}"]
 aws_tgw_bgp_asn   = $TGW_ASN
 gcp_router_asn    = 64514
 
-vpn_shared_secret = "{psk}"
+vpn_shared_secret = "{psk0}"
 
 aws_vpc_cidrs     = {cidr_tf}
 azure_vnet_cidr   = "10.1.0.0/16"
@@ -111,13 +117,15 @@ bgp_sessions = {{
   tunnel0 = {{
     vpn_gateway_interface           = 0
     peer_external_gateway_interface = 0
+    shared_secret                   = "{psk0}"
     router_ip_cidr                  = "{t0['gcp_cidr']}"
     peer_ip_address                 = "{t0['aws_ip']}"
     advertised_route_priority       = 100
   }}
   tunnel1 = {{
-    vpn_gateway_interface           = 1
+    vpn_gateway_interface           = 0
     peer_external_gateway_interface = 1
+    shared_secret                   = "{psk1}"
     router_ip_cidr                  = "{t1['gcp_cidr']}"
     peer_ip_address                 = "{t1['aws_ip']}"
     advertised_route_priority       = 100

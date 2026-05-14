@@ -33,6 +33,7 @@ Conditions:
 
 Resources:
   # ─── Azure Site-to-Site VPN Connection ───
+  # Azure VPN Gateway Route-Based는 IKEv2 사용 → AWS도 IKEv2로 맞춤
   AzureVpnConnection:
     Type: AWS::EC2::VPNConnection
     Condition: WithAzure
@@ -47,12 +48,71 @@ Resources:
         - WithAzurePsk
         - - PreSharedKey: !Ref AzurePresharedKey
             TunnelInsideCidr: 169.254.21.4/30
+            IKEVersions:
+              - Value: ikev2
+            Phase1EncryptionAlgorithms:
+              - Value: AES256
+            Phase1IntegrityAlgorithms:
+              - Value: SHA2-256
+            Phase1DHGroupNumbers:
+              - Value: 14
+            Phase2EncryptionAlgorithms:
+              - Value: AES256
+            Phase2IntegrityAlgorithms:
+              - Value: SHA2-256
+            Phase2DHGroupNumbers:
+              - Value: 14
           - PreSharedKey: !Ref AzurePresharedKey
             TunnelInsideCidr: 169.254.21.8/30
-        - !Ref AWS::NoValue
+            IKEVersions:
+              - Value: ikev2
+            Phase1EncryptionAlgorithms:
+              - Value: AES256
+            Phase1IntegrityAlgorithms:
+              - Value: SHA2-256
+            Phase1DHGroupNumbers:
+              - Value: 14
+            Phase2EncryptionAlgorithms:
+              - Value: AES256
+            Phase2IntegrityAlgorithms:
+              - Value: SHA2-256
+            Phase2DHGroupNumbers:
+              - Value: 14
+        - - TunnelInsideCidr: 169.254.21.4/30
+            IKEVersions:
+              - Value: ikev2
+            Phase1EncryptionAlgorithms:
+              - Value: AES256
+            Phase1IntegrityAlgorithms:
+              - Value: SHA2-256
+            Phase1DHGroupNumbers:
+              - Value: 14
+            Phase2EncryptionAlgorithms:
+              - Value: AES256
+            Phase2IntegrityAlgorithms:
+              - Value: SHA2-256
+            Phase2DHGroupNumbers:
+              - Value: 14
+          - TunnelInsideCidr: 169.254.21.8/30
+            IKEVersions:
+              - Value: ikev2
+            Phase1EncryptionAlgorithms:
+              - Value: AES256
+            Phase1IntegrityAlgorithms:
+              - Value: SHA2-256
+            Phase1DHGroupNumbers:
+              - Value: 14
+            Phase2EncryptionAlgorithms:
+              - Value: AES256
+            Phase2IntegrityAlgorithms:
+              - Value: SHA2-256
+            Phase2DHGroupNumbers:
+              - Value: 14
       Tags: [{ Key: Name, Value: !Sub '${ProjectName}-vpn-azure' }]
 
   # ─── GCP HA VPN Connection ───
+  # IKEv2 필수 (GCP HA VPN은 IKEv2 전용)
+  # inside CIDR은 GCP Cloud Router BGP 설정과 반드시 일치해야 함
   GcpVpnConnection:
     Type: AWS::EC2::VPNConnection
     Condition: WithGcp
@@ -66,10 +126,67 @@ Resources:
       VpnTunnelOptionsSpecifications: !If
         - WithGcpPsk
         - - PreSharedKey: !Ref GcpPresharedKey
-            TunnelInsideCidr: 169.254.21.0/30
+            TunnelInsideCidr: 169.254.213.136/30
+            IKEVersions:
+              - Value: ikev2
+            Phase1EncryptionAlgorithms:
+              - Value: AES128
+            Phase1IntegrityAlgorithms:
+              - Value: SHA2-256
+            Phase1DHGroupNumbers:
+              - Value: 14
+            Phase2EncryptionAlgorithms:
+              - Value: AES128
+            Phase2IntegrityAlgorithms:
+              - Value: SHA2-256
+            Phase2DHGroupNumbers:
+              - Value: 14
           - PreSharedKey: !Ref GcpPresharedKey
-            TunnelInsideCidr: 169.254.22.0/30
-        - !Ref AWS::NoValue
+            TunnelInsideCidr: 169.254.100.72/30
+            IKEVersions:
+              - Value: ikev2
+            Phase1EncryptionAlgorithms:
+              - Value: AES128
+            Phase1IntegrityAlgorithms:
+              - Value: SHA2-256
+            Phase1DHGroupNumbers:
+              - Value: 14
+            Phase2EncryptionAlgorithms:
+              - Value: AES128
+            Phase2IntegrityAlgorithms:
+              - Value: SHA2-256
+            Phase2DHGroupNumbers:
+              - Value: 14
+        - - TunnelInsideCidr: 169.254.213.136/30
+            IKEVersions:
+              - Value: ikev2
+            Phase1EncryptionAlgorithms:
+              - Value: AES128
+            Phase1IntegrityAlgorithms:
+              - Value: SHA2-256
+            Phase1DHGroupNumbers:
+              - Value: 14
+            Phase2EncryptionAlgorithms:
+              - Value: AES128
+            Phase2IntegrityAlgorithms:
+              - Value: SHA2-256
+            Phase2DHGroupNumbers:
+              - Value: 14
+          - TunnelInsideCidr: 169.254.100.72/30
+            IKEVersions:
+              - Value: ikev2
+            Phase1EncryptionAlgorithms:
+              - Value: AES128
+            Phase1IntegrityAlgorithms:
+              - Value: SHA2-256
+            Phase1DHGroupNumbers:
+              - Value: 14
+            Phase2EncryptionAlgorithms:
+              - Value: AES128
+            Phase2IntegrityAlgorithms:
+              - Value: SHA2-256
+            Phase2DHGroupNumbers:
+              - Value: 14
       Tags: [{ Key: Name, Value: !Sub '${ProjectName}-vpn-gcp' }]
 
   # VPN Connection  TGW  attach   TGW VPN Attachment 

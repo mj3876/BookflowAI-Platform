@@ -39,7 +39,7 @@ Resources:
           Description: egress all
       Tags: [{ Key: Name, Value: !Sub '${ProjectName}-lambda-vpc-sg' }]
 
-  # 1. aladin-sync (cron daily 10:20 KST)
+  # 1. aladin-sync (cron daily 11:40 KST)
   AladinSyncFn:
     Type: AWS::Serverless::Function
     Properties:
@@ -63,10 +63,10 @@ Resources:
         Cron:
           Type: Schedule
           Properties:
-            Schedule: 'cron(20 1 * * ? *)'
+            Schedule: 'cron(40 2 * * ? *)'
             Enabled: true
             Name: !Sub ${ProjectName}-aladin-sync-cron
-            Description: daily 10:20 KST (01:20 UTC)
+            Description: daily 11:40 KST (02:40 UTC)
 
   # 2. event-sync (cron daily 16:50 KST)
   EventSyncFn:
@@ -159,7 +159,7 @@ Resources:
             Enabled: true
             Name: !Sub ${ProjectName}-spike-detect-cron
 
-  # 5. forecast-trigger (cron daily 10:30 KST)
+  # 5. forecast-trigger (cron daily 11:43 KST)
   ForecastTriggerFn:
     Type: AWS::Serverless::Function
     Properties:
@@ -191,10 +191,10 @@ Resources:
         Cron:
           Type: Schedule
           Properties:
-            Schedule: 'cron(30 1 * * ? *)'
+            Schedule: 'cron(43 2 * * ? *)'
             Enabled: true
             Name: !Sub ${ProjectName}-forecast-trigger-cron
-            Description: daily 10:30 KST (01:30 UTC)
+            Description: daily 11:43 KST (02:43 UTC)
 
   # 6. secret-forwarder (API Gateway)
   SecretForwarderFn:

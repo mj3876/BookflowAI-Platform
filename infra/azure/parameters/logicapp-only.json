@@ -1,0 +1,16 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": { "value": "japanwest" },
+    "prefix": { "value": "bookflowmj" },
+    "logicappIdentityId": { "value": "/subscriptions/e98a94bb-7532-4e49-8a36-bc42e30d5a81/resourcegroups/rg-bookflow/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-bookflowmj-logicapp" },
+    "logicappIdentityClientId": { "value": "e9a7ec60-5ac9-49b3-8677-9156ac48ff39" },
+    "keyVaultUri": { "value": "https://kv-bookflowmj.vault.azure.net/" },
+    "logAnalyticsWorkspaceId": { "value": "/subscriptions/e98a94bb-7532-4e49-8a36-bc42e30d5a81/resourceGroups/rg-bookflow/providers/Microsoft.OperationalInsights/workspaces/law-bookflowmj" },
+    "acsEndpoint": { "value": "acs-bookflowmj.japan.communication.azure.com" },
+    "acsSenderAddress": { "value": "DoNotReply@2ccec47b-b5b4-41a4-a704-c9f38070133a.azurecomm.net" },
+    "digestRecipients": { "value": "[{\"address\":\"ms8405493@gmail.com\",\"displayName\":\"본사/경영진\"},{\"address\":\"rladudgjs0427@gmail.com\",\"displayName\":\"물류센터\"},{\"address\":\"admin@bleach10905gmail.onmicrosoft.com\",\"displayName\":\"지점\"}]" },
+    "dashboardBaseUrl": { "value": "https://bookflow.duckdns.org" }
+  }
+}

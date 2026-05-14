@@ -3,8 +3,13 @@
 # Azure/GCP deploy 는 각 담당자 (민지/우혁) 본인 IaC 로 별도 진행.
 #
 # 실행 전 환경변수:
-#   BOOKFLOW_GCP_VPN_GW_IP   GCP HA VPN Gateway 공인 IP  (필수)
-#   BOOKFLOW_GCP_VPN_PSK     GCP VPN Pre-Shared Key      (선택 · 없으면 AWS 자동생성)
+#   BOOKFLOW_GCP_VPN_GW_IP   GCP HA VPN Gateway Interface 0 공인 IP  (필수)
+#                            → gcloud compute vpn-gateways describe <NAME> --region=<REGION>
+#                              --format="value(vpnInterfaces[0].ipAddress)"
+#                            ※ Interface 0 IP만 지정 (Interface 1 IP 아님)
+#                            ※ 이 IP가 AWS Customer Gateway로 등록되며 IKE 인증에 사용됨
+#   BOOKFLOW_GCP_VPN_PSK     GCP VPN Pre-Shared Key (양쪽 터널 동일 적용)
+#                            → 미입력 시 AWS 자동생성 (gcp-vpn-info.sh로 확인 후 GCP에 적용)
 #   BOOKFLOW_AZURE_VPN_GW_IP Azure VPN Gateway 공인 IP   (선택)
 #   BOOKFLOW_AZURE_VPN_PSK   Azure VPN Pre-Shared Key    (선택)
 #
