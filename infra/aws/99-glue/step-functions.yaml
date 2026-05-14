@@ -6,7 +6,7 @@ Parameters:
     Default: bookflow
 
 Resources:
-  # ─── Step Functions IAM Role ───
+  # --- Step Functions IAM Role ---
   StateMachineRole:
     Type: AWS::IAM::Role
     Properties:
@@ -50,7 +50,7 @@ Resources:
                   - logs:CreateLogStream
                 Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/vendedlogs/states/${ProjectName}-*
 
-  # ─── CloudWatch Log Group ───
+  # --- CloudWatch Log Group ---
   StateMachineLogGroup:
     Type: AWS::Logs::LogGroup
     DeletionPolicy: Delete
@@ -59,11 +59,11 @@ Resources:
       LogGroupName: !Sub /aws/vendedlogs/states/${ProjectName}-etl3
       RetentionInDays: 7
 
-  # ─── ETL State Machine ───
+  # --- ETL State Machine ---
   # ParallelMart (7 jobs):
-  #   ETL1: raw_pos_mart · raw_sns_mart · raw_aladin_mart · raw_event_mart  (S3 Raw → S3 Mart)
-  #   ETL2: rds_inventory_mart · rds_locations_mart · rds_store_location_map_mart  (RDS → S3 Mart)
-  # → SalesDailyAgg → FeaturesBuild
+  #   ETL1: raw_pos_mart, raw_sns_mart, raw_aladin_mart, raw_event_mart  (S3 Raw -> S3 Mart)
+  #   ETL2: rds_inventory_mart, rds_locations_mart, rds_store_location_map_mart  (RDS -> S3 Mart)
+  # -> SalesDailyAgg -> FeaturesBuild
   Etl3StateMachine:
     Type: AWS::StepFunctions::StateMachine
     DependsOn: StateMachineRole
@@ -80,7 +80,7 @@ Resources:
       DefinitionString: !Sub
         - |
           {
-            "Comment": "BOOKFLOW ETL · ParallelMart (ETL1+ETL2) → sales_daily_agg → features_build",
+            "Comment": "BOOKFLOW ETL - ParallelMart (ETL1+ETL2, all 7 jobs) -> sales_daily_agg -> features_build",
             "StartAt": "ParallelMart",
             "States": {
               "ParallelMart": {

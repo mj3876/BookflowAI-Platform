@@ -13,8 +13,8 @@ Parameters:
     Description: Glue 4.0 (Spark 3.3 · Python 3.10)
   GcsBucket:
     Type: String
-    Default: ''
-    Description: GCS staging bucket name for features_build dual-write. Pass by env/deploy parameter.
+    Default: 'project-8ab6bf05-54d2-4f5d-b8d-bookflow-staging'
+    Description: GCS staging bucket name for features_build dual-write.
 
 Resources:
   # ─── Glue Database (Mart  ) ───

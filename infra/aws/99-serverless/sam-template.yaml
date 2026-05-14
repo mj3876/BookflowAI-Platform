@@ -6,13 +6,6 @@ Parameters:
   ProjectName:
     Type: String
     Default: bookflow
-  StepFunctionsArn:
-    Type: String
-    Default: ''
-    Description: ETL3 Step Functions State Machine ARN
-
-Conditions:
-  HasStepFn: !Not [!Equals [!Ref StepFunctionsArn, '']]
 
 Globals:
   Function:
@@ -68,7 +61,7 @@ Resources:
             Name: !Sub ${ProjectName}-aladin-sync-cron
             Description: daily 11:40 KST (02:40 UTC)
 
-  # 2. event-sync (cron daily 16:50 KST)
+  # 2. event-sync (cron daily 16:15 KST)
   EventSyncFn:
     Type: AWS::Serverless::Function
     Properties:
@@ -96,7 +89,7 @@ Resources:
             Schedule: 'cron(15 7 * * ? *)'
             Enabled: true
             Name: !Sub ${ProjectName}-event-sync-cron
-            Description: daily 16:50 KST (07:50 UTC)
+            Description: daily 16:15 KST (07:15 UTC)
 
   # 3. sns-gen (cron 10min)
   SnsGenFn:
@@ -180,13 +173,12 @@ Resources:
         Variables:
           PROJECT_NAME: !Ref ProjectName
           REGION: !Ref AWS::Region
-          STEP_FN_ARN: !If [HasStepFn, !Ref StepFunctionsArn, '']
+          STEP_FN_ARN: !ImportValue
+            Fn::Sub: ${ProjectName}-sfn-etl3-arn
       Policies:
-        - !If
-          - HasStepFn
-          - StepFunctionsExecutionPolicy:
-              StateMachineName: !Select [6, !Split [':', !Ref StepFunctionsArn]]
-          - !Ref AWS::NoValue
+        - StepFunctionsExecutionPolicy:
+            StateMachineName: !ImportValue
+              Fn::Sub: ${ProjectName}-sfn-etl3-name
       Events:
         Cron:
           Type: Schedule
