@@ -82,16 +82,18 @@ def _helm_install_ingress_nginx() -> None:
     ], check=True)
 
 
+CERT_MANAGER_ROUTE53_ROLE_ARN = "arn:aws:iam::354493396671:role/bookflow-cert-manager-route53"
+
+
 def _helm_install_cert_manager() -> None:
-    log.info("helm upgrade --install cert-manager (with DNS-01 recursive nameservers)")
-    # extraArgs: --dns01-recursive-nameservers-only + --dns01-recursive-nameservers=8.8.8.8:53,1.1.1.1:53
-    # → public recursive resolver 사용 (EKS Worker Node 의 외부 :53 차단 우회)
+    """cert-manager + ServiceAccount IRSA (Route53 DNS-01)."""
+    log.info(f"helm upgrade --install cert-manager · IRSA={CERT_MANAGER_ROUTE53_ROLE_ARN}")
     subprocess.run([
         "helm", "upgrade", "--install", "cert-manager", "jetstack/cert-manager",
         "--namespace", "cert-manager", "--create-namespace",
         "--version", CERT_MANAGER_VERSION,
         "--set", "crds.enabled=true",
-        "--set", "extraArgs={--dns01-recursive-nameservers-only,--dns01-recursive-nameservers=8.8.8.8:53\\,1.1.1.1:53}",
+        "--set-string", f"serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn={CERT_MANAGER_ROUTE53_ROLE_ARN}",
         "--wait", "--timeout", "5m",
     ], check=True)
 
@@ -118,6 +120,42 @@ def _helm_install_external_secrets() -> None:
         "--set-string", f"serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn={eso_role_arn}",
         "--wait", "--timeout", "5m",
     ], check=True)
+
+
+ROUTE53_HOSTED_ZONE_ID = "Z0061717U502ZCK2HCCF"  # myosoon.store
+NLB_HOSTED_ZONE_ID = "Z31USIVHYNEOWT"  # NLB ap-northeast-1
+PUBLIC_FQDN = "bookflow.myosoon.store"
+
+
+def _update_route53_a_alias() -> None:
+    """매일 새 NLB DNS → Route53 A alias 자동 UPSERT (bookflow.myosoon.store)."""
+    import boto3
+    r = subprocess.run(
+        ["kubectl", "get", "svc", "-n", "ingress-nginx", "ingress-nginx-controller",
+         "-o", "jsonpath={.status.loadBalancer.ingress[0].hostname}"],
+        capture_output=True, text=True, check=True,
+    )
+    nlb_dns = r.stdout.strip()
+    if not nlb_dns:
+        log.err("NLB DNS not found · ingress-nginx LoadBalancer 미배포")
+        raise SystemExit(1)
+    log.info(f"Route53 UPSERT {PUBLIC_FQDN} → {nlb_dns}")
+    boto3.client("route53").change_resource_record_sets(
+        HostedZoneId=ROUTE53_HOSTED_ZONE_ID,
+        ChangeBatch={"Changes": [{
+            "Action": "UPSERT",
+            "ResourceRecordSet": {
+                "Name": f"{PUBLIC_FQDN}.",
+                "Type": "A",
+                "AliasTarget": {
+                    "HostedZoneId": NLB_HOSTED_ZONE_ID,
+                    "DNSName": nlb_dns + ".",
+                    "EvaluateTargetHealth": False,
+                },
+            },
+        }]},
+    )
+    log.info(f"  ✓ {PUBLIC_FQDN} alias updated")
 
 
 def _apply_cluster_secret_store() -> None:
@@ -284,11 +322,11 @@ def _apply_manifests() -> None:
         subprocess.run(["kubectl", "apply", "-f", "-"], input=text.encode("utf-8"), check=True)
 
     apps = _apps_dir()
-    # 인프라 manifests (먼저 · cert-manager + duckdns + dashboard ingress)
+    # 인프라 manifests (먼저 · cluster-issuer Route53 + certificate + dashboard ingress)
+    # Route53 DNS-01 로 전환 (2026-05-14) — duckdns-sync 제거.
     infra_manifests = [
         apps / "eks-pods" / "auth-pod" / "k8s" / "cluster-issuer.yaml",
         apps / "eks-pods" / "auth-pod" / "k8s" / "certificate.yaml",
-        apps / "eks-pods" / "duckdns-sync" / "k8s" / "cronjob.yaml",
         apps / "eks-pods" / "dashboard-svc" / "k8s" / "ingress.yaml",
     ]
     for m in infra_manifests:
@@ -331,18 +369,12 @@ def deploy() -> None:
     _ensure_tools()
     _ensure_kubeconfig()
 
-    token = os.environ.get("BOOKFLOW_DUCKDNS_TOKEN")
-    if not token:
-        log.err("BOOKFLOW_DUCKDNS_TOKEN missing in scripts/aws/config/.env.local")
-        raise SystemExit(1)
-
     _helm_repo_add()
     _helm_install_ingress_nginx()
     _helm_install_cert_manager()
-    _helm_install_webhook_duckdns(token)
     _helm_install_external_secrets()
-    _ensure_duckdns_token_secret(token)
     _apply_cluster_secret_store()
+    _update_route53_a_alias()
     _apply_manifests()
     _sync_rds_pod_roles()
     # ALTER ROLE 후 7 pod 의 connection pool 캐시 무효화 — rollout restart 로 새 password 적용
@@ -356,7 +388,7 @@ def deploy() -> None:
     )
 
     log.step("=== task-eks-addons done ===")
-    log.info("https://bookflow.duckdns.org/ should serve in 60-90s after first cert issuance")
+    log.info("https://bookflow.myosoon.store/ should serve in 60-90s after first cert issuance")
 
 
 def destroy() -> None:
