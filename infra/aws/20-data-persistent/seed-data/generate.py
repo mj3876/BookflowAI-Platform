@@ -261,8 +261,10 @@ def gen_inventory(
                         for s in target_locs if s["location_type"] != "WH"
                     )
                 ]
+                # 2026-05-15: floor 100 제거 — 도서별 실제 5일치 수요 그대로 (사용자 발견 fix)
+                # 작은 수요 도서는 safety 가 적게 (자연스러운 분포)
                 wh_demand_5d = sum(fc_d1[k] for k in wh_stores) * 5
-                safety = max(int(wh_demand_5d), 100) if wh_stores else 100
+                safety = max(int(wh_demand_5d), 5) if wh_stores else 5
                 # 2026-05-15 v3: soldout (on_hand=0) 회피 — 시연 어색 방지
                 # 80% 충분 (safety × 2~4 · partner_surplus 양수) · 20% 빠듯 (safety × 1.0~1.5)
                 wh_bucket = random.random()
