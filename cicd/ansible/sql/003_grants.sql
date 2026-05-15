@@ -64,6 +64,8 @@ GRANT INSERT, UPDATE        ON pending_orders   TO intervention_svc;
 GRANT INSERT, UPDATE        ON order_approvals  TO intervention_svc;
 GRANT INSERT, UPDATE        ON returns          TO intervention_svc;
 GRANT INSERT                ON audit_log        TO intervention_svc;
+-- 2026-05-14: _adjust_source_inventory helper (Option B 승인/거부 시 source -qty/+qty 복원)
+GRANT INSERT, UPDATE        ON inventory        TO intervention_svc;
 -- HQ 도서 ON/OFF + 소진 모드 (FR-A6.1·A6.2): active + discontinue_* 컬럼만
 GRANT UPDATE (active, discontinue_mode, discontinue_reason, discontinue_at, discontinue_by, reactivated_at)
                             ON books            TO intervention_svc;

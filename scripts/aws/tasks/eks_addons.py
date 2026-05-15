@@ -82,18 +82,26 @@ def _helm_install_ingress_nginx() -> None:
     ], check=True)
 
 
-CERT_MANAGER_ROUTE53_ROLE_ARN = "arn:aws:iam::354493396671:role/bookflow-cert-manager-route53"
-
-
 def _helm_install_cert_manager() -> None:
-    """cert-manager + ServiceAccount IRSA (Route53 DNS-01)."""
-    log.info(f"helm upgrade --install cert-manager · IRSA={CERT_MANAGER_ROUTE53_ROLE_ARN}")
+    """cert-manager + ServiceAccount IRSA (Route53 DNS-01).
+    eks-cert-manager-irsa stack 의 CertManagerRoute53RoleArn export 사용 → 매일 OIDC 갱신 자동 sync.
+    """
+    import boto3
+    cf = boto3.client("cloudformation", region_name=os.environ.get("AWS_REGION", "ap-northeast-1"))
+    cert_role_arn = next(
+        (e["Value"] for e in cf.list_exports()["Exports"] if e["Name"] == "bookflow-cert-manager-route53-role-arn"),
+        None,
+    )
+    if not cert_role_arn:
+        log.err("bookflow-cert-manager-route53-role-arn export missing · eks-cert-manager-irsa stack 먼저 deploy")
+        raise SystemExit(1)
+    log.info(f"helm upgrade --install cert-manager · IRSA={cert_role_arn}")
     subprocess.run([
         "helm", "upgrade", "--install", "cert-manager", "jetstack/cert-manager",
         "--namespace", "cert-manager", "--create-namespace",
         "--version", CERT_MANAGER_VERSION,
         "--set", "crds.enabled=true",
-        "--set-string", f"serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn={CERT_MANAGER_ROUTE53_ROLE_ARN}",
+        "--set-string", f"serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn={cert_role_arn}",
         "--wait", "--timeout", "5m",
     ], check=True)
 

@@ -47,7 +47,7 @@ def destroy() -> None:
         "50": ["waf", "alb-external", "nat-gateway"],
         "40": ["ecs-online-sim", "ecs-offline-sim", "ecs-inventory-api",
                "publisher-asg", "eks-addons", "eks-nodegroup"],
-        "30": ["eks-eso-irsa", "eks-alb-controller-irsa", "eks-cluster",
+        "30": ["eks-cert-manager-irsa", "eks-eso-irsa", "eks-alb-controller-irsa", "eks-cluster",
                "ansible-node", "ecs-cluster"],
         "20": ["kinesis", "redis", "rds"],
         "10": [

@@ -22,10 +22,11 @@ up)
   step "1. eks-cluster"
   cfn_deploy bookflow-30-eks-cluster "$INFRA/30-compute-cluster/eks-cluster.yaml"
 
-  step "2. 2 IRSA 병렬"
+  step "2. 3 IRSA 병렬"
   cfn_parallel_deploy <<EOF
 bookflow-30-eks-eso-irsa|$INFRA/30-compute-cluster/eks-eso-irsa.yaml
 bookflow-30-eks-alb-controller-irsa|$INFRA/30-compute-cluster/eks-alb-controller-irsa.yaml
+bookflow-30-eks-cert-manager-irsa|$INFRA/30-compute-cluster/eks-cert-manager-irsa.yaml
 EOF
 
   # nodegroup + addons 병렬 — VPC CNI 가 없으면 nodes NotReady 로 nodegroup CFN deadlock.

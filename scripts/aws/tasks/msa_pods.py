@@ -42,11 +42,13 @@ def deploy() -> None:
               template="30-compute-cluster/eks-alb-controller-irsa.yaml"),
         Stack(tier="30", name="eks-eso-irsa",
               template="30-compute-cluster/eks-eso-irsa.yaml"),
+        Stack(tier="30", name="eks-cert-manager-irsa",
+              template="30-compute-cluster/eks-cert-manager-irsa.yaml"),
         Stack(tier="40", name="eks-nodegroup",
               template="40-compute-runtime/eks-nodegroup.yaml"),
         Stack(tier="40", name="eks-addons",
               template="40-compute-runtime/eks-addons.yaml"),
-    ], label="2 IRSAs + eks-nodegroup + eks-addons (CNI)")
+    ], label="3 IRSAs + eks-nodegroup + eks-addons (CNI)")
 
     log.step("=== task-msa-pods done ===")
     log.info("kubeconfig: aws eks update-kubeconfig --name bookflow-eks --region ap-northeast-1")
@@ -56,6 +58,7 @@ def destroy() -> None:
     log.step("=== task-msa-pods-down ===")
     Stack(tier="40", name="eks-addons", template="").destroy()
     Stack(tier="40", name="eks-nodegroup", template="").destroy()
+    Stack(tier="30", name="eks-cert-manager-irsa", template="").destroy()
     Stack(tier="30", name="eks-eso-irsa", template="").destroy()
     Stack(tier="30", name="eks-alb-controller-irsa", template="").destroy()
     Stack(tier="30", name="eks-cluster", template="").destroy()

@@ -1,0 +1,74 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW - Tier 30 - cert-manager IRSA Role (Route53 DNS-01 solver for Let's Encrypt cert issuance · bookflow.myosoon.store)
+Parameters:
+  ProjectName:
+    Type: String
+    Default: bookflow
+  ServiceAccountNamespace:
+    Type: String
+    Default: cert-manager
+    Description: cert-manager Helm chart ServiceAccount namespace
+  ServiceAccountName:
+    Type: String
+    Default: cert-manager
+    Description: cert-manager ServiceAccount name
+  Route53HostedZoneId:
+    Type: String
+    Default: Z0061717U502ZCK2HCCF
+    Description: Route53 Hosted Zone ID for myosoon.store
+
+Resources:
+  CertManagerRoute53Role:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-cert-manager-route53
+      AssumeRolePolicyDocument: !Sub
+        - |
+          {
+            "Version": "2012-10-17",
+            "Statement": [{
+              "Effect": "Allow",
+              "Principal": {"Federated": "${IdP}"},
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "${OidcHost}:sub": "system:serviceaccount:${Ns}:${Sa}",
+                  "${OidcHost}:aud": "sts.amazonaws.com"
+                }
+              }
+            }]
+          }
+        - IdP: !ImportValue
+            Fn::Sub: ${ProjectName}-eks-oidc-provider-arn
+          OidcHost: !Select
+            - 1
+            - !Split
+              - 'https://'
+              - !ImportValue
+                Fn::Sub: ${ProjectName}-eks-oidc-issuer-url
+          Ns: !Ref ServiceAccountNamespace
+          Sa: !Ref ServiceAccountName
+      Policies:
+        - PolicyName: Route53DnsChallenge
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: route53:GetChange
+                Resource: arn:aws:route53:::change/*
+              - Effect: Allow
+                Action: route53:ChangeResourceRecordSets
+                Resource: !Sub arn:aws:route53:::hostedzone/${Route53HostedZoneId}
+              - Effect: Allow
+                Action:
+                  - route53:ListHostedZonesByName
+                  - route53:ListResourceRecordSets
+                Resource: '*'
+
+Outputs:
+  CertManagerRoute53RoleArn:
+    Value: !GetAtt CertManagerRoute53Role.Arn
+    Export: { Name: !Sub '${ProjectName}-cert-manager-route53-role-arn' }
+  CertManagerRoute53RoleName:
+    Value: !Ref CertManagerRoute53Role
+    Export: { Name: !Sub '${ProjectName}-cert-manager-route53-role-name' }
