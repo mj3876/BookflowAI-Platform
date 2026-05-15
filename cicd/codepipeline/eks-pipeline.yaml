@@ -100,11 +100,12 @@ Resources:
                   - eks:ListClusters
                 Resource: !Sub arn:aws:eks:${AWS::Region}:${AWS::AccountId}:cluster/${EksClusterName}
 
-              # RDS · buildspec envsubst 의 RDS_HOST 동적 fetch 위해 read 권한
-              # (configmap.yaml 의 ${RDS_HOST} 치환 · 매일 redeploy 시 endpoint 자동 정합)
+              # RDS · ElastiCache · buildspec envsubst 의 RDS_HOST / REDIS_HOST 동적 fetch
+              # (configmap.yaml 의 ${RDS_HOST}/${REDIS_HOST} 치환 · 매일 redeploy 시 endpoint 자동 정합)
               - Effect: Allow
                 Action:
                   - rds:DescribeDBInstances
+                  - elasticache:DescribeCacheClusters
                 Resource: '*'
 
               # S3 artifacts (CodePipeline   source/build artifacts)

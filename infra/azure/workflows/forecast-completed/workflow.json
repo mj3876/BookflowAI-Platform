@@ -1,0 +1,69 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "description": "decision-svc /plan-daily 완료 직후 notification-svc가 호출. 수요예측 결과 기반 PENDING 결정이 대시보드에 생성되면 본사+물류센터+지점 전원에게 승인 요청 메일을 발송한다.",
+    "parameters": {
+      "ACS_EMAIL_URI":  { "type": "string", "defaultValue": "" },
+      "LA_IDENTITY_ID": { "type": "string", "defaultValue": "" },
+      "ACS_SENDER":     { "type": "string", "defaultValue": "" },
+      "DASHBOARD_URL":  { "type": "string", "defaultValue": "" }
+    },
+    "triggers": {
+      "manual": {
+        "description": "notification-svc가 SAS URL로 POST 호출. body: { event_type, severity, payload, recipients[] }",
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "event_type": { "type": "string" },
+              "severity":   { "type": "string" },
+              "payload":    { "type": "object" },
+              "recipients": { "type": "array" }
+            },
+            "required": ["event_type", "severity", "payload", "recipients"]
+          }
+        }
+      }
+    },
+    "actions": {
+      "Email_ForecastCompleted": {
+        "description": "수요예측 완료 → 대시보드에 승인 대기 항목 생성됨. 본사+물류센터+지점 전원에게 발송.",
+        "type": "Http",
+        "operationOptions": "DisableAsyncPattern",
+        "inputs": {
+          "method": "POST",
+          "uri": "@parameters('ACS_EMAIL_URI')",
+          "authentication": {
+            "type": "ManagedServiceIdentity",
+            "identity": "@parameters('LA_IDENTITY_ID')",
+            "audience": "https://communication.azure.com"
+          },
+          "body": {
+            "senderAddress": "@parameters('ACS_SENDER')",
+            "recipients": { "to": "@triggerBody()?['recipients']" },
+            "content": {
+              "subject": "[수요예측완료] 발주승인 및 재분배 검토 요청",
+              "html": "<p>수요예측이 완료되었습니다. 아래 링크에서 발주승인 및 재분배 승인을 진행해주세요.</p><ul><li><a href=\"@{parameters('DASHBOARD_URL')}\">BookFlow 대시보드 바로가기</a></li></ul>"
+            },
+            "importance": "high"
+          }
+        }
+      },
+      "Response": {
+        "description": "항상 200 반환.",
+        "type": "Response",
+        "runAfter": {
+          "Email_ForecastCompleted": ["Succeeded", "Failed", "Skipped", "TimedOut"]
+        },
+        "inputs": {
+          "statusCode": 200,
+          "body": { "result": "ok" }
+        }
+      }
+    }
+  },
+  "kind": "Stateful"
+}

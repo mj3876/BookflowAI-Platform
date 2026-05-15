@@ -2,7 +2,7 @@
   "definition": {
     "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
     "contentVersion": "1.0.0.0",
-    "description": "매시간 dashboard-svc에서 당일 PENDING 건수를 폴링한다. pending_count가 0이 되면 '의사결정 완료' 메일을 DIGEST_RECIPIENTS에 발송하고, 이후 실행은 PENDING이 없으므로 자동 스킵된다. 내부 수치 미포함, 역할별 링크만 포함.",
+    "description": "매일 수요예측 완료 예상 시각(UTC 21:00 = KST 06:00)에 1회 실행. pending_count > 0 이면 수요예측이 완료되어 PENDING 의사결정이 생성된 것으로 판단, 담당자에게 발주승인 및 재분배 승인을 요청하는 메일을 발송한다.",
     "parameters": {
       "ACS_EMAIL_URI":     { "type": "string", "defaultValue": "" },
       "LA_IDENTITY_ID":    { "type": "string", "defaultValue": "" },
@@ -11,36 +11,38 @@
       "DASHBOARD_URL":     { "type": "string", "defaultValue": "" }
     },
     "triggers": {
-      "Recurrence_Hourly": {
-        "description": "매시간 정각 실행. 업무 시간 외에도 동작해 PENDING 클리어 즉시 알림이 간다.",
+      "Recurrence_ForecastCheck": {
+        "description": "매일 UTC 21:00 (KST 06:00) 1회 실행. 수요예측 배치 완료 후 PENDING 생성 여부를 확인하는 시각에 맞춰 조정 필요.",
         "type": "Recurrence",
         "recurrence": {
-          "frequency": "Hour",
-          "interval": 1
+          "frequency": "Day",
+          "interval": 1,
+          "schedule": { "hours": ["21"], "minutes": [0] },
+          "timeZone": "UTC"
         }
       }
     },
     "actions": {
       "HTTP_GetPendingSummary": {
-        "description": "dashboard-svc /pending/summary 에서 당일 PENDING 건수(pending_count)를 조회. 메일 본문에 건수는 포함하지 않고 0 여부 판단에만 사용.",
+        "description": "dashboard-svc /pending/summary 에서 당일 PENDING 건수를 조회. pending_count > 0 이면 수요예측 완료 후 의사결정 건이 생성된 상태.",
         "type": "Http",
         "inputs": {
           "method": "GET",
           "uri": "@{concat(parameters('DASHBOARD_URL'), '/dashboard/pending/summary?days=1')}"
         }
       },
-      "Check_AllPendingZero": {
-        "description": "pending_count == 0 이면 완료 메일 발송(true 분기), 아직 남아 있으면 아무것도 하지 않는다(else 빈 분기).",
+      "Check_ForecastCompleted": {
+        "description": "pending_count > 0 이면 수요예측이 완료되어 승인 대기 건이 존재하는 것으로 판단해 메일 발송. 0 이면 수요예측 미완료 또는 당일 의사결정 없음 — 아무것도 하지 않는다.",
         "type": "If",
         "runAfter": { "HTTP_GetPendingSummary": ["Succeeded"] },
         "expression": {
           "and": [
-            { "equals": ["@body('HTTP_GetPendingSummary')?['pending_count']", 0] }
+            { "greater": ["@body('HTTP_GetPendingSummary')?['pending_count']", 0] }
           ]
         },
         "actions": {
-          "Email_PlanFinalized": {
-            "description": "의사결정 완료 알림. 내부 처리 건수 미포함, 역할별 WhTransfer 분석 뷰 링크만 포함. 수신자: DIGEST_RECIPIENTS(본사+물류센터+지점).",
+          "Email_ApprovalRequest": {
+            "description": "수요예측 완료 알림. 발주승인(본사)·재분배 승인(물류센터)·재고 배분 확인(지점) 역할별 링크 포함. 수신자: DIGEST_RECIPIENTS(본사+물류센터+지점).",
             "type": "Http",
             "operationOptions": "DisableAsyncPattern",
             "inputs": {
@@ -55,10 +57,10 @@
                 "senderAddress": "@parameters('ACS_SENDER')",
                 "recipients": { "to": "@json(parameters('DIGEST_RECIPIENTS'))" },
                 "content": {
-                  "subject": "[최종확정] @{formatDateTime(utcNow(), 'yyyy-MM-dd')} 의사결정 완료 · 운송 시작",
-                  "html": "<p>당일 모든 의사결정이 완료되었습니다. 운송을 시작할 수 있습니다.</p><h4>WhTransfer 분석 뷰</h4><ul><li><a href=\"@{parameters('DASHBOARD_URL')}/wh-transfer?role=hq\">본사 담당자</a></li><li><a href=\"@{parameters('DASHBOARD_URL')}/wh-transfer?role=warehouse\">물류센터 담당자</a></li><li><a href=\"@{parameters('DASHBOARD_URL')}/wh-transfer?role=branch\">지점 담당자</a></li></ul>"
+                  "subject": "[수요예측완료] @{formatDateTime(utcNow(), 'yyyy-MM-dd')} 발주승인 및 재분배 검토 요청",
+                  "html": "<p>수요예측이 완료되었습니다. 아래 링크에서 발주승인 및 재분배 승인을 진행해주세요.</p><ul><li><a href=\"@{parameters('DASHBOARD_URL')}/decision\">본사 — 발주승인 바로가기</a></li><li><a href=\"@{parameters('DASHBOARD_URL')}/wh-transfer?role=warehouse\">물류센터 — 재분배 승인 바로가기</a></li><li><a href=\"@{parameters('DASHBOARD_URL')}/wh-transfer?role=branch\">지점 — 재고 배분 확인</a></li></ul>"
                 },
-                "importance": "normal"
+                "importance": "high"
               }
             }
           }
