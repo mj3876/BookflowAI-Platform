@@ -48,11 +48,11 @@
 
 ### 수신자 그룹
 
-| 그룹 | configmap 키 | 현재 값 |
-|------|-------------|---------|
-| 본사/경영진 | `NOTIFICATION_CONTACT_HQ_EMAILS` | ms8405493@gmail.com |
-| 물류센터 | `NOTIFICATION_CONTACT_WH_EMAILS` | rladudgjs0427@gmail.com |
-| 지점 전체 | `NOTIFICATION_CONTACT_BRANCH_EMAILS` | woohek00@gmail.com |
+| 그룹 | configmap 키 |
+|------|-------------|
+| 본사/경영진 | `NOTIFICATION_CONTACT_HQ_EMAILS` |
+| 물류센터 | `NOTIFICATION_CONTACT_WH_EMAILS` |
+| 지점 전체 | `NOTIFICATION_CONTACT_BRANCH_EMAILS` |
 
 ### 호출 흐름
 
@@ -97,7 +97,7 @@ Logic Apps Switch_EventType
 ### ConfigMap 현재 설정
 
 ```yaml
-NOTIFICATION_LOGIC_APPS_URL: "https://prod-06.japanwest.logic.azure.com:443/workflows/dd6cf919e5d5477ab09cd42eabe489ea/triggers/manual/paths/invoke?api-version=2019-05-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=o3SWHvMXcVJqUm4Sx85TWdx8QlfqPIk4WJM7qts-WJI"
+NOTIFICATION_LOGIC_APPS_URL: "<SAS URL — Secret/ESO로 이동 예정, README에 기재 금지>"
 ```
 
 ---
@@ -111,17 +111,19 @@ notification-svc Pod 없이 Logic Apps trigger URL을 직접 호출해서 메일
 수신자: 본사 + 물류센터 + 지점
 
 ```bash
-curl -s -X POST \
-  "https://prod-06.japanwest.logic.azure.com:443/workflows/dd6cf919e5d5477ab09cd42eabe489ea/triggers/manual/paths/invoke?api-version=2019-05-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=o3SWHvMXcVJqUm4Sx85TWdx8QlfqPIk4WJM7qts-WJI" \
+# SAS URL은 Secret/ESO에서 조회 (README에 기재 금지)
+LA_URL="<NOTIFICATION_LOGIC_APPS_URL>"
+
+curl -s -X POST "$LA_URL" \
   -H "Content-Type: application/json" \
   -d '{
     "event_type": "DailyPlanFinalized",
     "severity": "INFO",
     "payload": {},
     "recipients": [
-      {"address": "ms8405493@gmail.com", "displayName": "본사/경영진"},
-      {"address": "rladudgjs0427@gmail.com", "displayName": "물류센터"},
-      {"address": "woohek00@gmail.com", "displayName": "지점"}
+      {"address": "<HQ_EMAIL>", "displayName": "본사/경영진"},
+      {"address": "<WH_EMAIL>", "displayName": "물류센터"},
+      {"address": "<BRANCH_EMAIL>", "displayName": "지점"}
     ]
   }'
 ```
@@ -134,16 +136,18 @@ curl -s -X POST \
 수신자: 본사 + 물류센터
 
 ```bash
-curl -s -X POST \
-  "https://prod-06.japanwest.logic.azure.com:443/workflows/dd6cf919e5d5477ab09cd42eabe489ea/triggers/manual/paths/invoke?api-version=2019-05-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=o3SWHvMXcVJqUm4Sx85TWdx8QlfqPIk4WJM7qts-WJI" \
+# SAS URL은 Secret/ESO에서 조회 (README에 기재 금지)
+LA_URL="<NOTIFICATION_LOGIC_APPS_URL>"
+
+curl -s -X POST "$LA_URL" \
   -H "Content-Type: application/json" \
   -d '{
     "event_type": "SpikeUrgent",
     "severity": "CRITICAL",
     "payload": {},
     "recipients": [
-      {"address": "ms8405493@gmail.com", "displayName": "본사/경영진"},
-      {"address": "rladudgjs0427@gmail.com", "displayName": "물류센터"}
+      {"address": "<HQ_EMAIL>", "displayName": "본사/경영진"},
+      {"address": "<WH_EMAIL>", "displayName": "물류센터"}
     ]
   }'
 ```
@@ -214,10 +218,10 @@ print(urllib.request.urlopen(req).read().decode())
 
 ### 6-1. 메일 수신 확인
 
-| 패턴 | 수신 확인 메일 |
-|------|--------------|
-| 2 DailyPlanFinalized | ms8405493@gmail.com + rladudgjs0427@gmail.com + woohek00@gmail.com |
-| 3 SpikeUrgent | ms8405493@gmail.com + rladudgjs0427@gmail.com |
+| 패턴 | 수신 그룹 |
+|------|----------|
+| 2 DailyPlanFinalized | 본사/경영진 + 물류센터 + 지점 (`NOTIFICATION_CONTACT_*` configmap 참조) |
+| 3 SpikeUrgent | 본사/경영진 + 물류센터 |
 
 ### 6-2. Logic Apps 실행 이력 (Azure)
 
