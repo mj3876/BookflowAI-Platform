@@ -61,7 +61,7 @@ Resources:
             Name: !Sub ${ProjectName}-aladin-sync-cron
             Description: daily 11:40 KST (02:40 UTC)
 
-  # 2. event-sync (cron daily 16:15 KST)
+  # 2. event-sync (cron daily 11:40 KST)
   EventSyncFn:
     Type: AWS::Serverless::Function
     Properties:
@@ -86,10 +86,10 @@ Resources:
         Cron:
           Type: Schedule
           Properties:
-            Schedule: 'cron(15 7 * * ? *)'
+            Schedule: 'cron(40 2 * * ? *)'
             Enabled: true
             Name: !Sub ${ProjectName}-event-sync-cron
-            Description: daily 16:15 KST (07:15 UTC)
+            Description: daily 11:40 KST (02:40 UTC)
 
   # 3. sns-gen (cron 10min)
   SnsGenFn:
