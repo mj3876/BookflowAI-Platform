@@ -2,17 +2,18 @@
   "definition": {
     "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
     "contentVersion": "1.0.0.0",
-    "description": "매일 09:00 KST(UTC 00:00) DIGEST_RECIPIENTS에 발주·재분배 최종 계획안과 운송 시작 안내 메일을 발송한다. 내부 수치 데이터 미포함, 역할별 대시보드 링크만 포함.",
+    "description": "매일 09:00 KST(UTC 00:00) 실행. 당일 승인거절 건이 있으면 본사(HQ_RECIPIENTS)에만 거절 알림을 발송하고, 거절 건이 없으면 DIGEST_RECIPIENTS 전체에 최종 계획안·운송 시작 메일을 발송한다.",
     "parameters": {
       "ACS_EMAIL_URI":     { "type": "string", "defaultValue": "" },
       "LA_IDENTITY_ID":    { "type": "string", "defaultValue": "" },
       "ACS_SENDER":        { "type": "string", "defaultValue": "" },
       "DIGEST_RECIPIENTS": { "type": "string", "defaultValue": "[]" },
+      "HQ_RECIPIENTS":     { "type": "string", "defaultValue": "[]" },
       "DASHBOARD_URL":     { "type": "string", "defaultValue": "" }
     },
     "triggers": {
       "Recurrence_0900KST": {
-        "description": "매일 UTC 00:00 (KST 09:00) 에 실행. 담당자들이 발주승인을 마친 후 최종 계획안을 확인하는 시각.",
+        "description": "매일 UTC 00:00 (KST 09:00) 실행.",
         "type": "Recurrence",
         "recurrence": {
           "frequency": "Day",
@@ -23,26 +24,73 @@
       }
     },
     "actions": {
-      "Send_DailyDigest": {
-        "description": "발주·재분배 최종 계획안 확인 및 운송 시작 안내. 역할별 WhTransfer 분석 뷰 링크와 본사 강제 승인 링크 포함. 내부 API 미호출.",
+      "HTTP_Funnel": {
+        "description": "당일 의사결정 퍼널에서 거절(rejected) 건수를 조회. API 실패 시 coalesce로 0 처리 → 거절 없음으로 간주해 정상 메일 발송.",
         "type": "Http",
-        "operationOptions": "DisableAsyncPattern",
         "inputs": {
-          "method": "POST",
-          "uri": "@parameters('ACS_EMAIL_URI')",
-          "authentication": {
-            "type": "ManagedServiceIdentity",
-            "identity": "@parameters('LA_IDENTITY_ID')",
-            "audience": "https://communication.azure.com"
-          },
-          "body": {
-            "senderAddress": "@parameters('ACS_SENDER')",
-            "recipients": { "to": "@json(parameters('DIGEST_RECIPIENTS'))" },
-            "content": {
-              "subject": "[최종계획안] BookFlow @{formatDateTime(utcNow(), 'yyyy-MM-dd')} 발주·재분배 확정 · 운송 시작",
-              "html": "<h2>BookFlow 발주·재분배 최종 계획안</h2><p>@{formatDateTime(utcNow(), 'yyyy-MM-dd')} 최종 계획안입니다. 아래 링크에서 확인 후 운송을 시작하세요.</p><h4>WhTransfer 분석 뷰</h4><ul><li><a href=\"@{parameters('DASHBOARD_URL')}/wh-transfer?role=hq\">본사 담당자</a></li><li><a href=\"@{parameters('DASHBOARD_URL')}/wh-transfer?role=warehouse\">물류센터 담당자</a></li><li><a href=\"@{parameters('DASHBOARD_URL')}/wh-transfer?role=branch\">지점 담당자</a></li></ul><h4>본사 강제 승인</h4><ul><li><a href=\"@{parameters('DASHBOARD_URL')}/decision/force-approve\">강제 승인 바로가기</a></li></ul>"
-            },
-            "importance": "normal"
+          "method": "GET",
+          "uri": "@{concat(parameters('DASHBOARD_URL'), '/dashboard/cascade/funnel?days=1')}"
+        }
+      },
+      "Check_RejectedCount": {
+        "description": "rejected > 0 이면 본사에 거절 알림 발송, 0 이면 전체에 최종 계획안 발송. API 실패 시 rejected = null → coalesce(0) → 정상 메일 분기.",
+        "type": "If",
+        "runAfter": { "HTTP_Funnel": ["Succeeded", "Failed"] },
+        "expression": {
+          "and": [
+            { "greater": ["@coalesce(body('HTTP_Funnel')?['rejected'], 0)", 0] }
+          ]
+        },
+        "actions": {
+          "Send_RejectionAlert": {
+            "description": "승인거절 건이 존재할 때 본사(HQ_RECIPIENTS)에만 발송.",
+            "type": "Http",
+            "operationOptions": "DisableAsyncPattern",
+            "inputs": {
+              "method": "POST",
+              "uri": "@parameters('ACS_EMAIL_URI')",
+              "authentication": {
+                "type": "ManagedServiceIdentity",
+                "identity": "@parameters('LA_IDENTITY_ID')",
+                "audience": "https://communication.azure.com"
+              },
+              "body": {
+                "senderAddress": "@parameters('ACS_SENDER')",
+                "recipients": { "to": "@json(parameters('HQ_RECIPIENTS'))" },
+                "content": {
+                  "subject": "[승인거절] @{formatDateTime(utcNow(), 'yyyy-MM-dd')} 거절 @{body('HTTP_Funnel')?['rejected']}건 — 사유 확인 필요",
+                  "html": "<p>승인거절 건이 <strong>@{body('HTTP_Funnel')?['rejected']}건</strong> 있습니다. 승인 거부 사유를 확인해주세요.</p><ul><li><a href=\"@{parameters('DASHBOARD_URL')}\">BookFlow 대시보드 바로가기</a></li></ul>"
+                },
+                "importance": "high"
+              }
+            }
+          }
+        },
+        "else": {
+          "actions": {
+            "Send_DailyDigest": {
+              "description": "거절 건 없음 — 전체(본사+물류센터+지점)에 최종 계획안·운송 시작 안내 발송.",
+              "type": "Http",
+              "operationOptions": "DisableAsyncPattern",
+              "inputs": {
+                "method": "POST",
+                "uri": "@parameters('ACS_EMAIL_URI')",
+                "authentication": {
+                  "type": "ManagedServiceIdentity",
+                  "identity": "@parameters('LA_IDENTITY_ID')",
+                  "audience": "https://communication.azure.com"
+                },
+                "body": {
+                  "senderAddress": "@parameters('ACS_SENDER')",
+                  "recipients": { "to": "@json(parameters('DIGEST_RECIPIENTS'))" },
+                  "content": {
+                    "subject": "[최종확정] 의사결정 완료 · 운송 시작 가능",
+                    "html": "<p>당일 모든 의사결정이 완료되었습니다. 운송을 시작할 수 있습니다.</p><ul><li><a href=\"@{parameters('DASHBOARD_URL')}\">BookFlow 대시보드 바로가기</a></li></ul>"
+                  },
+                  "importance": "normal"
+                }
+              }
+            }
           }
         }
       }

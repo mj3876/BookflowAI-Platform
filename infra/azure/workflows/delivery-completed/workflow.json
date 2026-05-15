@@ -1,0 +1,69 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "description": "intervention-svc /orders/{id}/receive 완료 시 notification-svc가 호출. 운송 완료 및 재고 입고 사실을 본사+물류센터+지점 전원에게 알린다.",
+    "parameters": {
+      "ACS_EMAIL_URI":  { "type": "string", "defaultValue": "" },
+      "LA_IDENTITY_ID": { "type": "string", "defaultValue": "" },
+      "ACS_SENDER":     { "type": "string", "defaultValue": "" },
+      "DASHBOARD_URL":  { "type": "string", "defaultValue": "" }
+    },
+    "triggers": {
+      "manual": {
+        "description": "notification-svc가 SAS URL로 POST 호출. body: { event_type, severity, payload, recipients[] }",
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "event_type": { "type": "string" },
+              "severity":   { "type": "string" },
+              "payload":    { "type": "object" },
+              "recipients": { "type": "array" }
+            },
+            "required": ["event_type", "severity", "payload", "recipients"]
+          }
+        }
+      }
+    },
+    "actions": {
+      "Email_DeliveryCompleted": {
+        "description": "운송 완료 · 재고 입고 알림. 본사+물류센터+지점 전원에게 발송.",
+        "type": "Http",
+        "operationOptions": "DisableAsyncPattern",
+        "inputs": {
+          "method": "POST",
+          "uri": "@parameters('ACS_EMAIL_URI')",
+          "authentication": {
+            "type": "ManagedServiceIdentity",
+            "identity": "@parameters('LA_IDENTITY_ID')",
+            "audience": "https://communication.azure.com"
+          },
+          "body": {
+            "senderAddress": "@parameters('ACS_SENDER')",
+            "recipients": { "to": "@triggerBody()?['recipients']" },
+            "content": {
+              "subject": "[운송완료] 재고 입고 완료 · 현황 확인",
+              "html": "<p>운송이 완료되어 재고가 입고되었습니다.</p><ul><li><a href=\"@{parameters('DASHBOARD_URL')}\">BookFlow 대시보드 바로가기</a></li></ul>"
+            },
+            "importance": "normal"
+          }
+        }
+      },
+      "Response": {
+        "description": "항상 200 반환.",
+        "type": "Response",
+        "runAfter": {
+          "Email_DeliveryCompleted": ["Succeeded", "Failed", "Skipped", "TimedOut"]
+        },
+        "inputs": {
+          "statusCode": 200,
+          "body": { "result": "ok" }
+        }
+      }
+    }
+  },
+  "kind": "Stateful"
+}
