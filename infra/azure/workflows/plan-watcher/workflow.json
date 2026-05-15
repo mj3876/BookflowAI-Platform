@@ -2,8 +2,17 @@
   "definition": {
     "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
     "contentVersion": "1.0.0.0",
+    "description": "매시간 dashboard-svc에서 당일 PENDING 건수를 폴링한다. pending_count가 0이 되면 '의사결정 완료' 메일을 DIGEST_RECIPIENTS에 발송하고, 이후 실행은 PENDING이 없으므로 자동 스킵된다. 내부 수치 미포함, 역할별 링크만 포함.",
+    "parameters": {
+      "ACS_EMAIL_URI":     { "type": "string", "defaultValue": "" },
+      "LA_IDENTITY_ID":    { "type": "string", "defaultValue": "" },
+      "ACS_SENDER":        { "type": "string", "defaultValue": "" },
+      "DIGEST_RECIPIENTS": { "type": "string", "defaultValue": "[]" },
+      "DASHBOARD_URL":     { "type": "string", "defaultValue": "" }
+    },
     "triggers": {
       "Recurrence_Hourly": {
+        "description": "매시간 정각 실행. 업무 시간 외에도 동작해 PENDING 클리어 즉시 알림이 간다.",
         "type": "Recurrence",
         "recurrence": {
           "frequency": "Hour",
@@ -13,13 +22,15 @@
     },
     "actions": {
       "HTTP_GetPendingSummary": {
+        "description": "dashboard-svc /pending/summary 에서 당일 PENDING 건수(pending_count)를 조회. 메일 본문에 건수는 포함하지 않고 0 여부 판단에만 사용.",
         "type": "Http",
         "inputs": {
           "method": "GET",
-          "uri": "@{concat(appsetting('DASHBOARD_URL'), '/dashboard/pending/summary?days=1')}"
+          "uri": "@{concat(parameters('DASHBOARD_URL'), '/dashboard/pending/summary?days=1')}"
         }
       },
       "Check_AllPendingZero": {
+        "description": "pending_count == 0 이면 완료 메일 발송(true 분기), 아직 남아 있으면 아무것도 하지 않는다(else 빈 분기).",
         "type": "If",
         "runAfter": { "HTTP_GetPendingSummary": ["Succeeded"] },
         "expression": {
@@ -29,22 +40,23 @@
         },
         "actions": {
           "Email_PlanFinalized": {
+            "description": "의사결정 완료 알림. 내부 처리 건수 미포함, 역할별 WhTransfer 분석 뷰 링크만 포함. 수신자: DIGEST_RECIPIENTS(본사+물류센터+지점).",
             "type": "Http",
             "operationOptions": "DisableAsyncPattern",
             "inputs": {
               "method": "POST",
-              "uri": "@appsetting('ACS_EMAIL_URI')",
+              "uri": "@parameters('ACS_EMAIL_URI')",
               "authentication": {
                 "type": "ManagedServiceIdentity",
-                "identity": "@appsetting('LA_IDENTITY_ID')",
+                "identity": "@parameters('LA_IDENTITY_ID')",
                 "audience": "https://communication.azure.com"
               },
               "body": {
-                "senderAddress": "@appsetting('ACS_SENDER')",
-                "recipients": { "to": "@json(appsetting('DIGEST_RECIPIENTS'))" },
+                "senderAddress": "@parameters('ACS_SENDER')",
+                "recipients": { "to": "@json(parameters('DIGEST_RECIPIENTS'))" },
                 "content": {
-                  "subject": "✅ [최종확정] @{formatDateTime(utcNow(), 'yyyy-MM-dd')} 의사결정 모두 완료 · 운송 시작",
-                  "html": "<p>오늘의 모든 PENDING이 처리됐습니다. 운송 시작 가능 상태입니다.</p><ul><li>총 @{body('HTTP_GetPendingSummary')?['total']}건 처리 완료</li></ul><p><a href=\"@{appsetting('DASHBOARD_URL')}/decision?date=@{formatDateTime(utcNow(), 'yyyy-MM-dd')}\">최종 계획안 보기</a></p>"
+                  "subject": "[최종확정] @{formatDateTime(utcNow(), 'yyyy-MM-dd')} 의사결정 완료 · 운송 시작",
+                  "html": "<p>당일 모든 의사결정이 완료되었습니다. 운송을 시작할 수 있습니다.</p><h4>WhTransfer 분석 뷰</h4><ul><li><a href=\"@{parameters('DASHBOARD_URL')}/wh-transfer?role=hq\">본사 담당자</a></li><li><a href=\"@{parameters('DASHBOARD_URL')}/wh-transfer?role=warehouse\">물류센터 담당자</a></li><li><a href=\"@{parameters('DASHBOARD_URL')}/wh-transfer?role=branch\">지점 담당자</a></li></ul>"
                 },
                 "importance": "normal"
               }

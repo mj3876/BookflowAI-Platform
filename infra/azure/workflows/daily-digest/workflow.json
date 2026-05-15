@@ -2,8 +2,17 @@
   "definition": {
     "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
     "contentVersion": "1.0.0.0",
+    "description": "매일 09:00 KST(UTC 00:00) DIGEST_RECIPIENTS에 역할별 대시보드 링크 브리핑 메일을 발송한다. 내부 수치 데이터(재고·매출·건수)는 포함하지 않는다.",
+    "parameters": {
+      "ACS_EMAIL_URI":     { "type": "string", "defaultValue": "" },
+      "LA_IDENTITY_ID":    { "type": "string", "defaultValue": "" },
+      "ACS_SENDER":        { "type": "string", "defaultValue": "" },
+      "DIGEST_RECIPIENTS": { "type": "string", "defaultValue": "[]" },
+      "DASHBOARD_URL":     { "type": "string", "defaultValue": "" }
+    },
     "triggers": {
       "Recurrence_0900KST": {
+        "description": "매일 UTC 00:00 (KST 09:00) 에 실행",
         "type": "Recurrence",
         "recurrence": {
           "frequency": "Day",
@@ -14,70 +23,24 @@
       }
     },
     "actions": {
-      "HTTP_Funnel": {
-        "type": "Http",
-        "inputs": {
-          "method": "GET",
-          "uri": "@{concat(appsetting('DASHBOARD_URL'), '/dashboard/cascade/funnel?days=1')}"
-        }
-      },
-      "HTTP_PendingSummary": {
-        "type": "Http",
-        "inputs": {
-          "method": "GET",
-          "uri": "@{concat(appsetting('DASHBOARD_URL'), '/dashboard/pending/summary?days=1')}"
-        }
-      },
-      "HTTP_Sales30": {
-        "type": "Http",
-        "inputs": {
-          "method": "GET",
-          "uri": "@{concat(appsetting('DASHBOARD_URL'), '/dashboard/sales/30days')}"
-        }
-      },
-      "HTTP_Bestsellers": {
-        "type": "Http",
-        "inputs": {
-          "method": "GET",
-          "uri": "@{concat(appsetting('DASHBOARD_URL'), '/dashboard/sales/bestsellers?days=1&limit=5')}"
-        }
-      },
-      "HTTP_Insufficient": {
-        "type": "Http",
-        "inputs": {
-          "method": "GET",
-          "uri": "@{concat(appsetting('DASHBOARD_URL'), '/dashboard/forecast/insufficient?limit=5')}"
-        }
-      },
-      "Compose_DigestBody": {
-        "type": "Compose",
-        "runAfter": {
-          "HTTP_Funnel":         ["Succeeded", "Failed"],
-          "HTTP_PendingSummary": ["Succeeded", "Failed"],
-          "HTTP_Sales30":        ["Succeeded", "Failed"],
-          "HTTP_Bestsellers":    ["Succeeded", "Failed"],
-          "HTTP_Insufficient":   ["Succeeded", "Failed"]
-        },
-        "inputs": "<h2>📊 BookFlow 일일 요약 — @{formatDateTime(addDays(utcNow(), -1), 'yyyy-MM-dd')} (KST)</h2><h3>🎯 핵심 KPI</h3><ul><li>전사 매출: ₩@{body('HTTP_Sales30')?['revenue']} (@{body('HTTP_Sales30')?['delta']}%)</li><li>거래 건수: @{body('HTTP_Sales30')?['tx_count']}건</li><li>결품률: @{body('HTTP_Insufficient')?['shortage_rate']}%</li></ul><h3>📦 의사결정 (어제)</h3><ul><li>총 @{body('HTTP_Funnel')?['total']}건 · 승인 @{body('HTTP_Funnel')?['approved']} · 거절 @{body('HTTP_Funnel')?['rejected']} · 자동실행 @{body('HTTP_Funnel')?['auto']}</li><li>Stage 1: @{body('HTTP_Funnel')?['s1']} · Stage 2: @{body('HTTP_Funnel')?['s2']} · Stage 3: @{body('HTTP_Funnel')?['s3']}</li></ul><h3>⚠️ 오늘 조치 필요</h3><ul><li>검토 필요 PENDING: @{body('HTTP_PendingSummary')?['pending_count']}건</li></ul><p><a href=\"@{appsetting('DASHBOARD_URL')}/kpi\">전사 KPI 차트</a></p>"
-      },
       "Send_DailyDigest": {
+        "description": "역할별 WhTransfer 분석 뷰 링크와 본사 강제 승인 링크만 포함한 일일 브리핑 메일 발송. 내부 API 미호출.",
         "type": "Http",
         "operationOptions": "DisableAsyncPattern",
-        "runAfter": { "Compose_DigestBody": ["Succeeded"] },
         "inputs": {
           "method": "POST",
-          "uri": "@appsetting('ACS_EMAIL_URI')",
+          "uri": "@parameters('ACS_EMAIL_URI')",
           "authentication": {
             "type": "ManagedServiceIdentity",
-            "identity": "@appsetting('LA_IDENTITY_ID')",
+            "identity": "@parameters('LA_IDENTITY_ID')",
             "audience": "https://communication.azure.com"
           },
           "body": {
-            "senderAddress": "@appsetting('ACS_SENDER')",
-            "recipients": { "to": "@json(appsetting('DIGEST_RECIPIENTS'))" },
+            "senderAddress": "@parameters('ACS_SENDER')",
+            "recipients": { "to": "@json(parameters('DIGEST_RECIPIENTS'))" },
             "content": {
-              "subject": "📊 [일일요약] BookFlow @{formatDateTime(addDays(utcNow(), -1), 'yyyy-MM-dd')}",
-              "html": "@{outputs('Compose_DigestBody')}"
+              "subject": "[일일브리핑] BookFlow @{formatDateTime(utcNow(), 'yyyy-MM-dd')}",
+              "html": "<h2>BookFlow 일일 업무 브리핑</h2><p>@{formatDateTime(utcNow(), 'yyyy-MM-dd')} 오늘의 운영 현황을 아래 링크에서 확인하세요.</p><h4>WhTransfer 분석 뷰</h4><ul><li><a href=\"@{parameters('DASHBOARD_URL')}/wh-transfer?role=hq\">본사 담당자</a></li><li><a href=\"@{parameters('DASHBOARD_URL')}/wh-transfer?role=warehouse\">물류센터 담당자</a></li><li><a href=\"@{parameters('DASHBOARD_URL')}/wh-transfer?role=branch\">지점 담당자</a></li></ul><h4>본사 강제 승인</h4><ul><li><a href=\"@{parameters('DASHBOARD_URL')}/decision/force-approve\">강제 승인 바로가기</a></li></ul>"
             },
             "importance": "normal"
           }

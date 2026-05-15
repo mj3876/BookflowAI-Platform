@@ -2,6 +2,12 @@
   "definition": {
     "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
     "contentVersion": "1.0.0.0",
+    "parameters": {
+      "digestRecipients": {
+        "defaultValue": "[{\"address\":\"ms8405493@gmail.com\",\"displayName\":\"본사/경영진\"},{\"address\":\"rladudgjs0427@gmail.com\",\"displayName\":\"물류센터\"},{\"address\":\"admin@bleach10905gmail.onmicrosoft.com\",\"displayName\":\"지점\"}]",
+        "type": "String"
+      }
+    },
     "triggers": {
       "Recurrence_0200KST": {
         "type": "Recurrence",
@@ -18,10 +24,10 @@
         "type": "Http",
         "inputs": {
           "method": "GET",
-          "uri": "@{concat(appsetting('KEY_VAULT_URI'), 'secrets?api-version=7.4')}",
+          "uri": "https://kv-bookflowmj.vault.azure.net/secrets?api-version=7.4",
           "authentication": {
             "type": "ManagedServiceIdentity",
-            "identity": "@appsetting('LA_IDENTITY_ID')",
+            "identity": "/subscriptions/e98a94bb-7532-4e49-8a36-bc42e30d5a81/resourcegroups/rg-bookflow/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-bookflowmj-logicapp",
             "audience": "https://vault.azure.net"
           }
         }
@@ -48,15 +54,15 @@
         "runAfter": { "Build_Rows": ["Succeeded"] },
         "inputs": {
           "method": "POST",
-          "uri": "@appsetting('ACS_EMAIL_URI')",
+          "uri": "https://acs-bookflowmj.japan.communication.azure.com/emails:send?api-version=2023-03-31",
           "authentication": {
             "type": "ManagedServiceIdentity",
-            "identity": "@appsetting('LA_IDENTITY_ID')",
+            "identity": "/subscriptions/e98a94bb-7532-4e49-8a36-bc42e30d5a81/resourcegroups/rg-bookflow/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-bookflowmj-logicapp",
             "audience": "https://communication.azure.com"
           },
           "body": {
-            "senderAddress": "@appsetting('ACS_SENDER')",
-            "recipients": { "to": "@json(appsetting('DIGEST_RECIPIENTS'))" },
+            "senderAddress": "DoNotReply@2ccec47b-b5b4-41a4-a704-c9f38070133a.azurecomm.net",
+            "recipients": { "to": "@json(parameters('digestRecipients'))" },
             "content": {
               "subject": "[BOOKFLOW] Key Vault 시크릿 만료 점검",
               "html": "@concat('<h3>만료 예정 시크릿</h3><table border=\"1\" cellpadding=\"6\" style=\"border-collapse:collapse\"><tr><th>시크릿 이름</th><th>만료일</th><th>남은 일수</th></tr>', join(body('Build_Rows'), ''), '</table><p style=\"color:gray;font-size:12px\">이 메일에는 시크릿 값이 포함되지 않습니다.</p>')"
@@ -66,6 +72,5 @@
         }
       }
     }
-  },
-  "kind": "Stateful"
+  }
 }
