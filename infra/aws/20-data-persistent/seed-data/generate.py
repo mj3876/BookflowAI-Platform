@@ -216,6 +216,7 @@ def gen_inventory(
     locations: list[dict],
     scenario_b_isbns: list[str],
     forecast_cache: list[dict] | None = None,
+    publisher_force_isbns: list[str] | None = None,
 ) -> list[dict]:
     """inventory 시드 + 시나리오 B 8 도서 의도적 부족 (cascade 시연용).
 
@@ -245,11 +246,27 @@ def gen_inventory(
                 except (TypeError, ValueError):
                     pass
 
+    publisher_force_set = set(publisher_force_isbns or [])
     rows = []
     target_locs = [l for l in locations if not (l.get("is_virtual") in ("true", True))]
     for b in books:
         isbn = b["isbn13"]
         short_locs = SHORT_PAIRS.get(isbn, [])
+        # PUBLISHER cascade 강제 — 그 책들 모든 location on_hand=0 → stage 0/1/2 fail → stage 3
+        if isbn in publisher_force_set:
+            for l in target_locs:
+                pred = fc_d1.get((isbn, l["location_id"]), 100.0)
+                safety = max(int(pred * 5), 50)
+                rows.append({
+                    "isbn13": isbn,
+                    "location_id": l["location_id"],
+                    "on_hand": 0,
+                    "reserved_qty": 0,
+                    "safety_stock": safety,
+                    "updated_at": (NOW - timedelta(minutes=random.randint(1, 600))).isoformat(),
+                    "updated_by": "seed-script",
+                })
+            continue
         for l in target_locs:
             if l["location_type"] == "WH":
                 # WH 안전재고 = 자기 권역 매장들의 forecast 합 × 5 (없으면 fallback 100)
@@ -329,7 +346,8 @@ def gen_reservations(books, locations) -> list[dict]:
 # =========================================================================
 # 8. forecast_cache (D+1 only · book × store, store_id 1~12)
 # =========================================================================
-def gen_forecast_cache(books, scenario_b_isbns: list[str], days: int = 7) -> list[dict]:
+def gen_forecast_cache(books, scenario_b_isbns: list[str], days: int = 7,
+                       publisher_force_isbns: list[str] | None = None) -> list[dict]:
     """forecast_cache · 7d rolling (D+0 ~ D+6) × 전 책 × 전 매장 = 1000×14×7 ≈ 98k row.
 
     매일 Vertex AI 가 모든 (book, store) 페어 예측 출력 — frontend AI 수요예측 컬럼
@@ -359,6 +377,9 @@ def gen_forecast_cache(books, scenario_b_isbns: list[str], days: int = 7) -> lis
     for b in books:
         if random.random() < 0.15:
             popular_isbns.add(b["isbn13"])
+    # PUBLISHER cascade 강제 — 그 책들 모든 매장 D+1 forecast 100/day (전체 12 매장 합산 = 1200/day)
+    # wh 본체 + 매장 inventory 0 (gen_inventory 별도 처리) → cascade stage 0/1/2 fail → stage 3.
+    publisher_force_set = set(publisher_force_isbns or [])
 
     for d in range(days):
         snap_date = TODAY + timedelta(days=d)
@@ -385,12 +406,16 @@ def gen_forecast_cache(books, scenario_b_isbns: list[str], days: int = 7) -> lis
         for b in books:
             isbn = b["isbn13"]
             is_popular = isbn in popular_isbns
+            is_publisher_force = isbn in publisher_force_set
             for store_id in range(1, 15):
                 key = (snap_date.isoformat(), isbn, store_id)
                 if key in seen:
                     continue
                 seen.add(key)
-                base = random.uniform(5, 25) if is_popular else random.uniform(0, 3)
+                if is_publisher_force:
+                    base = 100.0  # 매장당 100/day → wh 합산 1200/day · stage 3 진입 강제
+                else:
+                    base = random.uniform(5, 25) if is_popular else random.uniform(0, 3)
                 rows.append({
                     "snapshot_date": snap_date.isoformat(),
                     "isbn13": isbn,
@@ -1009,12 +1034,17 @@ def main() -> None:
     # 시나리오 B (재고 부족 cascade) 의 8 도서 — books 앞쪽 인덱스에서 stable 추출.
     # gen_inventory · gen_forecast_cache · gen_pending_orders 모두 같은 list 사용 → 정합 보장.
     scenario_b_isbns = [b["isbn13"] for b in books[:8]]
+    # PUBLISHER cascade 강제 — 그 책들 모든 location on_hand=0 + forecast 100/day
+    # → stage 0/1/2 fail → stage 3 PUBLISHER_ORDER 발의 자연스럽게 생성
+    publisher_force_isbns = [b["isbn13"] for b in books[60:65]]
 
     # forecast 가 먼저 — inventory.safety_stock 이 forecast D+1 × 5 (사용자 결정 2026-05-13)
-    forecast_cache = gen_forecast_cache(books, scenario_b_isbns, days=7)
+    forecast_cache = gen_forecast_cache(books, scenario_b_isbns, days=7,
+                                        publisher_force_isbns=publisher_force_isbns)
     # WH row 추가 (자기 권역 매장 합산 · 오프라인+온라인) — 사용자 결정 2026-05-13
     append_wh_forecast(forecast_cache, locations)
-    inventory = gen_inventory(books, locations, scenario_b_isbns, forecast_cache)
+    inventory = gen_inventory(books, locations, scenario_b_isbns, forecast_cache,
+                              publisher_force_isbns=publisher_force_isbns)
     reservations = gen_reservations(books, locations)
     # 시연 정합: D-1~D-6 처리완료 (600 row) · D-0 0 row (cascade 발의 버튼이 동적 생성)
     # D-7 ~ D-365 history (~17950 row) — 일자별 상세 history view 용.
