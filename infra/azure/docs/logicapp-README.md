@@ -34,8 +34,7 @@
 [수신자: 본사 / 물류센터 / 지점]
 ```
 
-> 현재 Logic Apps Standard(WS1) 쿼터 부재로 Consumption 방식을 사용합니다.  
-> VPN 터널 (AWS TGW ↔ Azure VPN GW)은 연결되어 있으나, Consumption Logic Apps는 public endpoint를 사용합니다.
+> EKS notification-svc → 공개 HTTPS POST (Consumption SAS URL) 방식으로 트리거. VPN 없이 인터넷을 통해 직접 호출합니다.
 
 ---
 
@@ -81,18 +80,8 @@ Logic Apps Switch_EventType
 
 | 리소스 | 상태 | 비고 |
 |--------|------|------|
-| VPN Gateway `vpngw-bookflowmj` | Connected | VpnGw1AZ, IP: 135.149.169.236, ASN: 65001 |
-| Logic Apps Consumption `la-bookflowmj-notification` | Enabled | HTTP trigger SAS URL 발급 완료 |
-| Logic Apps Standard (WS1) | 미배포 | WorkflowStandard 쿼터 0 → 신청 필요 |
+| Logic Apps Consumption `la-bookflowmj-notification` | Enabled | 공개 HTTPS SAS URL 트리거 |
 | ACS Email | 구성 완료 | Managed Identity 인증 |
-
-### AWS
-
-| 리소스 | 상태 | 비고 |
-|--------|------|------|
-| TGW | available | ASN: 64512 |
-| VPN Connection (Azure행) | available | 터널 2개 UP |
-| 라우팅 172.16.0.0/16 → TGW | active | 7개 VPC 반영 완료 |
 
 ### ConfigMap 현재 설정
 
@@ -257,19 +246,9 @@ kubectl logs -n bookflow -l app=notification-svc --tail=50 | grep -E "logic_apps
 | # | 작업 | 담당 | 비고 |
 |---|------|------|------|
 | 1 | **Azure Portal에서 Logic Apps Consumption workflow 업데이트** | Azure 담당 | `la-bookflowmj-notification` → Logic app designer → Code view → `definition` 블록을 `workflows/notification/workflow.json`의 `definition`으로 교체. Switch case를 DailyPlanFinalized·SpikeUrgent 2개만 남기고 메일 본문 단순화 반영 |
-| 2 | **패턴 2·3 메일 수신 재검증** | 검증 담당 | workflow.json 교체 후 §4 수동 실행 명령으로 테스트. ms8405493 / rladudgjs0427 / woohek00 수신 확인 |
+| 2 | **패턴 2·3 메일 수신 재검증** | 검증 담당 | workflow.json 교체 후 §4 수동 실행 명령으로 테스트. 수신자는 configmap `NOTIFICATION_CONTACT_*` 참조 |
 | 3 | **notification-svc RDS 연결 복구** | EKS 담당 | configmap의 `NOTIFICATION_RDS_HOST: "${RDS_HOST}"` → 실제 RDS 엔드포인트로 교체 후 `kubectl apply` + rollout restart. Pod CrashLoopBackOff 해소 필요 |
 
-### WorkflowStandard 쿼터 승인 후 (선택 — VPN 경유 전환)
-
-| # | 작업 | 비고 |
-|---|------|------|
-| 4 | WorkflowStandard 쿼터 신청 | Azure Portal → 구독 → Usage + quotas → WorkflowStandard Japan West → Request increase 1 |
-| 5 | Logic Apps Standard 배포 | `az deployment group create --template-file modules/logicapp.bicep --parameters parameters/logicapp-only.json` |
-| 6 | Private Endpoint IP 확인 후 Private DNS Zone A 레코드 검증 | `az network private-endpoint show ... --query customDnsConfigs` |
-| 7 | EKS CoreDNS Conditional Forwarder 설정 | `kubectl edit configmap coredns -n kube-system` — `privatelink.azurewebsites.net:53` forwarder 추가 |
-| 8 | ConfigMap URL 교체 | `NOTIFICATION_LOGIC_APPS_URL` → Standard trigger URL (FQDN, sig= 포함) |
-| 9 | VPN 경로 DNS·TCP 연결 최종 검증 | Pod에서 nslookup + curl로 172.16.2.x private IP 반환 확인 |
 
 ---
 

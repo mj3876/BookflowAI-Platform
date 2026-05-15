@@ -26,10 +26,26 @@
           }
         }
       },
+      "Filter_Expiring": {
+        "type": "Query",
+        "runAfter": { "List_Secrets": ["Succeeded"] },
+        "inputs": {
+          "from": "@body('List_Secrets')?['value']",
+          "where": "@not(equals(item()?['attributes']?['exp'], null))"
+        }
+      },
+      "Build_Rows": {
+        "type": "Select",
+        "runAfter": { "Filter_Expiring": ["Succeeded"] },
+        "inputs": {
+          "from": "@body('Filter_Expiring')",
+          "select": "@concat('<tr><td>', last(split(item()?['id'], '/')), '</td><td>', formatDateTime(addSeconds('1970-01-01T00:00:00Z', item()?['attributes']?['exp']), 'yyyy-MM-dd'), '</td><td>', string(div(sub(ticks(addSeconds('1970-01-01T00:00:00Z', item()?['attributes']?['exp'])), ticks(utcNow())), 864000000000)), '일</td></tr>')"
+        }
+      },
       "Notify_DevOps": {
         "type": "Http",
         "operationOptions": "DisableAsyncPattern",
-        "runAfter": { "List_Secrets": ["Succeeded"] },
+        "runAfter": { "Build_Rows": ["Succeeded"] },
         "inputs": {
           "method": "POST",
           "uri": "@appsetting('ACS_EMAIL_URI')",
@@ -42,8 +58,8 @@
             "senderAddress": "@appsetting('ACS_SENDER')",
             "recipients": { "to": "@json(appsetting('DIGEST_RECIPIENTS'))" },
             "content": {
-              "subject": "[BOOKFLOW] Key Vault 시크릿 만료 점검 실행",
-              "html": "<p>Key Vault 시크릿 만료 점검이 실행됐습니다.</p><p>시크릿 목록: @{body('List_Secrets')?['value']}</p>"
+              "subject": "[BOOKFLOW] Key Vault 시크릿 만료 점검",
+              "html": "@concat('<h3>만료 예정 시크릿</h3><table border=\"1\" cellpadding=\"6\" style=\"border-collapse:collapse\"><tr><th>시크릿 이름</th><th>만료일</th><th>남은 일수</th></tr>', join(body('Build_Rows'), ''), '</table><p style=\"color:gray;font-size:12px\">이 메일에는 시크릿 값이 포함되지 않습니다.</p>')"
             },
             "importance": "normal"
           }
