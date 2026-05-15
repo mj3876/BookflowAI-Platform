@@ -450,13 +450,14 @@ def append_wh_forecast(forecast_rows: list[dict], locations: list[dict]) -> None
 # =========================================================================
 # 9. pending_orders (30 · 다양 상태 · order_type 다양)
 # =========================================================================
-# Stage 별 LEAD_DAYS — decision-svc/src/routes/decision.py 의 LEAD_DAYS 와 동일.
-# WH_TO_STORE/REBALANCE=1 · WH_TRANSFER=2 · PUBLISHER_ORDER=4 (외부 3일 + 익일 처리).
+# Stage 별 LEAD_DAYS — decision-svc/src/routes/decision.py 와 동일 (v4 2026-05-15).
+# 사용자 도메인: D+0 새벽 예측 → 9시 승인 → 당일 실행 (REBALANCE/WH_TO_STORE),
+#               권역 간 (WH_TRANSFER) D+1, 외부 발주 (PUBLISHER) D+3.
 PO_LEAD_DAYS = {
-    "REBALANCE":       1,
-    "WH_TO_STORE":     1,
-    "WH_TRANSFER":     2,
-    "PUBLISHER_ORDER": 4,
+    "REBALANCE":       0,
+    "WH_TO_STORE":     0,
+    "WH_TRANSFER":     1,
+    "PUBLISHER_ORDER": 3,
 }
 
 
@@ -481,7 +482,15 @@ def _po_row(order_type, isbn13, src, tgt, qty, urgency, status,
       | REJECTED       | stage 따라  | stage 따라    | NULL        | ✓ (PENDING|APPROVED|IN_TRANSIT) |
     """
     created = NOW - timedelta(hours=hours_ago)
-    expected_arrival_date = created.date() + timedelta(days=PO_LEAD_DAYS.get(order_type, 1))
+    # expected_arrival_at: 완료 status (EXECUTED/AUTO_EXECUTED/REJECTED) 는 과거 일자에 cap.
+    #   - 시드 시점 캘린더에 D-0 이상 ✅완료가 보이면 안 됨 (사용자 SoT 원칙).
+    # PENDING/APPROVED/IN_TRANSIT 만 LEAD_DAYS 기반 미래 일자.
+    if status in ("EXECUTED", "AUTO_EXECUTED"):
+        expected_arrival_date = (created + timedelta(hours=3)).date()  # executed_at::date 와 동일
+    elif status == "REJECTED":
+        expected_arrival_date = created.date()
+    else:
+        expected_arrival_date = created.date() + timedelta(days=PO_LEAD_DAYS.get(order_type, 0))
     expected_arrival = expected_arrival_date.isoformat()
 
     # ── approved_at: APPROVED 이후 모든 status + REJECTED stage='APPROVED'|'IN_TRANSIT'
@@ -603,6 +612,23 @@ def gen_pending_orders(books, locations, scenario_b_isbns) -> list[dict]:
             rows.append(_po_row("WH_TRANSFER", isbn, src, tgt, qty=30,
                                 urgency="NORMAL", status="EXECUTED",
                                 hours_ago=48 + i * 6, reason="capacity_balance"))
+
+    # ── D. PUBLISHER_ORDER PENDING 6건 (시연용 · 외부 발주 협의 필요) ──
+    # 시드 시점에서 외부 발주 PENDING 가 있어야 hq-admin /approval 에서 📦 외부 발주 탭 확인 가능.
+    # plan-daily cascade 는 stage 0-2 만 채우므로 stage 3 (PUBLISHER) 는 별도 시드 필요.
+    if wh1_loc and wh2_loc:
+        for i, (isbn, urg, tgt) in enumerate([
+            (isbns[50], "NORMAL",   wh1_loc),
+            (isbns[51], "NORMAL",   wh2_loc),
+            (isbns[52], "URGENT",   wh1_loc),
+            (isbns[53], "URGENT",   wh2_loc),
+            (isbns[54], "CRITICAL", wh1_loc),
+            (isbns[55], "NEWBOOK",  wh2_loc),
+        ]):
+            rows.append(_po_row("PUBLISHER_ORDER", isbn, None, tgt, qty=120,
+                                urgency=urg, status="PENDING",
+                                auto_exec=(urg in ("URGENT", "CRITICAL")),
+                                hours_ago=2, reason="seed_pending_publisher"))
 
     return rows
 
