@@ -54,6 +54,13 @@ $PSQL -f cicd/ansible/sql/001_tables.sql > /tmp/ddl.log 2>&1 || {{ tail -50 /tmp
 $PSQL -f cicd/ansible/sql/002_indexes.sql >> /tmp/ddl.log 2>&1
 $PSQL -f cicd/ansible/sql/003_grants.sql >> /tmp/ddl.log 2>&1
 
+echo "=== Migrations (002~006 in sorted order) ==="
+for m in cicd/ansible/sql/migrations/*.sql; do
+  [ -f "$m" ] || continue
+  echo "  apply $m"
+  $PSQL -f "$m" >> /tmp/ddl.log 2>&1 || {{ echo "  FAIL $m"; tail -50 /tmp/ddl.log; exit 1; }}
+done
+
 echo "=== TRUNCATE + COPY ==="
 $PSQL -c "TRUNCATE TABLE {truncate_list} RESTART IDENTITY CASCADE"
 SEED_DIR=infra/aws/20-data-persistent/seed-data
