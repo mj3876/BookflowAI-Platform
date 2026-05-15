@@ -613,23 +613,6 @@ def gen_pending_orders(books, locations, scenario_b_isbns) -> list[dict]:
                                 urgency="NORMAL", status="EXECUTED",
                                 hours_ago=48 + i * 6, reason="capacity_balance"))
 
-    # ── D. PUBLISHER_ORDER PENDING 6건 (시연용 · 외부 발주 협의 필요) ──
-    # 시드 시점에서 외부 발주 PENDING 가 있어야 hq-admin /approval 에서 📦 외부 발주 탭 확인 가능.
-    # plan-daily cascade 는 stage 0-2 만 채우므로 stage 3 (PUBLISHER) 는 별도 시드 필요.
-    if wh1_loc and wh2_loc:
-        for i, (isbn, urg, tgt) in enumerate([
-            (isbns[50], "NORMAL",   wh1_loc),
-            (isbns[51], "NORMAL",   wh2_loc),
-            (isbns[52], "URGENT",   wh1_loc),
-            (isbns[53], "URGENT",   wh2_loc),
-            (isbns[54], "CRITICAL", wh1_loc),
-            (isbns[55], "NEWBOOK",  wh2_loc),
-        ]):
-            rows.append(_po_row("PUBLISHER_ORDER", isbn, None, tgt, qty=120,
-                                urgency=urg, status="PENDING",
-                                auto_exec=(urg in ("URGENT", "CRITICAL")),
-                                hours_ago=2, reason="seed_pending_publisher"))
-
     return rows
 
 
