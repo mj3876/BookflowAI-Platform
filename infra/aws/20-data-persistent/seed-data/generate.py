@@ -465,18 +465,45 @@ PO_LEAD_DAYS = {
 
 
 def _po_row(order_type, isbn13, src, tgt, qty, urgency, status,
-            auto_exec=False, hours_ago=12, reason="demand_growth"):
+            auto_exec=False, hours_ago=12, reason="demand_growth",
+            rejection_stage=None):
     """pending_orders row helper — 시나리오 fixture 의 row 생성 단순화.
 
     forecast_rationale.expected_arrival_date: created_at + LEAD_DAYS[order_type] (date).
     decision-svc /decide 와 /plan-daily 가 채우는 필드 정합.
+
+    4-step state machine v2 (migration 006):
+      PENDING → APPROVED → IN_TRANSIT → EXECUTED (또는 REJECTED + rejection_stage)
+      신규 컬럼 5개 정합 채움 — CHECK 제약 충족 보장.
+
+      | status         | approved_at | dispatched_at | executed_at | rejection_stage |
+      | PENDING        | NULL        | NULL          | NULL        | NULL            |
+      | APPROVED       | ✓           | NULL          | NULL        | NULL            |
+      | IN_TRANSIT     | ✓           | ✓             | NULL        | NULL            |
+      | EXECUTED       | ✓           | ✓             | ✓           | NULL            |
+      | AUTO_EXECUTED  | ✓           | ✓             | ✓           | NULL            |
+      | REJECTED       | stage 따라  | stage 따라    | NULL        | ✓ (PENDING|APPROVED|IN_TRANSIT) |
     """
     created = NOW - timedelta(hours=hours_ago)
-    approved_at = (created + timedelta(hours=1)).isoformat() if status in ("APPROVED", "AUTO_EXECUTED", "EXECUTED") else ""
-    executed_at = (created + timedelta(hours=2)).isoformat() if status in ("AUTO_EXECUTED", "EXECUTED") else ""
-    expected_arrival = (
-        created.date() + timedelta(days=PO_LEAD_DAYS.get(order_type, 1))
-    ).isoformat()
+    expected_arrival_date = created.date() + timedelta(days=PO_LEAD_DAYS.get(order_type, 1))
+    expected_arrival = expected_arrival_date.isoformat()
+
+    # ── approved_at: APPROVED 이후 모든 status + REJECTED stage='APPROVED'|'IN_TRANSIT'
+    has_approved = status in ("APPROVED", "IN_TRANSIT", "EXECUTED", "AUTO_EXECUTED") \
+                   or (status == "REJECTED" and rejection_stage in ("APPROVED", "IN_TRANSIT"))
+    approved_at = (created + timedelta(hours=1)).isoformat() if has_approved else ""
+
+    # ── dispatched_at: IN_TRANSIT 진입 후 모든 status + REJECTED stage='IN_TRANSIT'
+    has_dispatched = status in ("IN_TRANSIT", "EXECUTED", "AUTO_EXECUTED") \
+                     or (status == "REJECTED" and rejection_stage == "IN_TRANSIT")
+    dispatched_at = (created + timedelta(hours=2)).isoformat() if has_dispatched else ""
+    dispatched_by = "seed:cron" if status == "AUTO_EXECUTED" else ("seed:user" if has_dispatched else "")
+
+    # ── executed_at: EXECUTED 또는 AUTO_EXECUTED 만
+    has_executed = status in ("EXECUTED", "AUTO_EXECUTED")
+    executed_at = (created + timedelta(hours=3)).isoformat() if has_executed else ""
+    executed_by = "seed:cron" if status == "AUTO_EXECUTED" else ("seed:user" if has_executed else "")
+
     return {
         "order_id": str(uuid.uuid4()),
         "order_type": order_type,
@@ -503,6 +530,12 @@ def _po_row(order_type, isbn13, src, tgt, qty, urgency, status,
         "created_at": created.isoformat(),
         "approved_at": approved_at,
         "executed_at": executed_at,
+        # 4-step state machine v2 신규 컬럼 (migration 006)
+        "dispatched_at": dispatched_at,
+        "dispatched_by": dispatched_by,
+        "executed_by": executed_by,
+        "rejection_stage": rejection_stage if status == "REJECTED" else "",
+        "expected_arrival_at": expected_arrival,
     }
 
 
@@ -628,11 +661,25 @@ def gen_pending_orders_daily(books, locations, days: int = 7, per_day: int = 100
             )[0]
             urgency = random.choices(["NORMAL", "URGENT", "CRITICAL"], weights=[70, 25, 5])[0]
             auto_exec = urgency in ("URGENT", "CRITICAL")
-            # 과거 batch 처리 완료 분포
+            # 4-step state machine v2 분포 (D-6~D-1 · 부분 진행 + 완료 혼합)
             if auto_exec:
-                status = "AUTO_EXECUTED"   # 07:00 batch
+                # URGENT/CRITICAL — 07:00 cron 자동 처리. 일부는 dispatch+receive 완료(EXECUTED),
+                # 일부는 dispatch 직후 운송 중(IN_TRANSIT), 나머지는 AUTO_EXECUTED 상태 유지
+                status = random.choices(
+                    ["AUTO_EXECUTED", "EXECUTED", "IN_TRANSIT"],
+                    weights=[40, 50, 10],
+                )[0]
             else:
-                status = random.choices(["APPROVED", "REJECTED"], weights=[55, 45])[0]
+                # NORMAL — 사람이 처리. 완료(EXECUTED) · 운송 중(IN_TRANSIT) · 발송 대기(APPROVED) · 거절
+                status = random.choices(
+                    ["EXECUTED", "APPROVED", "IN_TRANSIT", "REJECTED"],
+                    weights=[35, 15, 5, 45],
+                )[0]
+            # REJECTED 시 rejection_stage 분포: PENDING 거부 50% · APPROVED 거부 30% · IN_TRANSIT 거부 20%
+            rejection_stage = (
+                random.choices(["PENDING", "APPROVED", "IN_TRANSIT"], weights=[50, 30, 20])[0]
+                if status == "REJECTED" else None
+            )
 
             isbn = random.choice(isbns[50:500])
             qty = random.randint(10, 80)
@@ -674,6 +721,7 @@ def gen_pending_orders_daily(books, locations, days: int = 7, per_day: int = 100
                 urgency=urgency, status=status,
                 auto_exec=auto_exec, hours_ago=hours_ago,
                 reason="daily_generated",
+                rejection_stage=rejection_stage,
             ))
     return rows
 

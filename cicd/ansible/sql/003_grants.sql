@@ -65,6 +65,9 @@ GRANT INSERT, UPDATE        ON order_approvals  TO intervention_svc;
 GRANT INSERT, UPDATE        ON returns          TO intervention_svc;
 GRANT INSERT                ON audit_log        TO intervention_svc;
 -- 2026-05-14: _adjust_source_inventory helper (Option B 승인/거부 시 source -qty/+qty 복원)
+-- 2026-05-15: Option B 폐기 (4-step state machine v2 · migration 006) — inventory writer 단일화 inventory-svc
+--             intervention-svc 는 inventory-svc /adjust HTTP 호출만 사용. 직접 UPDATE 금지.
+--             단 GRANT 유지 — destroy/redeploy 흐름에서 legacy 코드 잔존 시 안전망 + 향후 emergency repair 용.
 GRANT INSERT, UPDATE        ON inventory        TO intervention_svc;
 -- HQ 도서 ON/OFF + 소진 모드 (FR-A6.1·A6.2): active + discontinue_* 컬럼만
 GRANT UPDATE (active, discontinue_mode, discontinue_reason, discontinue_at, discontinue_by, reactivated_at)
