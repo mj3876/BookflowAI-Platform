@@ -413,7 +413,9 @@ def gen_forecast_cache(books, scenario_b_isbns: list[str], days: int = 7,
                     continue
                 seen.add(key)
                 if is_publisher_force:
-                    base = 100.0  # 매장당 100/day → wh 합산 1200/day · stage 3 진입 강제
+                    # 매장별 차등 forecast (60~160/day) → chained WH_TO_STORE 분배가 매장별 비율로 차등.
+                    # 12 매장 평균 110/day → wh 합산 ~1320/day · stage 3 진입 크기 유지.
+                    base = random.uniform(60, 160)
                 else:
                     base = random.uniform(5, 25) if is_popular else random.uniform(0, 3)
                 rows.append({
