@@ -4,6 +4,7 @@ SAM template auto-fetches RDS/Redis/SF/Secret/Bucket params from existing stacks
 GCS transfer is handled by the Glue features_build job, not by a Lambda.
 """
 import os
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -14,22 +15,25 @@ from ..lib.config import Config
 
 def _package_sam(artifact_bucket: str) -> Path:
     """SAM 로컬 CodeUri → S3 업로드 후 패키징된 템플릿 경로 반환."""
-    sam_dir  = Config.INFRA_ROOT / "99-serverless"
-    built    = sam_dir / ".aws-sam" / "build" / "template.yaml"
+    sam_dir   = Config.INFRA_ROOT / "99-serverless"
+    build_dir = sam_dir / ".aws-sam"
+    built     = build_dir / "build" / "template.yaml"
 
-    if not built.exists():
-        log.info("  sam build 실행 중...")
-        # Windows 에서 PATH 에 sam 없으면 SAM_CMD env 또는 default 위치 fallback
-        sam_cmd = os.environ.get("SAM_CMD")
-        if not sam_cmd:
-            from shutil import which
-            sam_cmd = which("sam") or which("sam.cmd") or r"C:\Program Files\Amazon\AWSSAMCLI\bin\sam.cmd"
-        # --use-container: Docker 안에서 build (로컬 python 버전 = Lambda runtime 일치 강제 회피)
-        subprocess.run(
-            [sam_cmd, "build", "--use-container", "--template-file", str(sam_dir / "sam-template.yaml")],
-            cwd=str(sam_dir), check=True,
-            env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"},
-        )
+    # stale build 재사용 방지 — 매번 .aws-sam 삭제 후 fresh build.
+    # (sam-template / lambda 소스 변경이 항상 반영 · 옛 ReservedConcurrentExecutions 등 잔재 제거)
+    if build_dir.exists():
+        shutil.rmtree(build_dir, ignore_errors=True)
+    log.info("  sam build 실행 중 (fresh)...")
+    # Windows 에서 PATH 에 sam 없으면 SAM_CMD env 또는 default 위치 fallback
+    sam_cmd = os.environ.get("SAM_CMD")
+    if not sam_cmd:
+        sam_cmd = shutil.which("sam") or shutil.which("sam.cmd") or r"C:\Program Files\Amazon\AWSSAMCLI\bin\sam.cmd"
+    # --use-container: Docker 안에서 build (로컬 python 버전 = Lambda runtime 일치 강제 회피)
+    subprocess.run(
+        [sam_cmd, "build", "--use-container", "--template-file", str(sam_dir / "sam-template.yaml")],
+        cwd=str(sam_dir), check=True,
+        env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"},
+    )
 
     tmp_dir   = Path(tempfile.mkdtemp())
     packaged  = tmp_dir / "packaged.yaml"

@@ -6,6 +6,10 @@ Parameters:
   ProjectName:
     Type: String
     Default: bookflow
+  StepFunctionsArn:
+    Type: String
+    Default: ''
+    Description: ETL3 Step Functions ARN. Empty on lambda CREATE-only step; glue task injects it via lambda UPDATE after the step-functions stack exists (lambdas_.py passes this parameter).
 
 Globals:
   Function:
@@ -173,12 +177,14 @@ Resources:
         Variables:
           PROJECT_NAME: !Ref ProjectName
           REGION: !Ref AWS::Region
-          STEP_FN_ARN: !ImportValue
-            Fn::Sub: ${ProjectName}-sfn-etl3-arn
+          STEP_FN_ARN: !Ref StepFunctionsArn
       Policies:
-        - StepFunctionsExecutionPolicy:
-            StateMachineName: !ImportValue
-              Fn::Sub: ${ProjectName}-sfn-etl3-name
+        # SF ARN is empty on lambda CREATE-only step -> use parameter, not ImportValue.
+        # Policy uses bookflow-* state machine wildcard -> no step-functions stack dependency.
+        - Statement:
+            - Effect: Allow
+              Action: states:StartExecution
+              Resource: !Sub arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${ProjectName}-*
       Events:
         Cron:
           Type: Schedule

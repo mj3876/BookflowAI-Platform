@@ -197,62 +197,10 @@ Resources:
           Value: !Sub ${ProjectName}-publisher-bg
           PropagateAtLaunch: true
 
-  # ─── CodeDeploy Service Role ───
-  CodeDeployServiceRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub ${ProjectName}-codedeploy-publisher-role
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal: { Service: codedeploy.amazonaws.com }
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole
-
-  # ─── CodeDeploy Application ───
-  PublisherCodeDeployApp:
-    Type: AWS::CodeDeploy::Application
-    Properties:
-      ApplicationName: !Sub ${ProjectName}-publisher
-      ComputePlatform: Server
-
-  # ─── CodeDeploy Deployment Group (Blue/Green · ALB listener 전환) ───
-  PublisherCodeDeployDG:
-    Type: AWS::CodeDeploy::DeploymentGroup
-    Properties:
-      ApplicationName: !Ref PublisherCodeDeployApp
-      DeploymentGroupName: !Sub ${ProjectName}-publisher-bg
-      ServiceRoleArn: !GetAtt CodeDeployServiceRole.Arn
-      DeploymentConfigName: CodeDeployDefault.OneAtATime
-      DeploymentStyle:
-        DeploymentOption: WITH_TRAFFIC_CONTROL
-        DeploymentType: BLUE_GREEN
-      BlueGreenDeploymentConfiguration:
-        DeploymentReadyOption:
-          ActionOnTimeout: CONTINUE_DEPLOYMENT
-          WaitTimeInMinutes: 0
-        GreenFleetProvisioningOption:
-          Action: COPY_AUTO_SCALING_GROUP
-        TerminateBlueInstancesOnDeploymentSuccess:
-          Action: TERMINATE
-          TerminationWaitTimeInMinutes: 5
-      LoadBalancerInfo:
-        TargetGroupPairInfoList:
-          - TargetGroups:
-              - Name: !Sub ${ProjectName}-publisher-blue-tg
-              - Name: !Sub ${ProjectName}-publisher-green-tg
-            ProdTrafficRoute:
-              ListenerArns:
-                - !ImportValue
-                    Fn::Sub: ${ProjectName}-alb-listener-prod-arn
-            TestTrafficRoute:
-              ListenerArns:
-                - !ImportValue
-                    Fn::Sub: ${ProjectName}-alb-listener-test-arn
-      AutoScalingGroups:
-        - !Ref PublisherAsg
+# CodeDeploy Application / DeploymentGroup / ServiceRole are NOT defined here.
+# cicd/codepipeline/publisher-codedeploy.yaml (bookflow-cicd-publisher) is the source of truth -
+# defining the same names (bookflow-publisher / bookflow-publisher-bg) in two stacks would conflict.
+# This stack only owns ASG/LaunchTemplate/SG/IAM/target infrastructure.
 
 Outputs:
   AsgName:

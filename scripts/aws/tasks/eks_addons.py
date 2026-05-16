@@ -130,9 +130,26 @@ def _helm_install_external_secrets() -> None:
     ], check=True)
 
 
-ROUTE53_HOSTED_ZONE_ID = "Z0061717U502ZCK2HCCF"  # myosoon.store
+ROUTE53_HOSTED_ZONE_ID = "Z0061717U502ZCK2HCCF"  # myosoon.store (deploy 계정 소유 영구 zone)
+ROUTE53_ZONE_ACCOUNT = "354493396671"            # myosoon.store zone 소유 계정 (deploy)
+ROUTE53_XACCT_ROLE = "arn:aws:iam::354493396671:role/bookflow-route53-xacct"
 NLB_HOSTED_ZONE_ID = "Z31USIVHYNEOWT"  # NLB ap-northeast-1
 PUBLIC_FQDN = "bookflow.myosoon.store"
+
+
+def _route53_client():
+    """myosoon.store zone 은 deploy 계정 소유. 현재 계정(admin)이 다르면 cross-account assume.
+    deploy 계정에서 돌 땐 자기 zone → assume 불필요."""
+    import boto3
+    sts = boto3.client("sts")
+    if sts.get_caller_identity()["Account"] == ROUTE53_ZONE_ACCOUNT:
+        return boto3.client("route53")
+    cr = sts.assume_role(RoleArn=ROUTE53_XACCT_ROLE,
+                         RoleSessionName="bookflow-eks-addons-route53")["Credentials"]
+    return boto3.client("route53",
+                        aws_access_key_id=cr["AccessKeyId"],
+                        aws_secret_access_key=cr["SecretAccessKey"],
+                        aws_session_token=cr["SessionToken"])
 
 
 def _update_route53_a_alias() -> None:
@@ -148,7 +165,7 @@ def _update_route53_a_alias() -> None:
         log.err("NLB DNS not found · ingress-nginx LoadBalancer 미배포")
         raise SystemExit(1)
     log.info(f"Route53 UPSERT {PUBLIC_FQDN} → {nlb_dns}")
-    boto3.client("route53").change_resource_record_sets(
+    _route53_client().change_resource_record_sets(
         HostedZoneId=ROUTE53_HOSTED_ZONE_ID,
         ChangeBatch={"Changes": [{
             "Action": "UPSERT",
@@ -286,6 +303,18 @@ def _sync_rds_pod_roles() -> None:
     _alter_rds_pod_roles(rds_pw)
 
 
+def _patch_clusterissuer_xacct_role() -> None:
+    """admin: myosoon.store zone 은 deploy 계정 소유 → ClusterIssuer route53 solver 에
+    cross-account role 주입. cert-manager 가 이 role 을 assume 해 DNS-01 TXT 를 작성.
+    deploy 계정에선 자기 zone 직접 → 호출 안 함 (_apply_manifests 가 BOOKFLOW_ENV 로 분기)."""
+    patch = ('[{"op":"add","path":"/spec/acme/solvers/0/dns01/route53/role",'
+             f'"value":"{ROUTE53_XACCT_ROLE}"}}]')
+    for ci in ("letsencrypt-prod", "letsencrypt-staging"):
+        subprocess.run(["kubectl", "patch", "clusterissuer", ci, "--type=json", "-p", patch],
+                       check=False)
+    log.info(f"  ClusterIssuer route53 solver cross-account role 주입: {ROUTE53_XACCT_ROLE}")
+
+
 def _apply_manifests() -> None:
     # bookflow namespace 가 certificate.yaml 보다 먼저 존재해야 함 (cert-manager Certificate 가 namespace=bookflow)
     subprocess.run(
@@ -342,6 +371,10 @@ def _apply_manifests() -> None:
             log.warn(f"manifest missing (skip): {m}")
             continue
         _apply_with_subs(m)
+        # cluster-issuer apply 직후 — admin 은 myosoon.store(deploy zone) cross-account
+        # role 을 solver 에 주입 (certificate.yaml apply 보다 먼저 → challenge 가 role config 사용).
+        if m.name == "cluster-issuer.yaml" and os.environ.get("BOOKFLOW_ENV", "deploy") == "admin":
+            _patch_clusterissuer_xacct_role()
 
     # 7 pod manifests (admin 환경 전용 · deploy 는 cicd-eks 가 build/push/apply 자동 처리)
     # BOOKFLOW_ENV=admin 일 때만 실행 — deploy 에서 중복 apply 회피

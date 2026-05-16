@@ -5,15 +5,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../lib/common.sh"
 ACTION="${1:-up}"
 load_env; acquire_lock "publisher"; init_log "publisher" "$ACTION"; pre_flight
-INFRA="$PROJECT_ROOT/infra/aws"
 
 case "$ACTION" in
 up)
-  step "publisher.sh up · publisher-asg + alb-external (2 병렬)"
-  cfn_parallel_deploy <<EOF
-bookflow-40-publisher-asg|$INFRA/40-compute-runtime/publisher-asg.yaml
-bookflow-50-alb-external|$INFRA/50-network-traffic/alb-external.yaml
-EOF
+  step "publisher.sh up · task publisher (alb-external → waf → publisher-asg → ecs-inventory-api 순차)"
+  # publisher-asg 는 alb-external 의 TargetGroup ARN 을 파라미터로 받음 → 병렬 불가.
+  # bookflow.py task publisher 가 ALB output 을 읽어 ASG/ECS 에 순차 전달.
+  py "$PROJECT_ROOT/scripts/aws/bookflow.py" task publisher
   state_write "publisher" "up"; step "publisher.sh up done" ;;
 down)
   step "publisher.sh down · CodeDeploy ASG 강제 삭제 + CFN delete"

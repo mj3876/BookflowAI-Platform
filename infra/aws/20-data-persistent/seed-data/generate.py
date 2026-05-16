@@ -475,13 +475,14 @@ def append_wh_forecast(forecast_rows: list[dict], locations: list[dict]) -> None
 # =========================================================================
 # 9. pending_orders (30 · 다양 상태 · order_type 다양)
 # =========================================================================
-# Stage 별 LEAD_DAYS — decision-svc/src/routes/decision.py 와 동일 (v4 2026-05-15).
-# 사용자 도메인: D+0 새벽 예측 → 9시 승인 → 당일 실행 (REBALANCE/WH_TO_STORE),
-#               권역 간 (WH_TRANSFER) D+1, 외부 발주 (PUBLISHER) D+3.
+# Stage 별 LEAD_DAYS — decision-svc/src/routes/decision.py 와 동일 (v5 2026-05-16).
+# 사용자 도메인: D+0 새벽 예측 → 9시 승인 → 당일 실행.
+#   REBALANCE/WH_TO_STORE/WH_TRANSFER 모두 D+0 (WH_TRANSFER 는 물류센터끼리 당일 분배).
+#   PUBLISHER 만 D+3 (외부 발주 리드). chained WH_TO_STORE 는 상위 도착 +1일.
 PO_LEAD_DAYS = {
     "REBALANCE":       0,
     "WH_TO_STORE":     0,
-    "WH_TRANSFER":     1,
+    "WH_TRANSFER":     0,
     "PUBLISHER_ORDER": 3,
 }
 

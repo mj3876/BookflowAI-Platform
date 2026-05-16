@@ -82,6 +82,9 @@ SELECT setval('audit_log_log_id_seq',        COALESCE((SELECT MAX(log_id)       
 SELECT setval('new_book_requests_id_seq',    COALESCE((SELECT MAX(id)           FROM new_book_requests), 1), true);
 "
 
+echo "=== cover_url account 정합 (books.csv 는 특정 계정 S3 URL · 현재 계정 book-covers 버킷으로 정정) ==="
+$PSQL -c "UPDATE books SET cover_url = REGEXP_REPLACE(cover_url, 'bookflow-book-covers-[0-9]+', 'bookflow-book-covers-{account}') WHERE cover_url LIKE '%bookflow-book-covers-%';"
+
 echo "=== Aggregate kpi_daily from sales_realtime (sales_realtime 이 단일 truth source) ==="
 $PSQL -c "
 TRUNCATE TABLE kpi_daily;
@@ -198,6 +201,7 @@ def deploy() -> None:
         bucket=bucket,
         truncate_list=truncate_list,
         load_order=" ".join(LOAD_ORDER),
+        account=Config.account_id(),
     )
     _ssm_run(instance_id, script, Config.REGION)
     log.step("=== task-rds-seed complete ===")

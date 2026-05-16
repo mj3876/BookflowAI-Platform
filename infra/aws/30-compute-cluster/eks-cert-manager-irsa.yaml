@@ -64,6 +64,11 @@ Resources:
                   - route53:ListHostedZonesByName
                   - route53:ListResourceRecordSets
                 Resource: '*'
+              # myosoon.store zone 이 다른 계정(deploy 354493396671) 소유일 때 cross-account assume.
+              # 같은 계정(deploy)에서 배포되면 위 route53 직접 권한으로 충분 — 이 권한은 미사용 무해.
+              - Effect: Allow
+                Action: sts:AssumeRole
+                Resource: arn:aws:iam::354493396671:role/bookflow-route53-xacct
 
 Outputs:
   CertManagerRoute53RoleArn:
