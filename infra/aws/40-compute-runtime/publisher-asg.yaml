@@ -74,6 +74,14 @@ Resources:
               - Effect: Allow
                 Action: secretsmanager:GetSecretValue
                 Resource: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ProjectName}/*
+        # after-install.sh 가 RDS 엔드포인트를 CFN 스택 출력에서 라이브 조회 (daily 재생성 robust)
+        - PolicyName: RdsStackDescribe
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: cloudformation:DescribeStacks
+                Resource: !Sub arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${ProjectName}-20-rds/*
 
   PublisherInstanceProfile:
     Type: AWS::IAM::InstanceProfile

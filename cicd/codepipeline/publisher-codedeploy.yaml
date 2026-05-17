@@ -1,4 +1,4 @@
-﻿AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: '2010-09-09'
 Description: BOOKFLOW - Publisher EC2 Blue/Green CodePipeline and CodeDeploy
 
 Parameters:
@@ -179,6 +179,7 @@ Resources:
                 - test -f publisher/appspec.yml
                 - test -d publisher/scripts
                 - test -d publisher/src
+                - test -d publisher/backend
                 - mkdir -p dist
                 - cp -a publisher/. dist/
                 - sed -i 's/\r$//' dist/scripts/*.sh
@@ -189,6 +190,7 @@ Resources:
               - appspec.yml
               - scripts/**/*
               - src/**/*
+              - backend/**/*
             discard-paths: no
       Tags:
         - Key: Name
