@@ -14,7 +14,7 @@ BEGIN;
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'publisher_api') THEN
-        CREATE ROLE publisher_api LOGIN PASSWORD 'CHANGE_ME_PUBLISHER_API' IN ROLE bookflow_app;
+        CREATE ROLE publisher_api LOGIN PASSWORD 'Bookflow-Pub-2026' IN ROLE bookflow_app;
     END IF;
 END $$;
 
