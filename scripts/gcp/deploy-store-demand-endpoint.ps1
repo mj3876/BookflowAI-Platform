@@ -20,8 +20,7 @@ gcloud ai endpoints deploy-model $EndpointId `
   --display-name="champion-20260515-v1" `
   --machine-type=$MachineType `
   --min-replica-count=$MinReplicaCount `
-  --max-replica-count=$MaxReplicaCount `
-  --traffic-split="0=100"
+  --max-replica-count=$MaxReplicaCount
 
 gcloud ai endpoints describe $EndpointId `
   --project=$ProjectId `
