@@ -15,11 +15,18 @@ Deploy :
 : 🟡   deploy
 """
 import boto3
+import os
 
 from ..lib import Stack, log
 from ..lib.config import Config
 
 CICD_ROOT = Config.REPO_ROOT / "cicd" / "codepipeline"
+
+_GCP_PROJECT_ID = os.environ.get("GCP_PROJECT_ID", "project-8ab6bf05-54d2-4f5d-b8d")
+_GCP_VERTEX_INVOKE_URL = os.environ.get(
+    "GCP_VERTEX_INVOKE_URL",
+    "https://asia-northeast1-project-8ab6bf05-54d2-4f5d-b8d.cloudfunctions.net/bookflow-vertex-invoke",
+)
 
 
 def deploy() -> None:
@@ -31,6 +38,10 @@ def deploy() -> None:
         name="eks",
         template="eks-pipeline.yaml",
         template_root=CICD_ROOT,
+        parameters={
+            "GcpProjectId": _GCP_PROJECT_ID,
+            "GcpVertexInvokeUrl": _GCP_VERTEX_INVOKE_URL,
+        },
     )
     cicd_stack.deploy()
 

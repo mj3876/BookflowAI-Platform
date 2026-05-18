@@ -31,6 +31,7 @@ TGW_ASN=$(aws cloudformation describe-stacks \
   --output text 2>/dev/null || echo "64512")
 
 # Python으로 전체 파싱 (inside CIDR → BGP IP 계산, PSK 추출, VPC CIDR 목록)
+export SCRIPT_DIR
 py - <<PYEOF
 import boto3, os, sys, re, json, ipaddress
 sys.stdout.reconfigure(encoding='utf-8', line_buffering=True)
@@ -91,20 +92,10 @@ print(f'\n  AWS VPC CIDRs : {cidrs}')
 cidr_tf = '[' + ', '.join(f'"{c}"' for c in cidrs) + ']'
 t0, t1  = tunnels[0], tunnels[1]
 
-# ── terraform.tfvars 출력 ──
-print("""
-════════════════════════════════════════════════════════
-  infra/gcp/20-network-daily/terraform.tfvars
-════════════════════════════════════════════════════════""")
-
-print(f"""
-project_id        = "project-8ab6bf05-54d2-4f5d-b8d"
-region            = "asia-northeast1"
-vpc_name          = "bookflow-vpc"
-
-aws_peer_ips      = ["{t0['outside_ip']}", "{t1['outside_ip']}"]
+# ── terraform.tfvars 내용 생성 (variables.tf 선언 변수만 포함) ──
+# project_id / region / vpc_name / gcp_router_asn 은 variables.tf 미선언 → 제외
+tfvars_content = f"""aws_peer_ips      = ["{t0['outside_ip']}", "{t1['outside_ip']}"]
 aws_tgw_bgp_asn   = $TGW_ASN
-gcp_router_asn    = 64514
 
 vpn_shared_secret = "{psk0}"
 
@@ -130,12 +121,23 @@ bgp_sessions = {{
     peer_ip_address                 = "{t1['aws_ip']}"
     advertised_route_priority       = 100
   }}
-}}""")
+}}
+"""
 
-print("""
+# ── 자동 저장 ──
+import pathlib
+script_dir  = pathlib.Path(os.environ.get('SCRIPT_DIR', '.')).resolve()
+tfvars_path = script_dir.parents[2] / 'infra' / 'gcp' / '20-network-daily' / 'terraform.tfvars'
+tfvars_path.write_text(tfvars_content, encoding='utf-8')
+
+print(f"""
+════════════════════════════════════════════════════════
+  infra/gcp/20-network-daily/terraform.tfvars
+════════════════════════════════════════════════════════
+{tfvars_content}
+  → 자동 저장 완료: {tfvars_path}
 ════════════════════════════════════════════════════════
   다음 단계:
-  1. 위 내용을 infra/gcp/20-network-daily/terraform.tfvars 로 저장
-  2. cd infra/gcp/20-network-daily && terraform apply -auto-approve
+  cd infra/gcp/20-network-daily && terraform apply -auto-approve
 ════════════════════════════════════════════════════════""")
 PYEOF
