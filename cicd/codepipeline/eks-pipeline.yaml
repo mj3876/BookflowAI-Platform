@@ -53,6 +53,14 @@ Parameters:
     Default: '1.30'
     Description: CodeBuild  install  kubectl  (EKS cluster   )
 
+  GcpProjectId:
+    Type: String
+    Description: GCP project id used by forecast-svc BigQuery refresh.
+
+  GcpVertexInvokeUrl:
+    Type: String
+    Description: HTTPS URL for the GCP vertex-invoke Cloud Function.
+
 Resources:
   # ────────────────────────────────────────────────────────────────
   # 1. CodeBuild IAM Role
@@ -169,6 +177,8 @@ Resources:
           - { Name: PROJECT_NAME, Value: !Ref ProjectName }
           - { Name: EKS_CLUSTER_NAME, Value: !Ref EksClusterName }
           - { Name: KUBECTL_VERSION, Value: !Ref KubectlVersion }
+          - { Name: GCP_PROJECT_ID, Value: !Ref GcpProjectId }
+          - { Name: GCP_VERTEX_INVOKE_URL, Value: !Ref GcpVertexInvokeUrl }
       Source:
         Type: CODEPIPELINE
         BuildSpec: eks-pods/buildspec.yml   # source artifact   
