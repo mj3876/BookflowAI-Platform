@@ -48,7 +48,7 @@ terraform version      # Mode B 사용 시 (GCP 쪽)
 `scripts/aws/config/.env.local` 생성 (gitignored):
 
 ```bash
-BOOKFLOW_DUCKDNS_TOKEN=<your-token>
+BOOKFLOW_DOMAIN=bookflow.myosoon.store
 BOOKFLOW_ENTRA_CLIENT_ID=<entra-client-id>
 BOOKFLOW_ENTRA_TENANT_ID=<entra-tenant-id>
 
@@ -381,7 +381,7 @@ scripts/aws/
 | `BOOKFLOW_GCP_VPC_CIDR` | `10.50.0.0/24` | GCP VPC 라우팅 대상 CIDR |
 | `GCP_PROJECT_ID` | param store 자동 | ETL Lambda → GCS 연동 |
 | `GCS_STAGING_BUCKET` | param store 자동 | ETL staging 버킷 |
-| `BOOKFLOW_DUCKDNS_TOKEN` | `.env.local` | DuckDNS HTTPS |
+| `BOOKFLOW_DOMAIN` | `bookflow.myosoon.store` | 서비스 도메인 (HTTPS) |
 | `BOOKFLOW_ENTRA_CLIENT_ID` | `.env.local` | Entra OIDC |
 | `BOOKFLOW_ENTRA_TENANT_ID` | `.env.local` | Entra OIDC |
 
