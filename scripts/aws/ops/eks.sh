@@ -38,7 +38,10 @@ bookflow-40-eks-addons|$INFRA/40-compute-runtime/eks-addons.yaml
 EOF
 
   step "5. kubectl 인증 + helm + manifests + Secret sync"
-  py "$PROJECT_ROOT/scripts/aws/bookflow.py" task eks-addons
+  # BOOKFLOW_SKIP_RDS_SYNC=1: ALTER ROLE 건너뜀
+  # start-day.sh 병렬 실행 중 seed.sh 미완료 상태에서 role 없어 실패하는 문제 방지
+  # start-day.sh step 5/5 의 task eks-addons 가 seed 완료 후 full sync 처리
+  BOOKFLOW_SKIP_RDS_SYNC=1 py "$PROJECT_ROOT/scripts/aws/bookflow.py" task eks-addons
 
   state_write "eks" "up"
   step "eks.sh up done"

@@ -423,6 +423,12 @@ def deploy() -> None:
     _apply_cluster_secret_store()
     _update_route53_a_alias()
     _apply_manifests()
+    # BOOKFLOW_SKIP_RDS_SYNC=1 이면 ALTER ROLE + rollout restart 건너뜀
+    # eks.sh 병렬 실행 시 seed.sh 미완료로 role 없어 실패하는 문제 방지
+    # start-day.sh step 5/5 에서 플래그 없이 재호출 → full sync
+    if os.environ.get("BOOKFLOW_SKIP_RDS_SYNC") == "1":
+        log.info("BOOKFLOW_SKIP_RDS_SYNC=1 · ALTER ROLE + rollout restart skip (start-day step 5/5 에서 처리)")
+        return
     _sync_rds_pod_roles()
     # ALTER ROLE 후 7 pod 의 connection pool 캐시 무효화 — rollout restart 로 새 password 적용
     log.info("rollout restart 7 pods · ALTER ROLE 적용 위해 connection pool 재생성")
