@@ -48,14 +48,16 @@ terraform version      # Mode B 사용 시 (GCP 쪽)
 `scripts/aws/config/.env.local` 생성 (gitignored):
 
 ```bash
-BOOKFLOW_DOMAIN=bookflow.myosoon.store
+# Entra ID 자격증명 (민감정보 · git 커밋 금지)
 BOOKFLOW_ENTRA_CLIENT_ID=<entra-client-id>
 BOOKFLOW_ENTRA_TENANT_ID=<entra-tenant-id>
 
-# Mode B 사용 시 — PSK 고정값 등록 (매번 입력 방지)
+# Mode B 사용 시 — PSK 고정값 등록 (민감정보 · 매번 입력 방지)
 BOOKFLOW_GCP_VPN_PSK=<gcp-shared-secret>
 BOOKFLOW_AZURE_VPN_PSK=<azure-shared-secret>
 ```
+
+> `BOOKFLOW_DOMAIN`은 민감정보가 아니므로 `deploy.env` / `admin.env`에 이미 포함되어 있다.
 
 ---
 
@@ -381,9 +383,9 @@ scripts/aws/
 | `BOOKFLOW_GCP_VPC_CIDR` | `10.50.0.0/24` | GCP VPC 라우팅 대상 CIDR |
 | `GCP_PROJECT_ID` | param store 자동 | ETL Lambda → GCS 연동 |
 | `GCS_STAGING_BUCKET` | param store 자동 | ETL staging 버킷 |
-| `BOOKFLOW_DOMAIN` | `bookflow.myosoon.store` | 서비스 도메인 (HTTPS) |
-| `BOOKFLOW_ENTRA_CLIENT_ID` | `.env.local` | Entra OIDC |
-| `BOOKFLOW_ENTRA_TENANT_ID` | `.env.local` | Entra OIDC |
+| `BOOKFLOW_DOMAIN` | `bookflow.myosoon.store` | 서비스 도메인 — `deploy.env` / `admin.env`에 고정 |
+| `BOOKFLOW_ENTRA_CLIENT_ID` | `.env.local` | Entra OIDC 자격증명 (민감정보) |
+| `BOOKFLOW_ENTRA_TENANT_ID` | `.env.local` | Entra OIDC 자격증명 (민감정보) |
 
 > PSK를 환경변수로 고정하지 않으면 AWS가 매번 자동생성한다.  
 > 자동생성 시 GCP · Azure도 매번 PSK를 업데이트해야 하므로 `.env.local`에 고정값 등록을 권장한다.
