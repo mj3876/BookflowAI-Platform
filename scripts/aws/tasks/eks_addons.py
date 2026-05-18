@@ -347,6 +347,12 @@ def _apply_manifests() -> None:
         "PROJECT_NAME": "bookflow",
         "DOMAIN": os.environ.get("BOOKFLOW_DUCKDNS_FQDN", "bookflow.duckdns.org"),
         "RDS_HOST": _rds_host,
+        "REDIS_HOST": os.environ.get("REDIS_HOST", ""),
+        "GCP_PROJECT_ID": os.environ.get("GCP_PROJECT_ID", "project-8ab6bf05-54d2-4f5d-b8d"),
+        "GCP_VERTEX_INVOKE_URL": os.environ.get(
+            "GCP_VERTEX_INVOKE_URL",
+            "https://asia-northeast1-project-8ab6bf05-54d2-4f5d-b8d.cloudfunctions.net/bookflow-vertex-invoke",
+        ),
     }
 
     def _apply_with_subs(manifest: Path, extra: dict[str, str] | None = None) -> None:
