@@ -49,12 +49,17 @@ terraform version      # Mode B 사용 시 (GCP 쪽)
 
 ```bash
 # Entra ID 자격증명 (민감정보 · git 커밋 금지)
-BOOKFLOW_ENTRA_CLIENT_ID=<entra-client-id>
-BOOKFLOW_ENTRA_TENANT_ID=<entra-tenant-id>
+BOOKFLOW_ENTRA_CLIENT_ID=1afc548a-bce8-43c7-8de2-fc72c50bd52b
+BOOKFLOW_ENTRA_TENANT_ID=c21d48ef-bedf-4987-a1ba-84aeab7ea76a
 
-# Mode B 사용 시 — PSK 고정값 등록 (민감정보 · 매번 입력 방지)
-BOOKFLOW_GCP_VPN_PSK=<gcp-shared-secret>
-BOOKFLOW_AZURE_VPN_PSK=<azure-shared-secret>
+# Mode B — VPN Gateway IP (고정값 · STEP 2 export 생략 가능)
+BOOKFLOW_GCP_VPN_GW_IP=34.157.64.22
+BOOKFLOW_AZURE_VPN_GW_IP=135.149.169.236
+
+# Mode B — PSK 고정값 (민감정보 · 매번 입력 방지)
+# BOOKFLOW_GCP_VPN_PSK: GCP write-only — 터널 재생성 시 직접 설정 필요
+BOOKFLOW_GCP_VPN_PSK=
+BOOKFLOW_AZURE_VPN_PSK=bookflow
 ```
 
 > `BOOKFLOW_DOMAIN`은 민감정보가 아니므로 `deploy.env` / `admin.env`에 이미 포함되어 있다.
@@ -202,13 +207,15 @@ bash scripts/aws/start-day.sh
 
 #### STEP 2 — Peering → TGW 전환
 
-GCP/Azure IP 환경변수를 설정하고 전환한다.
+GCP/Azure IP 환경변수를 설정하고 전환한다.  
+`.env.local`에 저장해 두면 아래 export를 매번 실행하지 않아도 된다.
 
 ```bash
-export BOOKFLOW_GCP_VPN_GW_IP="34.157.64.22"       # GCP HA VPN Interface 0 (고정값)
-export BOOKFLOW_GCP_VPN_PSK="<gcp-shared-secret>"   # .env.local에 저장해 두면 생략 가능
-export BOOKFLOW_AZURE_VPN_GW_IP="<Azure PIP>"        # Azure 팀 제공 (고정 PIP)
-export BOOKFLOW_AZURE_VPN_PSK="<azure-shared-secret>"
+# .env.local에 없는 경우만 수동 export
+export BOOKFLOW_GCP_VPN_GW_IP="34.157.64.22"        # GCP HA VPN Interface 0 (고정값)
+export BOOKFLOW_GCP_VPN_PSK="<gcp-shared-secret>"    # 터널 재생성 시 GCP 쪽 PSK
+export BOOKFLOW_AZURE_VPN_GW_IP="135.149.169.236"    # Azure VPN Gateway Active PIP (고정값)
+export BOOKFLOW_AZURE_VPN_PSK="bookflow"             # Azure PSK
 
 bash scripts/aws/ops/network-mode.sh tgw
 ```
@@ -286,6 +293,42 @@ gcloud compute vpn-tunnels list \
 ```
 
 정상: `ESTABLISHED` (BGP 수렴까지 2-3분 소요).
+
+#### STEP 6 — Azure VPN 연결
+
+```bash
+bash scripts/azure/2-tasks/vpn-connect.sh
+```
+
+스크립트 내부 동작:
+
+| 단계 | 내용 |
+|---|---|
+| 1 | CFN 스택 `bookflow-60-vpn-site-to-site`에서 Azure VPN Outside IP + PSK 자동 추출 |
+| 2 | `lng-bookflow-aws-active` (Local Network Gateway) 생성 — AWS Outside IP · BGP ASN 64512 등록 |
+| 3 | `conn-bookflow-aws-active` (VPN Connection) 생성 — IKEv2, AES256, BGP 활성화 |
+| 4 | 2분 대기 후 BGP 학습 경로 자동 출력 |
+
+> `.env.local`에 `BOOKFLOW_AZURE_VPN_PSK=bookflow`이 설정되어 있으면 PSK 입력 생략 가능.  
+> Azure VPN Gateway는 항상 유지되므로 Gateway 재생성 없이 LNG + Connection만 교체된다.
+
+#### STEP 7 — Azure 연결 확인
+
+```bash
+# Azure 측 BGP 학습 경로 확인
+az network vnet-gateway list-learned-routes \
+  --name bookflow-vpngw \
+  --resource-group bookflow-network-rg \
+  --output table
+
+# AWS 측 터널 상태
+aws ec2 describe-vpn-connections \
+  --filters "Name=tag:Name,Values=bookflow-vpn-azure" \
+  --query "VpnConnections[0].VgwTelemetry[*].{IP:OutsideIpAddress,Status:Status,BGP:AcceptedRouteCount}" \
+  --profile bookflow-deploy --region ap-northeast-1
+```
+
+정상: Azure 측에서 `10.0.0.0/16` (AWS VPC CIDR) 경로가 학습된 상태 / AWS 측 `ESTABLISHED`.
 
 ---
 
