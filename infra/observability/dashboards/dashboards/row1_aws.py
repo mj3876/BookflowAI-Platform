@@ -37,7 +37,11 @@ from grafana_foundation_sdk.builders.cloudwatch import (
 )
 from grafana_foundation_sdk.builders.dashboard import Dashboard, Row
 from grafana_foundation_sdk.builders.prometheus import Dataquery as PromQuery
-from grafana_foundation_sdk.models.cloudwatch import CloudWatchQueryMode
+from grafana_foundation_sdk.models.cloudwatch import (
+    CloudWatchQueryMode,
+    MetricEditorMode,
+    MetricQueryType,
+)
 
 from lib import datasources as ds
 from lib import panels as pb
@@ -86,6 +90,8 @@ def _metric(ref_id, namespace, metric, dims, stat="Average", period="300", label
         CWMetrics()
         .datasource(ds.ref(ds.CLOUDWATCH))
         .query_mode(CloudWatchQueryMode.METRICS)
+        .metric_query_type(MetricQueryType.SEARCH)
+        .metric_editor_mode(MetricEditorMode.BUILDER)
         .region(REGION)
         .namespace(namespace)
         .metric_name(metric)
