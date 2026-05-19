@@ -1,0 +1,6 @@
+# BookFlow 운영 대시보드 — dashboards-as-code 빌드 의존성
+#
+# Grafana Foundation SDK (Python) — 공식 dashboards-as-code 방식.
+# 패키지 버전은 epoch!버전 형식. 11.6.0 = Grafana 11.x 호환 (라이브 Grafana 11.x).
+# epoch(1769699379)는 동일 11.6.0 의 최신 릴리스 빌드를 고정한다.
+grafana-foundation-sdk==1769699379!11.6.0

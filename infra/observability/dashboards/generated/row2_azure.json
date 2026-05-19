@@ -1,0 +1,659 @@
+{
+  "annotations": {},
+  "description": "Azure Monitor 기반 Azure 리소스 운영 현황. Logic Apps 12개 실행/메일 발송률 · Function App 호출·에러 · Event Grid 이벤트 · Key Vault 접근/가용성. rg-bookflow (subscription e98a94bb-…). Entra OIDC 로그인은 §하단 노트 참조.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 0,
+      "panels": [],
+      "title": "Row 2 · Azure (Azure Monitor)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "description": "auth-pod 의 Entra(Azure AD) OIDC 로그인 결과. law-bookflowmj 에 SigninLogs 진단설정 라우팅 필요 (현재 미수집).",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 1
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "azureLogAnalytics": {
+            "dashboardTime": true,
+            "query": "SigninLogs | where TimeGenerated > ago(6h) | summarize 성공=countif(ResultType==0), 실패=countif(ResultType!=0) by bin(TimeGenerated, 15m) | order by TimeGenerated asc",
+            "resources": [
+              "/subscriptions/e98a94bb-7532-4e49-8a36-bc42e30d5a81/resourceGroups/rg-bookflow/providers/Microsoft.OperationalInsights/workspaces/law-bookflowmj"
+            ],
+            "resultFormat": "time_series"
+          },
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "refId": "",
+          "subscription": "e98a94bb-7532-4e49-8a36-bc42e30d5a81"
+        }
+      ],
+      "title": "Entra OIDC 로그인 성공/실패",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "description": "AzureDiagnostics WorkflowRuntime — 전 워크플로 status 별 15m 집계.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "azureLogAnalytics": {
+            "dashboardTime": true,
+            "query": "AzureDiagnostics | where ResourceProvider == 'MICROSOFT.LOGIC' | where TimeGenerated > ago(6h) | summarize 완료=countif(status_s=='Succeeded'), 실패=countif(status_s=='Failed') by bin(TimeGenerated, 15m) | order by TimeGenerated asc",
+            "resources": [
+              "/subscriptions/e98a94bb-7532-4e49-8a36-bc42e30d5a81/resourceGroups/rg-bookflow/providers/Microsoft.OperationalInsights/workspaces/law-bookflowmj"
+            ],
+            "resultFormat": "time_series"
+          },
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "refId": "",
+          "subscription": "e98a94bb-7532-4e49-8a36-bc42e30d5a81"
+        }
+      ],
+      "title": "Logic Apps 실행 추세 (완료/실패 · 12개 합계)",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "description": "AzureDiagnostics WorkflowRuntime 6h 집계. 워크플로별 실행/성공/실패/실행중/스킵. 실패 많은 순 정렬.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true,
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 9
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "azureLogAnalytics": {
+            "dashboardTime": true,
+            "query": "AzureDiagnostics | where ResourceProvider == 'MICROSOFT.LOGIC' | where TimeGenerated > ago(6h) | summarize 실행=count(), 성공=countif(status_s=='Succeeded'), 실패=countif(status_s=='Failed'), 실행중=countif(status_s=='Running'), 스킵=countif(status_s=='Skipped') by 워크플로=resource_workflowName_s | order by 실패 desc, 실행 desc",
+            "resources": [
+              "/subscriptions/e98a94bb-7532-4e49-8a36-bc42e30d5a81/resourceGroups/rg-bookflow/providers/Microsoft.OperationalInsights/workspaces/law-bookflowmj"
+            ],
+            "resultFormat": "table"
+          },
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "refId": "",
+          "subscription": "e98a94bb-7532-4e49-8a36-bc42e30d5a81"
+        }
+      ],
+      "title": "Logic Apps 워크플로 실행 현황 (12개)",
+      "transparent": false,
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "description": "la-bookflowmj-notification 발송 성공률. AzureDiagnostics 성공/(성공+실패) · 6h.",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 99
+              },
+              {
+                "color": "green",
+                "value": 99.9
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 9
+      },
+      "options": {
+        "minVizHeight": 75,
+        "minVizWidth": 75,
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "sizing": "auto"
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "azureLogAnalytics": {
+            "dashboardTime": true,
+            "query": "AzureDiagnostics | where ResourceProvider == 'MICROSOFT.LOGIC' | where resource_workflowName_s == 'la-bookflowmj-notification' | where TimeGenerated > ago(6h) | where status_s in ('Succeeded','Failed') | summarize 성공=countif(status_s=='Succeeded'), 총건=count() | extend 발송률 = iff(총건==0, real(null), round(100.0*성공/총건, 1)) | project 발송률",
+            "resources": [
+              "/subscriptions/e98a94bb-7532-4e49-8a36-bc42e30d5a81/resourceGroups/rg-bookflow/providers/Microsoft.OperationalInsights/workspaces/law-bookflowmj"
+            ],
+            "resultFormat": "table"
+          },
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "refId": "",
+          "subscription": "e98a94bb-7532-4e49-8a36-bc42e30d5a81"
+        }
+      ],
+      "title": "메일 발송 성공률 (notification)",
+      "transparent": false,
+      "type": "gauge"
+    },
+    {
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "description": "func-bookflowmj-sync · FunctionExecutionCount (Total · 1h grain).",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 18,
+        "y": 9
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "azureMonitor": {
+            "aggregation": "Total",
+            "alias": "실행 수",
+            "metricName": "FunctionExecutionCount",
+            "metricNamespace": "Microsoft.Web/sites",
+            "resources": [
+              {
+                "metricNamespace": "Microsoft.Web/sites",
+                "resourceGroup": "rg-bookflow",
+                "resourceName": "func-bookflowmj-sync",
+                "subscription": "e98a94bb-7532-4e49-8a36-bc42e30d5a81"
+              }
+            ],
+            "timeGrain": "PT1H"
+          },
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Monitor",
+          "refId": "",
+          "subscription": "e98a94bb-7532-4e49-8a36-bc42e30d5a81"
+        }
+      ],
+      "title": "Function App 실행 수 (func-sync)",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "description": "func-bookflowmj-sync · Http5xx (Total · 1h grain).",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 18
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "azureMonitor": {
+            "aggregation": "Total",
+            "alias": "5xx 에러",
+            "metricName": "Http5xx",
+            "metricNamespace": "Microsoft.Web/sites",
+            "resources": [
+              {
+                "metricNamespace": "Microsoft.Web/sites",
+                "resourceGroup": "rg-bookflow",
+                "resourceName": "func-bookflowmj-sync",
+                "subscription": "e98a94bb-7532-4e49-8a36-bc42e30d5a81"
+              }
+            ],
+            "timeGrain": "PT1H"
+          },
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Monitor",
+          "refId": "",
+          "subscription": "e98a94bb-7532-4e49-8a36-bc42e30d5a81"
+        }
+      ],
+      "title": "Function App 5xx 에러 (func-sync)",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "description": "egt-bookflowmj-keyvault · 발행 성공(PublishSuccessCount)과 전달 성공(DeliverySuccessCount). KeyVault 이벤트 발생 시 카운트.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 18
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "azureMonitor": {
+            "aggregation": "Total",
+            "alias": "발행 성공",
+            "metricName": "PublishSuccessCount",
+            "metricNamespace": "Microsoft.EventGrid/systemTopics",
+            "resources": [
+              {
+                "metricNamespace": "Microsoft.EventGrid/systemTopics",
+                "resourceGroup": "rg-bookflow",
+                "resourceName": "egt-bookflowmj-keyvault",
+                "subscription": "e98a94bb-7532-4e49-8a36-bc42e30d5a81"
+              }
+            ],
+            "timeGrain": "PT1H"
+          },
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Monitor",
+          "refId": "",
+          "subscription": "e98a94bb-7532-4e49-8a36-bc42e30d5a81"
+        },
+        {
+          "azureMonitor": {
+            "aggregation": "Total",
+            "alias": "전달 성공",
+            "metricName": "DeliverySuccessCount",
+            "metricNamespace": "Microsoft.EventGrid/systemTopics",
+            "resources": [
+              {
+                "metricNamespace": "Microsoft.EventGrid/systemTopics",
+                "resourceGroup": "rg-bookflow",
+                "resourceName": "egt-bookflowmj-keyvault",
+                "subscription": "e98a94bb-7532-4e49-8a36-bc42e30d5a81"
+              }
+            ],
+            "timeGrain": "PT1H"
+          },
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Monitor",
+          "refId": "",
+          "subscription": "e98a94bb-7532-4e49-8a36-bc42e30d5a81"
+        }
+      ],
+      "title": "Event Grid 이벤트 처리 (keyvault topic)",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "description": "kv-bookflowmj · ServiceApiHit (Count · 1h grain).",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 26
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "azureMonitor": {
+            "aggregation": "Count",
+            "alias": "API 접근",
+            "metricName": "ServiceApiHit",
+            "metricNamespace": "Microsoft.KeyVault/vaults",
+            "resources": [
+              {
+                "metricNamespace": "Microsoft.KeyVault/vaults",
+                "resourceGroup": "rg-bookflow",
+                "resourceName": "kv-bookflowmj",
+                "subscription": "e98a94bb-7532-4e49-8a36-bc42e30d5a81"
+              }
+            ],
+            "timeGrain": "PT1H"
+          },
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Monitor",
+          "refId": "",
+          "subscription": "e98a94bb-7532-4e49-8a36-bc42e30d5a81"
+        }
+      ],
+      "title": "Key Vault API 접근 수 (kv-bookflowmj)",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "description": "kv-bookflowmj · Availability (Average). 시크릿 만료는 Event Grid SecretNearExpiry / secret-rotation Logic App 로 추적.",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2,
+          "max": 100,
+          "min": 90,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 99
+              },
+              {
+                "color": "green",
+                "value": 99.9
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 26
+      },
+      "options": {
+        "minVizHeight": 75,
+        "minVizWidth": 75,
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "sizing": "auto"
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "azureMonitor": {
+            "aggregation": "Average",
+            "alias": "가용성",
+            "metricName": "Availability",
+            "metricNamespace": "Microsoft.KeyVault/vaults",
+            "resources": [
+              {
+                "metricNamespace": "Microsoft.KeyVault/vaults",
+                "resourceGroup": "rg-bookflow",
+                "resourceName": "kv-bookflowmj",
+                "subscription": "e98a94bb-7532-4e49-8a36-bc42e30d5a81"
+              }
+            ],
+            "timeGrain": "PT1H"
+          },
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Monitor",
+          "refId": "",
+          "subscription": "e98a94bb-7532-4e49-8a36-bc42e30d5a81"
+        }
+      ],
+      "title": "Key Vault 가용성",
+      "transparent": false,
+      "type": "gauge"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 41,
+  "tags": [
+    "bookflow",
+    "ops"
+  ],
+  "templating": {},
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "BookFlow 운영 — Azure (Row 2)",
+  "uid": "bookflow-ops-row2-azure"
+}

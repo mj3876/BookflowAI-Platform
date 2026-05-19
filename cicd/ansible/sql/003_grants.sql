@@ -72,6 +72,8 @@ GRANT INSERT, UPDATE        ON inventory        TO intervention_svc;
 -- HQ 도서 ON/OFF + 소진 모드 (FR-A6.1·A6.2): active + discontinue_* 컬럼만
 GRANT UPDATE (active, discontinue_mode, discontinue_reason, discontinue_at, discontinue_by, reactivated_at)
                             ON books            TO intervention_svc;
+-- SNS 급등 발주 승인 (2026-05-19): 본사 승인 시 spike_events.triggered_order_id + resolved_at 갱신
+GRANT UPDATE                ON spike_events     TO intervention_svc;
 
 -- notification-svc: notifications log writer
 GRANT INSERT, UPDATE        ON notifications_log TO notification_svc;

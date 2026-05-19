@@ -101,6 +101,25 @@ def _z_score(count: int, lam: float) -> float:
     return (count - lam) / math.sqrt(lam) if lam > 0 else 0.0
 
 
+def _estimate_preemptive_qty(z: float) -> int:
+    """SNS 급등 발주 plan 의 1차 추정 재고 필요량 (z-score 기반).
+
+    [설계 결정 · 2026-05-19]
+      이 Lambda 는 BookFlowAI VPC private subnet 에 있고, forecast-svc 는 EKS Internal
+      ALB 뒤에 있다. Lambda 가 cron 마다 EKS pod 를 직접 호출하면 cold-start·ALB 의존성·
+      pod rollout 중 실패가 spike 감지 자체를 막을 수 있다. 따라서 spike-detect 는
+      z-score 기반의 가벼운 1차 추정량만 spike_events.predicted_qty 에 남긴다.
+
+      정밀한 Vertex AI 수요예측은 본사 직원이 대시보드에서 급등 발주 plan 을 확인할 때
+      dashboard-svc → forecast-svc POST /forecast/spike/predict-demand 로 수행된다
+      (mock/real 모드 분리 · GCP 미연결 시 mock). 즉 이 값은 "발주 plan 의 근거 데이터"
+      이고, 본사 승인 화면이 더 정밀한 예측으로 갱신/대체한다.
+
+    추정식: 급등 강도(z) 가 클수록 더 많은 선제 재고. z 3.0 → 약 90권, z 6.0 → 약 180권.
+    """
+    return int(min(400, max(30, round(z * 30))))
+
+
 def lambda_handler(event, context):
     # Step 2. EventBridge Cron이 10분마다 이 핸들러를 호출
     # event는 EventBridge 스케줄 이벤트 객체 (내용 사용 안 함, 트리거 신호만)
@@ -128,12 +147,24 @@ def lambda_handler(event, context):
         count = counts.get(isbn13, 0)
         z     = _z_score(count, lam)
         if z >= Z_THRESHOLD:
+            z_rounded = round(z, 2)
+            # SNS 급등 발주 plan 의 1차 추정 재고 필요량 — 본사 승인 화면이 근거로 사용.
+            est_qty = _estimate_preemptive_qty(z_rounded)
             spikes.append({
                 "event_id":       str(_uuid.uuid4()),
                 "isbn13":         isbn13,
                 "detected_at":    now.isoformat(),
-                "z_score":        round(z, 2),  # NUMERIC(5,2)
+                "z_score":        z_rounded,  # NUMERIC(5,2)
                 "mentions_count": count,
+                "predicted_qty":  est_qty,
+                "forecast_meta":  json.dumps({
+                    "source":        "spike-detect-zscore-v1",
+                    "z_score":       z_rounded,
+                    "mentions":      count,
+                    "baseline_lam":  lam,
+                    "estimated_qty": est_qty,
+                    "note":          "z-score 기반 1차 추정 · 본사 승인 시 forecast-svc Vertex 예측으로 정밀화",
+                }),
             })
 
     print(f"[spike-detect] {len(counts)} ISBNs · {len(spikes)} spikes (Z≥{Z_THRESHOLD})")
@@ -141,7 +172,7 @@ def lambda_handler(event, context):
     if not spikes:
         return {"statusCode": 200, "spikes": 0}
 
-    # Step 4. RDS spike_events INSERT
+    # Step 4. RDS spike_events INSERT (predicted_qty + forecast_meta = 발주 plan 근거 데이터)
     # PK 가 event_id UUID 라 ON CONFLICT 는 event_id 기준 (사실상 발생 안 함 · 매 invocation 새 UUID)
     conn = _db_connect(rds_sec)
     try:
@@ -150,9 +181,11 @@ def lambda_handler(event, context):
                 cur.executemany(
                     """
                     INSERT INTO spike_events
-                        (event_id, detected_at, isbn13, z_score, mentions_count)
+                        (event_id, detected_at, isbn13, z_score, mentions_count,
+                         predicted_qty, forecast_meta)
                     VALUES (%(event_id)s, %(detected_at)s, %(isbn13)s,
-                            %(z_score)s, %(mentions_count)s)
+                            %(z_score)s, %(mentions_count)s,
+                            %(predicted_qty)s, %(forecast_meta)s)
                     ON CONFLICT (event_id) DO NOTHING
                     """,
                     spikes,
@@ -160,11 +193,13 @@ def lambda_handler(event, context):
     finally:
         conn.close()
 
-    # [Step 5 연계: intervention-svc 자동 발주 로직 — bookflow-apps repo]
-    # intervention-svc가 spike_events.is_resolved=False 레코드를 감지하면:
-    #   1) 재고 데이터 기반으로 24시간 내 품절 예상 여부 판단
-    #   2) 품절 예상 시 → RDS orders 테이블에 AUTO_EXECUTED 상태로 발주 기록
-    #   3) 무승인 자동 발주 즉시 실행 후 대시보드(WebSocket 실시간 Push) 반영
-    #   4) 처리 완료 후 spike_events.is_resolved = True 업데이트
+    # [Step 5 연계: SNS 급등 자동 발주 — bookflow-apps repo · 2026-05-19]
+    # spike_events.predicted_qty 는 z-score 기반 1차 추정 재고 필요량.
+    #   1) notification-svc 가 spike.detected 구독 → 본사에 SpikeUrgent 알림
+    #   2) 본사 직원이 대시보드 SNS 급등 페이지에서 발주 plan 확인
+    #      (dashboard-svc → forecast-svc /forecast/spike/predict-demand 로 Vertex 정밀 예측)
+    #   3) 본사 승인 → intervention-svc /intervention/spike-events/{id}/approve
+    #      → pending_orders PUBLISHER_ORDER status=APPROVED 즉시 (양측 협의 skip · 신간 패턴)
+    #   4) spike_events.triggered_order_id + resolved_at 갱신
 
     return {"statusCode": 200, "spikes": len(spikes)}

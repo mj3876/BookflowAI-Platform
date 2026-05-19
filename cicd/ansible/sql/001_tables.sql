@@ -241,8 +241,16 @@ CREATE TABLE IF NOT EXISTS spike_events (
     z_score                 NUMERIC(5,2),
     mentions_count          INTEGER,
     triggered_order_id      UUID,
-    resolved_at             TIMESTAMPTZ
+    resolved_at             TIMESTAMPTZ,
+    -- SNS 급등 자동 발주 (2026-05-19): spike-detect Lambda 가 z-score 기반 선제 발주 추정량 기록.
+    -- 본사 직원이 대시보드에서 이 값을 보고 SNS 급등 발주 plan 을 승인 → pending_orders 생성.
+    predicted_qty           INTEGER,
+    forecast_meta           JSONB
 );
+
+-- 기존 DB 호환 (CREATE TABLE IF NOT EXISTS 는 컬럼 추가 안 함) — idempotent ALTER.
+ALTER TABLE spike_events ADD COLUMN IF NOT EXISTS predicted_qty INTEGER;
+ALTER TABLE spike_events ADD COLUMN IF NOT EXISTS forecast_meta JSONB;
 
 -- =========================================================================
 -- 16. notifications_log (Logic Apps send log)

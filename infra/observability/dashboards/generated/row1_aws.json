@@ -1,0 +1,2425 @@
+{
+  "annotations": {},
+  "description": "AWS 인프라 헬스 (CloudWatch · ap-northeast-1). EKS 컨트롤플레인 · ECS 3 서비스 · RDS · Redis · Lambda 7 · Kinesis · ALB · CodePipeline · CloudTrail. 노드/Pod 단위는 Row 4·Row 8(Prometheus).",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 0,
+      "panels": [],
+      "title": "Row 1 · AWS — EKS (컨트롤플레인)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/EKS apiserver_request_total. Container Insights 미활성 → 노드/Pod 헬스는 Row 4·Row 8(Prometheus). 여기선 컨트롤플레인.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 1
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "ClusterName": "bookflow-eks"
+          },
+          "id": "",
+          "label": "API 요청",
+          "matchExact": true,
+          "metricName": "apiserver_request_total",
+          "namespace": "AWS/EKS",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "EKS · API server 요청률",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/EKS apiserver_request_total_4XX·5XX·429 — 컨트롤플레인 이상.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "ClusterName": "bookflow-eks"
+          },
+          "id": "",
+          "label": "4XX",
+          "matchExact": true,
+          "metricName": "apiserver_request_total_4XX",
+          "namespace": "AWS/EKS",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "ClusterName": "bookflow-eks"
+          },
+          "id": "",
+          "label": "5XX",
+          "matchExact": true,
+          "metricName": "apiserver_request_total_5XX",
+          "namespace": "AWS/EKS",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "B",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "ClusterName": "bookflow-eks"
+          },
+          "id": "",
+          "label": "429",
+          "matchExact": true,
+          "metricName": "apiserver_request_total_429",
+          "namespace": "AWS/EKS",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "C",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "EKS · API server 에러 (4XX/5XX/429)",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/EKS scheduler_pending_pods_UNSCHEDULABLE. CronJob 4종·8 Pod 의 성공/실패 카운트는 Row 4(Prometheus) — Container Insights 미활성.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 9
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "ClusterName": "bookflow-eks"
+          },
+          "id": "",
+          "label": "미스케줄",
+          "matchExact": true,
+          "metricName": "scheduler_pending_pods_UNSCHEDULABLE",
+          "namespace": "AWS/EKS",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "ap-northeast-1",
+          "statistic": "Maximum"
+        }
+      ],
+      "title": "EKS · 미스케줄 Pod",
+      "transparent": false,
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
+      "id": 0,
+      "panels": [],
+      "title": "Row 1 · AWS — ECS",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "ECS/ContainerInsights RunningTaskCount — 3 서비스. desired 대비.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "ClusterName": "bookflow-ecs",
+            "ServiceName": "inventory-api"
+          },
+          "id": "",
+          "label": "inventory-api running",
+          "matchExact": true,
+          "metricName": "RunningTaskCount",
+          "namespace": "ECS/ContainerInsights",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "R0",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "ClusterName": "bookflow-ecs",
+            "ServiceName": "inventory-api"
+          },
+          "id": "",
+          "label": "inventory-api desired",
+          "matchExact": true,
+          "metricName": "DesiredTaskCount",
+          "namespace": "ECS/ContainerInsights",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "D0",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "ClusterName": "bookflow-ecs",
+            "ServiceName": "online-sim"
+          },
+          "id": "",
+          "label": "online-sim running",
+          "matchExact": true,
+          "metricName": "RunningTaskCount",
+          "namespace": "ECS/ContainerInsights",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "R1",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "ClusterName": "bookflow-ecs",
+            "ServiceName": "online-sim"
+          },
+          "id": "",
+          "label": "online-sim desired",
+          "matchExact": true,
+          "metricName": "DesiredTaskCount",
+          "namespace": "ECS/ContainerInsights",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "D1",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "ClusterName": "bookflow-ecs",
+            "ServiceName": "offline-sim"
+          },
+          "id": "",
+          "label": "offline-sim running",
+          "matchExact": true,
+          "metricName": "RunningTaskCount",
+          "namespace": "ECS/ContainerInsights",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "R2",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "ClusterName": "bookflow-ecs",
+            "ServiceName": "offline-sim"
+          },
+          "id": "",
+          "label": "offline-sim desired",
+          "matchExact": true,
+          "metricName": "DesiredTaskCount",
+          "namespace": "ECS/ContainerInsights",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "D2",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        }
+      ],
+      "title": "ECS · 서비스별 Running Task",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "ECS/ContainerInsights CpuUtilized·MemoryUtilized — 3 서비스.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "ClusterName": "bookflow-ecs",
+            "ServiceName": "inventory-api"
+          },
+          "id": "",
+          "label": "inventory-api CPU",
+          "matchExact": true,
+          "metricName": "CpuUtilized",
+          "namespace": "ECS/ContainerInsights",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "C0",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "ClusterName": "bookflow-ecs",
+            "ServiceName": "inventory-api"
+          },
+          "id": "",
+          "label": "inventory-api Mem",
+          "matchExact": true,
+          "metricName": "MemoryUtilized",
+          "namespace": "ECS/ContainerInsights",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "M0",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "ClusterName": "bookflow-ecs",
+            "ServiceName": "online-sim"
+          },
+          "id": "",
+          "label": "online-sim CPU",
+          "matchExact": true,
+          "metricName": "CpuUtilized",
+          "namespace": "ECS/ContainerInsights",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "C1",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "ClusterName": "bookflow-ecs",
+            "ServiceName": "online-sim"
+          },
+          "id": "",
+          "label": "online-sim Mem",
+          "matchExact": true,
+          "metricName": "MemoryUtilized",
+          "namespace": "ECS/ContainerInsights",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "M1",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "ClusterName": "bookflow-ecs",
+            "ServiceName": "offline-sim"
+          },
+          "id": "",
+          "label": "offline-sim CPU",
+          "matchExact": true,
+          "metricName": "CpuUtilized",
+          "namespace": "ECS/ContainerInsights",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "C2",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "ClusterName": "bookflow-ecs",
+            "ServiceName": "offline-sim"
+          },
+          "id": "",
+          "label": "offline-sim Mem",
+          "matchExact": true,
+          "metricName": "MemoryUtilized",
+          "namespace": "ECS/ContainerInsights",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "M2",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        }
+      ],
+      "title": "ECS · CPU / 메모리 사용률",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "id": 0,
+      "panels": [],
+      "title": "Row 1 · AWS — RDS / ElastiCache",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/RDS DatabaseConnections — bookflow-postgres.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 25
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "DBInstanceIdentifier": "bookflow-postgres"
+          },
+          "id": "",
+          "label": "연결",
+          "matchExact": true,
+          "metricName": "DatabaseConnections",
+          "namespace": "AWS/RDS",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        }
+      ],
+      "title": "RDS · DB 연결 수",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/RDS CPUUtilization — bookflow-postgres.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 25
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "DBInstanceIdentifier": "bookflow-postgres"
+          },
+          "id": "",
+          "label": "CPU",
+          "matchExact": true,
+          "metricName": "CPUUtilization",
+          "namespace": "AWS/RDS",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        }
+      ],
+      "title": "RDS · CPU 사용률",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/RDS ReadIOPS·WriteIOPS — bookflow-postgres.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "iops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 33
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "DBInstanceIdentifier": "bookflow-postgres"
+          },
+          "id": "",
+          "label": "Read",
+          "matchExact": true,
+          "metricName": "ReadIOPS",
+          "namespace": "AWS/RDS",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "DBInstanceIdentifier": "bookflow-postgres"
+          },
+          "id": "",
+          "label": "Write",
+          "matchExact": true,
+          "metricName": "WriteIOPS",
+          "namespace": "AWS/RDS",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "B",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        }
+      ],
+      "title": "RDS · IOPS (Read/Write)",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/RDS FreeStorageSpace — bookflow-postgres.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 2000000000.0
+              },
+              {
+                "color": "green",
+                "value": 5000000000.0
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 12,
+        "y": 33
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "DBInstanceIdentifier": "bookflow-postgres"
+          },
+          "id": "",
+          "label": "가용 스토리지",
+          "matchExact": true,
+          "metricName": "FreeStorageSpace",
+          "namespace": "AWS/RDS",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        }
+      ],
+      "title": "RDS · 가용 스토리지",
+      "transparent": false,
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/ElastiCache CurrConnections — bookflow-redis.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 18,
+        "y": 33
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "CacheClusterId": "bookflow-redis"
+          },
+          "id": "",
+          "label": "연결",
+          "matchExact": true,
+          "metricName": "CurrConnections",
+          "namespace": "AWS/ElastiCache",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        }
+      ],
+      "title": "Redis · 연결 수",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/ElastiCache DatabaseMemoryUsagePercentage — bookflow-redis.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 41
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "CacheClusterId": "bookflow-redis"
+          },
+          "id": "",
+          "label": "메모리%",
+          "matchExact": true,
+          "metricName": "DatabaseMemoryUsagePercentage",
+          "namespace": "AWS/ElastiCache",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        }
+      ],
+      "title": "Redis · 메모리 사용률",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/ElastiCache Evictions — bookflow-redis. >0 이면 메모리 압박.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 12,
+        "y": 41
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "CacheClusterId": "bookflow-redis"
+          },
+          "id": "",
+          "label": "evictions",
+          "matchExact": true,
+          "metricName": "Evictions",
+          "namespace": "AWS/ElastiCache",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "Redis · Evictions",
+      "transparent": false,
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 49
+      },
+      "id": 0,
+      "panels": [],
+      "title": "Row 1 · AWS — Lambda / Kinesis",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/Lambda Invocations — bookflow Lambda 7종.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 50
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-pos-ingestor"
+          },
+          "id": "",
+          "label": "pos-ingestor",
+          "matchExact": true,
+          "metricName": "Invocations",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "I0",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-spike-detect"
+          },
+          "id": "",
+          "label": "spike-detect",
+          "matchExact": true,
+          "metricName": "Invocations",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "I1",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-aladin-sync"
+          },
+          "id": "",
+          "label": "aladin-sync",
+          "matchExact": true,
+          "metricName": "Invocations",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "I2",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-sns-gen"
+          },
+          "id": "",
+          "label": "sns-gen",
+          "matchExact": true,
+          "metricName": "Invocations",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "I3",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-event-sync"
+          },
+          "id": "",
+          "label": "event-sync",
+          "matchExact": true,
+          "metricName": "Invocations",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "I4",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-forecast-trigger"
+          },
+          "id": "",
+          "label": "forecast-trigger",
+          "matchExact": true,
+          "metricName": "Invocations",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "I5",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-mart-to-gcs"
+          },
+          "id": "",
+          "label": "mart-to-gcs",
+          "matchExact": true,
+          "metricName": "Invocations",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "I6",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "Lambda · 호출 수",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/Lambda Errors·Throttles — bookflow Lambda 7종.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 50
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-pos-ingestor"
+          },
+          "id": "",
+          "label": "pos-ingestor err",
+          "matchExact": true,
+          "metricName": "Errors",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "E0",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-pos-ingestor"
+          },
+          "id": "",
+          "label": "pos-ingestor throttle",
+          "matchExact": true,
+          "metricName": "Throttles",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "T0",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-spike-detect"
+          },
+          "id": "",
+          "label": "spike-detect err",
+          "matchExact": true,
+          "metricName": "Errors",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "E1",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-spike-detect"
+          },
+          "id": "",
+          "label": "spike-detect throttle",
+          "matchExact": true,
+          "metricName": "Throttles",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "T1",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-aladin-sync"
+          },
+          "id": "",
+          "label": "aladin-sync err",
+          "matchExact": true,
+          "metricName": "Errors",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "E2",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-aladin-sync"
+          },
+          "id": "",
+          "label": "aladin-sync throttle",
+          "matchExact": true,
+          "metricName": "Throttles",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "T2",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-sns-gen"
+          },
+          "id": "",
+          "label": "sns-gen err",
+          "matchExact": true,
+          "metricName": "Errors",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "E3",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-sns-gen"
+          },
+          "id": "",
+          "label": "sns-gen throttle",
+          "matchExact": true,
+          "metricName": "Throttles",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "T3",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-event-sync"
+          },
+          "id": "",
+          "label": "event-sync err",
+          "matchExact": true,
+          "metricName": "Errors",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "E4",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-event-sync"
+          },
+          "id": "",
+          "label": "event-sync throttle",
+          "matchExact": true,
+          "metricName": "Throttles",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "T4",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-forecast-trigger"
+          },
+          "id": "",
+          "label": "forecast-trigger err",
+          "matchExact": true,
+          "metricName": "Errors",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "E5",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-forecast-trigger"
+          },
+          "id": "",
+          "label": "forecast-trigger throttle",
+          "matchExact": true,
+          "metricName": "Throttles",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "T5",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-mart-to-gcs"
+          },
+          "id": "",
+          "label": "mart-to-gcs err",
+          "matchExact": true,
+          "metricName": "Errors",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "E6",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-mart-to-gcs"
+          },
+          "id": "",
+          "label": "mart-to-gcs throttle",
+          "matchExact": true,
+          "metricName": "Throttles",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "T6",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "Lambda · 에러 / Throttle",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/Lambda Duration(Average) — bookflow Lambda 7종.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 58
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-pos-ingestor"
+          },
+          "id": "",
+          "label": "pos-ingestor",
+          "matchExact": true,
+          "metricName": "Duration",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "D0",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-spike-detect"
+          },
+          "id": "",
+          "label": "spike-detect",
+          "matchExact": true,
+          "metricName": "Duration",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "D1",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-aladin-sync"
+          },
+          "id": "",
+          "label": "aladin-sync",
+          "matchExact": true,
+          "metricName": "Duration",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "D2",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-sns-gen"
+          },
+          "id": "",
+          "label": "sns-gen",
+          "matchExact": true,
+          "metricName": "Duration",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "D3",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-event-sync"
+          },
+          "id": "",
+          "label": "event-sync",
+          "matchExact": true,
+          "metricName": "Duration",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "D4",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-forecast-trigger"
+          },
+          "id": "",
+          "label": "forecast-trigger",
+          "matchExact": true,
+          "metricName": "Duration",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "D5",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-mart-to-gcs"
+          },
+          "id": "",
+          "label": "mart-to-gcs",
+          "matchExact": true,
+          "metricName": "Duration",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "D6",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        }
+      ],
+      "title": "Lambda · 실행시간 (avg)",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/Kinesis IncomingRecords — bookflow-pos-events.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 58
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "StreamName": "bookflow-pos-events"
+          },
+          "id": "",
+          "label": "유입 레코드",
+          "matchExact": true,
+          "metricName": "IncomingRecords",
+          "namespace": "AWS/Kinesis",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "Kinesis · 유입 레코드",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/Kinesis GetRecords.IteratorAgeMilliseconds — 소비자 지연. 값이 크면 Glue/소비 Lambda 가 따라가지 못함.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 66
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "StreamName": "bookflow-pos-events"
+          },
+          "id": "",
+          "label": "iterator age",
+          "matchExact": true,
+          "metricName": "GetRecords.IteratorAgeMilliseconds",
+          "namespace": "AWS/Kinesis",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "ap-northeast-1",
+          "statistic": "Maximum"
+        }
+      ],
+      "title": "Kinesis · Iterator Age (소비 지연)",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 74
+      },
+      "id": 0,
+      "panels": [],
+      "title": "Row 1 · AWS — ALB / CodePipeline",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/ApplicationELB RequestCount — bookflow-alb-external. Internal ALB 는 ingress-nginx NLB → Row 4(Prometheus).",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 75
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "LoadBalancer": "app/bookflow-alb-external/89f4008ac9c171df"
+          },
+          "id": "",
+          "label": "요청",
+          "matchExact": true,
+          "metricName": "RequestCount",
+          "namespace": "AWS/ApplicationELB",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "ALB · 요청 수 (External)",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/ApplicationELB HTTPCode_ELB_5XX_Count·HTTPCode_Target_5XX_Count.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 75
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "LoadBalancer": "app/bookflow-alb-external/89f4008ac9c171df"
+          },
+          "id": "",
+          "label": "ELB 5xx",
+          "matchExact": true,
+          "metricName": "HTTPCode_ELB_5XX_Count",
+          "namespace": "AWS/ApplicationELB",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "LoadBalancer": "app/bookflow-alb-external/89f4008ac9c171df"
+          },
+          "id": "",
+          "label": "Target 5xx",
+          "matchExact": true,
+          "metricName": "HTTPCode_Target_5XX_Count",
+          "namespace": "AWS/ApplicationELB",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "B",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "ALB · 5xx 에러 (External)",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/ApplicationELB HealthyHostCount — bookflow-alb-external.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 83
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "LoadBalancer": "app/bookflow-alb-external/89f4008ac9c171df"
+          },
+          "id": "",
+          "label": "healthy",
+          "matchExact": true,
+          "metricName": "HealthyHostCount",
+          "namespace": "AWS/ApplicationELB",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        }
+      ],
+      "title": "ALB · Healthy Target",
+      "transparent": false,
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "cp-eks·cp-ecs·publisher-bg. CodePipeline 은 CW 메트릭 네이티브 미발행 → EventBridge 커스텀 메트릭 필요. 데일리 자원·현재 미배포.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "green",
+                "value": 2
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 6,
+        "y": 83
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "PipelineName": "cp-eks"
+          },
+          "id": "",
+          "label": "cp-eks",
+          "matchExact": true,
+          "metricName": "SucceededPipeline",
+          "namespace": "BookFlow/CodePipeline",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "P0",
+          "region": "ap-northeast-1",
+          "statistic": "Maximum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "PipelineName": "cp-ecs"
+          },
+          "id": "",
+          "label": "cp-ecs",
+          "matchExact": true,
+          "metricName": "SucceededPipeline",
+          "namespace": "BookFlow/CodePipeline",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "P1",
+          "region": "ap-northeast-1",
+          "statistic": "Maximum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "PipelineName": "publisher-bg"
+          },
+          "id": "",
+          "label": "publisher-bg",
+          "matchExact": true,
+          "metricName": "SucceededPipeline",
+          "namespace": "BookFlow/CodePipeline",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "P2",
+          "region": "ap-northeast-1",
+          "statistic": "Maximum"
+        }
+      ],
+      "title": "CodePipeline · 최근 실행 결과",
+      "transparent": false,
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 89
+      },
+      "id": 0,
+      "panels": [],
+      "title": "Row 1 · AWS — CloudTrail (감사)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "CloudWatch Logs (/aws/cloudtrail/bookflow). 5분 bin API 호출 수. 트레일→CWLogs 연동 시 동작 · 현재 트레일 미생성.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 90
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "expression": "fields @timestamp | stats count(*) as 호출수 by bin(5m)",
+          "id": "",
+          "logGroupNames": [
+            "/aws/cloudtrail/bookflow"
+          ],
+          "queryMode": "Logs",
+          "refId": "A",
+          "region": "ap-northeast-1"
+        }
+      ],
+      "title": "CloudTrail · API 활동량",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "CloudWatch Logs (/aws/cloudtrail/bookflow). Create*/Update*/Delete*/Put*/Modify* 이벤트 — 누가 무엇을 변경했나.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true,
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 90
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "expression": "fields @timestamp, eventName, eventSource, userIdentity.arn as actor | filter eventName like /^(Create|Update|Delete|Put|Modify|Run|Terminate)/ | sort @timestamp desc | limit 50",
+          "id": "",
+          "logGroupNames": [
+            "/aws/cloudtrail/bookflow"
+          ],
+          "queryMode": "Logs",
+          "refId": "A",
+          "region": "ap-northeast-1"
+        }
+      ],
+      "title": "CloudTrail · 리소스 변경 이력",
+      "transparent": false,
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "CloudWatch Logs (/aws/cloudtrail/bookflow). errorCode 존재 이벤트 (AccessDenied·UnauthorizedOperation 등) — 보안·감사.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true,
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 99
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "expression": "fields @timestamp, errorCode, eventName, eventSource, userIdentity.arn as actor, sourceIPAddress | filter ispresent(errorCode) | sort @timestamp desc | limit 50",
+          "id": "",
+          "logGroupNames": [
+            "/aws/cloudtrail/bookflow"
+          ],
+          "queryMode": "Logs",
+          "refId": "A",
+          "region": "ap-northeast-1"
+        }
+      ],
+      "title": "CloudTrail · 실패 / 비정상 API 호출",
+      "transparent": false,
+      "type": "table"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 41,
+  "tags": [
+    "bookflow",
+    "ops"
+  ],
+  "templating": {},
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "BookFlow 운영 — AWS (Row 1)",
+  "uid": "bookflow-ops-row1-aws"
+}

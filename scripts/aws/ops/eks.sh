@@ -22,11 +22,12 @@ up)
   step "1. eks-cluster"
   cfn_deploy bookflow-30-eks-cluster "$INFRA/30-compute-cluster/eks-cluster.yaml"
 
-  step "2. 3 IRSA 병렬"
+  step "2. 4 IRSA 병렬"
   cfn_parallel_deploy <<EOF
 bookflow-30-eks-eso-irsa|$INFRA/30-compute-cluster/eks-eso-irsa.yaml
 bookflow-30-eks-alb-controller-irsa|$INFRA/30-compute-cluster/eks-alb-controller-irsa.yaml
 bookflow-30-eks-cert-manager-irsa|$INFRA/30-compute-cluster/eks-cert-manager-irsa.yaml
+bookflow-30-eks-grafana-cloudwatch-irsa|$INFRA/30-compute-cluster/eks-grafana-cloudwatch-irsa.yaml
 EOF
 
   # nodegroup + addons 병렬 — VPC CNI 가 없으면 nodes NotReady 로 nodegroup CFN deadlock.
@@ -47,7 +48,7 @@ EOF
   step "eks.sh up done"
   ;;
 down)
-  step "eks.sh down · K8s LB cleanup + helm uninstall + CFN 4 stack delete"
+  step "eks.sh down · K8s LB cleanup + helm uninstall + CFN 5 stack delete"
 
   # K8s LoadBalancer Service 명시적 정리 (orphan NLB 방지 · 2026-05-07 incident)
   if kubectl get nodes >/dev/null 2>&1; then

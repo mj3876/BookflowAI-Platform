@@ -26,6 +26,7 @@ random.seed(42)
 
 ROOT = Path(__file__).resolve().parent
 ALADIN_JSON = ROOT / "books_aladin.json"
+BQ_FORECAST_CSV = ROOT / "bq_forecast_base.csv"
 
 KST = timezone(timedelta(hours=9))
 NOW = datetime.now(KST).replace(microsecond=0)
@@ -50,6 +51,18 @@ def write_csv(name: str, rows: list[dict]) -> None:
 def read_aladin_json(path: Path) -> list[dict]:
     """books_aladin.json 읽기 (fetch_aladin.py 결과). 1000개 dict 반환."""
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def read_bq_forecast_base(path: Path) -> dict[tuple[str, int], float]:
+    """bq_forecast_base.csv 로드 — GCP BQML champion 모델 실예측을 (isbn,store)별 5일 평균낸 것.
+    BQ `forecast_results` 를 bq query 로 추출한 스냅샷. gen_forecast_cache 가 이 분포를
+    seed 실 알라딘 책에 1:1 relabel 한다 (BQ 책 우주는 합성 데이터 · ISBN 정합은
+    추후 GCP 가 실 ISBN 으로 재학습 시 해결). 반환: {(isbn13, store_id): base_demand}."""
+    out: dict[tuple[str, int], float] = {}
+    with path.open(encoding="utf-8") as f:
+        for r in csv.DictReader(f):
+            out[(r["isbn13"].strip(), int(r["store_id"]))] = float(r["base_demand"])
+    return out
 
 
 # =========================================================================
@@ -215,15 +228,24 @@ def gen_inventory(
     books: list[dict],
     locations: list[dict],
     scenario_b_isbns: list[str],
-    forecast_cache: list[dict] | None = None,
+    base_demand: dict[tuple[str, int], float],
     publisher_force_isbns: list[str] | None = None,
+    wh_transfer_force_isbns: list[str] | None = None,
+    wh_to_store_force_isbns: list[str] | None = None,
 ) -> list[dict]:
-    """inventory 시드 + 시나리오 B 8 도서 의도적 부족 (cascade 시연용).
+    """inventory 시드 — 2026-05-17 재설계 (안정 baseline + 격리된 데모 시나리오).
 
-    safety_stock = forecast D+1 predicted_demand × 5 (사용자 결정 2026-05-13).
-    forecast 가 없는 (book, store) 또는 WH 는 fallback 값.
+    safety_stock = base_demand × 5 (매장) · 권역 매장 base_demand 합 × 5 (WH).
+    base_demand 는 forecast 와 동일 source → 안전재고 == 화면 5일치 항상 정합.
 
-    SHORT_PAIRS = pending_orders 의 시나리오 B fixture 와 정합하는 매장 부족 매핑.
+    baseline (비시나리오 책): on_hand = safety × 1.5~3 (매장) · ×2~4 (WH) → 부족 0 · 결품 0.
+    데모 시나리오만 의도적 부족:
+      - scenario_b 8책 SHORT_PAIRS 매장: 안전재고 미만 (부족 · 결품 아님)
+      - publisher_force 책: 전 위치 on_hand 0 (cascade stage 0/1/2 fail → stage 3 PUBLISHER)
+      - wh_transfer_force 책: 영남 권역(wh_id=2) 매장+WH 부족 · 수도권 WH 는 충분
+        → REBALANCE/WH_TO_STORE fail → 수도권→영남 WH_TRANSFER 트리거
+      - wh_to_store_force 책: 수도권(wh_id=1) 오프라인 매장 전부(loc 1~6) 부족 · 수도권 WH 본체는 충분
+        → 같은 wh 매장 surplus 없어 REBALANCE fail → 자기 wh 본체→매장 WH_TO_STORE 트리거
     """
     SHORT_PAIRS: dict[str, list[int]] = {
         scenario_b_isbns[0]: [1, 2],   # 강남·광화문 부족 → REBALANCE 3건의 source/target
@@ -235,80 +257,55 @@ def gen_inventory(
         scenario_b_isbns[6]: [7],      # 부산 서면 부족 → PUBLISHER CRITICAL
         scenario_b_isbns[7]: [2],      # 광화문 부족 → PUBLISHER URGENT
     }
-    # (isbn13, store_id) → D+1 predicted_demand lookup
-    target_d1 = (TODAY + timedelta(days=1)).isoformat()
-    fc_d1: dict[tuple[str, int], float] = {}
-    if forecast_cache:
-        for r in forecast_cache:
-            if r.get("snapshot_date") == target_d1:
-                try:
-                    fc_d1[(r["isbn13"], int(r["store_id"]))] = float(r["predicted_demand"])
-                except (TypeError, ValueError):
-                    pass
-
     publisher_force_set = set(publisher_force_isbns or [])
-    rows = []
+    wh_transfer_force_set = set(wh_transfer_force_isbns or [])
+    wh_to_store_force_set = set(wh_to_store_force_isbns or [])
     target_locs = [l for l in locations if not (l.get("is_virtual") in ("true", True))]
+    # store_id → wh_id (WH safety = 권역 매장 base_demand 합 × 5)
+    store_wh = {
+        l["location_id"]: l.get("wh_id")
+        for l in target_locs if l["location_type"] != "WH"
+    }
+
+    rows = []
     for b in books:
         isbn = b["isbn13"]
-        short_locs = SHORT_PAIRS.get(isbn, [])
-        # PUBLISHER cascade 강제 — 그 책들 모든 location on_hand=0 → stage 0/1/2 fail → stage 3
-        if isbn in publisher_force_set:
-            for l in target_locs:
-                pred = fc_d1.get((isbn, l["location_id"]), 100.0)
-                safety = max(int(pred * 5), 50)
-                rows.append({
-                    "isbn13": isbn,
-                    "location_id": l["location_id"],
-                    "on_hand": 0,
-                    "reserved_qty": 0,
-                    "safety_stock": safety,
-                    "updated_at": (NOW - timedelta(minutes=random.randint(1, 600))).isoformat(),
-                    "updated_by": "seed-script",
-                })
-            continue
+        short_locs = set(SHORT_PAIRS.get(isbn, []))
+        is_publisher_force = isbn in publisher_force_set
+        is_wh_transfer_force = isbn in wh_transfer_force_set
+        is_wh_to_store_force = isbn in wh_to_store_force_set
         for l in target_locs:
+            lid = l["location_id"]
             if l["location_type"] == "WH":
-                # WH 안전재고 = 자기 권역 매장들의 forecast 합 × 5 (없으면 fallback 100)
                 wh_id = l.get("wh_id")
-                wh_stores = [
-                    (b_isbn, sid) for (b_isbn, sid) in fc_d1.keys()
-                    if b_isbn == isbn and any(
-                        s.get("location_id") == sid and s.get("wh_id") == wh_id
-                        for s in target_locs if s["location_type"] != "WH"
-                    )
-                ]
-                # 2026-05-15: floor 100 제거 — 도서별 실제 5일치 수요 그대로 (사용자 발견 fix)
-                # 작은 수요 도서는 safety 가 적게 (자연스러운 분포)
-                wh_demand_5d = sum(fc_d1[k] for k in wh_stores) * 5
-                safety = max(int(wh_demand_5d), 5) if wh_stores else 5
-                # 2026-05-15 v3: soldout (on_hand=0) 회피 — 시연 어색 방지
-                # 80% 충분 (safety × 2~4 · partner_surplus 양수) · 20% 빠듯 (safety × 1.0~1.5)
-                wh_bucket = random.random()
-                if wh_bucket < 0.80:
-                    on_hand = random.randint(safety * 2, safety * 4 + 1)
+                wh_5d = sum(
+                    base_demand.get((isbn, sid), 0.0)
+                    for sid, w in store_wh.items() if w == wh_id
+                ) * 5
+                safety = max(int(wh_5d), 5)
+                if is_publisher_force:
+                    on_hand = 0                                                  # 양 WH 결품 → stage 3
+                elif is_wh_transfer_force and wh_id == 2:
+                    on_hand = 0                                                  # 영남 WH 결품 → WH_TO_STORE fail
                 else:
-                    on_hand = random.randint(int(safety * 1.0), int(safety * 1.5) + 1)
-            elif l["location_id"] in short_locs:
-                # 시나리오 B 의도 부족 — on_hand 0~2, safety 는 forecast × 5 (재고 < 안전재고 보장)
-                on_hand = random.randint(0, 2)
-                pred = fc_d1.get((isbn, l["location_id"]), 1.0)
-                safety = max(int(pred * 5), 5)
+                    on_hand = random.randint(safety * 2, safety * 4 + 1)         # 충분 (수도권 WH = WH_TO_STORE source)
             else:
-                # 2026-05-15 v3: soldout 회피 + 충분 우선 (시연 어색 방지).
-                # 시나리오 B 8 도서만 의도 부족 (위 short_locs 매핑) · 나머지는 모두 충분
-                # 85% 충분 (safety × 1.5~3) · 15% 약간 부족 (safety × 0.6~1.0 · on_hand>0 보장)
-                pred = fc_d1.get((isbn, l["location_id"]), 1.0)
-                safety = max(int(pred * 5), 5)
-                bucket = random.random()
-                if bucket < 0.85:
-                    on_hand = random.randint(int(safety * 1.5), int(safety * 3) + 1)
+                base = base_demand.get((isbn, lid), 1.0)
+                safety = max(int(base * 5), 5)
+                if is_publisher_force:
+                    on_hand = 0                                                  # 전 매장 결품
+                elif is_wh_transfer_force and l.get("wh_id") == 2:
+                    on_hand = random.randint(1, max(2, int(safety * 0.25)))       # 영남 매장 부족 → REBALANCE fail
+                elif is_wh_to_store_force and l.get("wh_id") == 1:
+                    on_hand = random.randint(1, max(2, int(safety * 0.25)))       # 수도권 매장 전부 부족 → REBALANCE fail → WH_TO_STORE
+                elif lid in short_locs:
+                    on_hand = random.randint(1, max(2, int(safety * 0.25)))       # 의도 부족 (결품 X)
                 else:
-                    on_hand = random.randint(max(1, int(safety * 0.6)), max(2, int(safety * 1.0)))
+                    on_hand = random.randint(int(safety * 1.5), int(safety * 3) + 1)  # baseline 충분
             reserved = random.randint(0, max(0, on_hand // 10))
             rows.append({
                 "isbn13": isbn,
-                "location_id": l["location_id"],
+                "location_id": lid,
                 "on_hand": on_hand,
                 "reserved_qty": reserved,
                 "safety_stock": safety,
@@ -346,89 +343,63 @@ def gen_reservations(books, locations) -> list[dict]:
 # =========================================================================
 # 8. forecast_cache (D+1 only · book × store, store_id 1~12)
 # =========================================================================
-def gen_forecast_cache(books, scenario_b_isbns: list[str], days: int = 7,
-                       publisher_force_isbns: list[str] | None = None) -> list[dict]:
-    """forecast_cache · 7d rolling (D+0 ~ D+6) × 전 책 × 전 매장 = 1000×14×7 ≈ 98k row.
+def gen_forecast_cache(books, days: int = 7) -> tuple[list[dict], dict]:
+    """forecast_cache · 7d rolling (D+0 ~ D+6) × 전 책 × 전 매장.
 
-    매일 Vertex AI 가 모든 (book, store) 페어 예측 출력 — frontend AI 수요예측 컬럼
-    빈 셀 없어야 함 (`branch10` 등 매장 재고 화면 정합).
+    2026-05-17 재설계 — base_demand 를 (책,매장) 별 1회 산출 → 매일 ±10% 노이즈만.
+    날짜가 지나도 D+1 예측이 일관 → safety_stock(=base×5) 과 화면 5일치가 항상 ≈ 일치.
+    (기존: 매일 독립 난수 → safety_stock 과 화면 forecast 가 무관한 값으로 어긋남.)
 
-    분포:
-      - 시나리오 B fixture 8 도서 × SHORT_PAIRS 매장 = 의도적 high spike (50~80권/day)
-      - 인기 도서 (~15%): 5~25권/day random
-      - 일반 도서 (~85%): 0~3권/day random (대부분 낮음 — 현실 long-tail)
-    PK (snapshot_date, isbn13, store_id) seen check 로 중복 방지.
+    2026-05-19 cascade 발주 폭증 버그 정정 — fixture 도서(publisher_force·wh_transfer·
+    scenario_b SHORT_PAIRS)의 base_demand 인위 인플레이션(18~45권/day) 제거.
+    인플레이션된 base_demand 가 safety_stock(=base×5) 으로 전파되어 cascade desired/gap 이
+    BQ 실예측과 무관하게 부풀려졌다(WH safety ≈ 1000+ → /plan-daily 발주 ~2000).
+    이제 전 도서·매장이 BQ 실예측 분포만 사용 → safety_stock 이 항상 예측과 정합.
+    데모 시나리오의 cascade 트리거는 gen_inventory 의 on_hand 조작(publisher_force on_hand=0 ·
+    wh_transfer/short_stores on_hand 부족)만으로 유지 — base_demand 와 독립.
+
+    base_demand 분포:
+      - 전 도서·매장 = GCP BQML champion 모델 실예측 분포 (bq_forecast_base.csv).
+        seed 실 알라딘 책 ↔ BQ 책을 isbn 정렬 후 1:1 relabel — intermittent long-tail
+        (실측: 80% ≲0.76권/day · 90분위 4.8 · 온라인/거점 고수요).
+
+    반환: (forecast_rows, base_demand) — base_demand 는 gen_inventory 가 safety_stock 산출에 사용.
     """
-    SHORT_PAIRS: dict[str, list[int]] = {
-        scenario_b_isbns[0]: [1, 2],
-        scenario_b_isbns[1]: [2, 3],
-        scenario_b_isbns[2]: [3, 4],
-        scenario_b_isbns[3]: [7],
-        scenario_b_isbns[4]: [9],
-        scenario_b_isbns[5]: [1],
-        scenario_b_isbns[6]: [7],
-        scenario_b_isbns[7]: [2],
-    }
-    rows: list[dict] = []
-    seen: set[tuple[str, str, int]] = set()
+    # BQ 실예측 분포를 seed 책에 1:1 relabel — seed 책 ↔ BQ 책 결정적 bijection
+    # (양쪽 isbn13 정렬 후 zip · 1000↔1000). 추후 GCP 가 실 isbn 으로 재학습하면 자연 정합.
+    bq_base = read_bq_forecast_base(BQ_FORECAST_CSV)
+    bq_isbns = sorted({k[0] for k in bq_base})
+    seed_isbns = sorted(b["isbn13"] for b in books)
+    seed_to_bq = dict(zip(seed_isbns, bq_isbns))
 
-    # 책 인기도 결정 (~15% popular) — 모든 day 일관 유지
-    popular_isbns: set[str] = set()
+    # base_demand[(isbn, store_id)] — (책,매장) 별 1회 산출 (날짜 무관 안정값)
+    base_demand: dict[tuple[str, int], float] = {}
     for b in books:
-        if random.random() < 0.15:
-            popular_isbns.add(b["isbn13"])
-    # PUBLISHER cascade 강제 — 그 책들 모든 매장 D+1 forecast 100/day (전체 12 매장 합산 = 1200/day)
-    # wh 본체 + 매장 inventory 0 (gen_inventory 별도 처리) → cascade stage 0/1/2 fail → stage 3.
-    publisher_force_set = set(publisher_force_isbns or [])
+        isbn = b["isbn13"]
+        bq_isbn = seed_to_bq.get(isbn)
+        for store_id in range(1, 15):
+            # GCP BQML champion 모델 실예측 (매핑된 BQ 책의 해당 매장 5일 평균 수요)
+            base_demand[(isbn, store_id)] = bq_base.get((bq_isbn, store_id), 0.0)
 
+    # 7일치 (D+0 ~ D+6) — 매일 base × ±10% 노이즈만 (일관성 유지)
+    rows: list[dict] = []
     for d in range(days):
-        snap_date = TODAY + timedelta(days=d)
-
-        # 시나리오 B fixture 먼저 (high spikes — 모든 day 동일 패턴)
-        for isbn, locs in SHORT_PAIRS.items():
-            for store_id in locs:
-                key = (snap_date.isoformat(), isbn, store_id)
-                if key in seen:
-                    continue
-                seen.add(key)
-                rows.append({
-                    "snapshot_date": snap_date.isoformat(),
-                    "isbn13": isbn,
-                    "store_id": store_id,
-                    "predicted_demand": round(random.uniform(50, 80), 2),
-                    "confidence_low":   40.0,
-                    "confidence_high":  100.0,
-                    "model_version":    "automl-v1.0.0",
-                    "synced_at": NOW.isoformat(),
-                })
-
-        # 일반 fill — 전 책 × 전 매장 (오프라인 1~12 + 온라인 13,14) 빠짐없이 row 생성
+        snap_date = (TODAY + timedelta(days=d)).isoformat()
         for b in books:
             isbn = b["isbn13"]
-            is_popular = isbn in popular_isbns
-            is_publisher_force = isbn in publisher_force_set
             for store_id in range(1, 15):
-                key = (snap_date.isoformat(), isbn, store_id)
-                if key in seen:
-                    continue
-                seen.add(key)
-                if is_publisher_force:
-                    # 매장별 차등 forecast (60~160/day) → chained WH_TO_STORE 분배가 매장별 비율로 차등.
-                    # 12 매장 평균 110/day → wh 합산 ~1320/day · stage 3 진입 크기 유지.
-                    base = random.uniform(60, 160)
-                else:
-                    base = random.uniform(5, 25) if is_popular else random.uniform(0, 3)
+                demand = round(base_demand[(isbn, store_id)] * random.uniform(0.9, 1.1), 2)
                 rows.append({
-                    "snapshot_date": snap_date.isoformat(),
-                    "isbn13": isbn,
-                    "store_id": store_id,
-                    "predicted_demand": round(base, 2),
-                    "confidence_low":   round(base * 0.7, 2),
-                    "confidence_high":  round(base * 1.3, 2),
+                    "snapshot_date":    snap_date,
+                    "isbn13":           isbn,
+                    "store_id":         store_id,
+                    "predicted_demand": demand,
+                    "confidence_low":   round(demand * 0.7, 2),
+                    "confidence_high":  round(demand * 1.3, 2),
                     "model_version":    "automl-v1.0.0",
-                    "synced_at": NOW.isoformat(),
+                    "synced_at":        NOW.isoformat(),
                 })
-    return rows
+    return rows, base_demand
 
 
 def append_wh_forecast(forecast_rows: list[dict], locations: list[dict]) -> None:
@@ -1035,19 +1006,27 @@ def main() -> None:
     users = gen_users(locations)
 
     # 시나리오 B (재고 부족 cascade) 의 8 도서 — books 앞쪽 인덱스에서 stable 추출.
-    # gen_inventory · gen_forecast_cache · gen_pending_orders 모두 같은 list 사용 → 정합 보장.
+    # gen_inventory · gen_pending_orders 가 같은 list 사용 → 정합 보장.
     scenario_b_isbns = [b["isbn13"] for b in books[:8]]
-    # PUBLISHER cascade 강제 — 그 책들 모든 location on_hand=0 + forecast 100/day
-    # → stage 0/1/2 fail → stage 3 PUBLISHER_ORDER 발의 자연스럽게 생성
-    publisher_force_isbns = [b["isbn13"] for b in books[60:65]]
+    # PUBLISHER cascade 강제 — 2 도서 모든 location on_hand=0
+    # → stage 0/1/2 fail → stage 3 PUBLISHER_ORDER 발의 자연스럽게 생성 (2026-05-17: 5→2 축소)
+    # 2026-05-19: base_demand 인플레이션 제거 — 트리거는 on_hand=0 만으로 (BQ 실예측 기반 발주량).
+    publisher_force_isbns = [b["isbn13"] for b in books[60:62]]
+    # WH_TRANSFER cascade — 1 도서 영남 권역(매장+WH) 부족 · 수도권 WH 충분
+    # → REBALANCE/WH_TO_STORE fail → 수도권→영남 WH_TRANSFER 발의 (2026-05-17 추가)
+    wh_transfer_force_isbns = [b["isbn13"] for b in books[62:63]]
+    # WH_TO_STORE cascade (stage 1) — 1 도서 수도권(wh_id=1) 매장 전부(loc 1~6) 부족 · 수도권 WH 본체 충분
+    # → 같은 wh 매장 surplus 없어 REBALANCE fail → 자기 wh 본체→매장 WH_TO_STORE 발의 (2026-05-19 추가)
+    wh_to_store_force_isbns = [books[63]["isbn13"]]
 
-    # forecast 가 먼저 — inventory.safety_stock 이 forecast D+1 × 5 (사용자 결정 2026-05-13)
-    forecast_cache = gen_forecast_cache(books, scenario_b_isbns, days=7,
-                                        publisher_force_isbns=publisher_force_isbns)
+    # forecast 가 먼저 — base_demand 산출 → inventory.safety_stock = base_demand × 5
+    forecast_cache, base_demand = gen_forecast_cache(books, days=7)
     # WH row 추가 (자기 권역 매장 합산 · 오프라인+온라인) — 사용자 결정 2026-05-13
     append_wh_forecast(forecast_cache, locations)
-    inventory = gen_inventory(books, locations, scenario_b_isbns, forecast_cache,
-                              publisher_force_isbns=publisher_force_isbns)
+    inventory = gen_inventory(books, locations, scenario_b_isbns, base_demand,
+                              publisher_force_isbns=publisher_force_isbns,
+                              wh_transfer_force_isbns=wh_transfer_force_isbns,
+                              wh_to_store_force_isbns=wh_to_store_force_isbns)
     reservations = gen_reservations(books, locations)
     # 시연 정합: D-1~D-6 처리완료 (600 row) · D-0 0 row (cascade 발의 버튼이 동적 생성)
     # D-7 ~ D-365 history (~17950 row) — 일자별 상세 history view 용.

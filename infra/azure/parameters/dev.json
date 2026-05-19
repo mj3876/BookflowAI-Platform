@@ -12,7 +12,7 @@
     "vpnBgpAsn": { "value": 65001 },
     "logRetentionDays": { "value": 90 },
     "securityAdminObjectId": { "value": "bc2c50b2-2e17-4c3e-b89f-6b1fc72074ad" },
-    "awsTgwActiveIp": { "value": "52.194.91.158" },
+    "awsTgwActiveIp": { "value": "54.168.155.173" },
     "awsTgwBgpPeeringIp": { "value": "169.254.21.5" },
     "vpnPreSharedKey": { "value": "bookflow" },
     "vpnCustomBgpIpAddresses": { "value": ["169.254.21.6"] },

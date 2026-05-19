@@ -19,6 +19,10 @@ tmp/
 # ─── Local-only 임시 검증 task (일회성 · git push 안 함) ───
 scripts/aws/tasks/cicd_verify.py
 
+# ─── 관측 대시보드 빌드 산출물 (provisioning 이 빌드해 사용 · 커밋 불필요) ───
+infra/observability/dashboards/dist/
+infra/observability/dashboards/**/__pycache__/
+
 # ─── 개인별 설정 override ───
 scripts/aws/config/aws.local.ps1
 scripts/azure/config/azure.local.ps1
@@ -119,6 +123,8 @@ infra/aws/20-data-persistent/seed-data/parquet_csv/
 
 # seed CSV 는 generate.py 산출물 · git 추적 X (rds_seed 시 로컬에서 재생성 후 S3 번들)
 infra/aws/20-data-persistent/seed-data/*.csv
+# 단 bq_forecast_base.csv 는 산출물이 아니라 generate.py 입력 (BQ forecast_results 스냅샷) → 추적
+!infra/aws/20-data-persistent/seed-data/bq_forecast_base.csv
 
 # ─── ETL / Lambda 로컬 실행 아티팩트 ───
 aladin_out.json

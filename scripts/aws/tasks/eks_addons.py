@@ -30,6 +30,9 @@ CERT_MANAGER_VERSION = "v1.16.1"
 INGRESS_NGINX_VERSION = "4.11.3"
 WEBHOOK_DUCKDNS_VERSION = "v1.2.3"
 EXTERNAL_SECRETS_VERSION = "0.10.4"
+PROMETHEUS_VERSION = "25.27.0"
+GRAFANA_VERSION = "8.5.1"
+BLACKBOX_EXPORTER_VERSION = "9.0.1"
 
 DEFAULT_APPS_DIR_REL = "../BookFlowAI-Apps"
 
@@ -64,6 +67,8 @@ def _helm_repo_add() -> None:
         ("jetstack", "https://charts.jetstack.io"),
         ("mmontes11", "https://mmontes11.github.io/charts"),
         ("external-secrets", "https://charts.external-secrets.io"),
+        ("prometheus-community", "https://prometheus-community.github.io/helm-charts"),
+        ("grafana", "https://grafana.github.io/helm-charts"),
     ]
     for name, url in repos:
         subprocess.run(["helm", "repo", "add", name, url], check=False)
@@ -128,6 +133,370 @@ def _helm_install_external_secrets() -> None:
         "--set-string", f"serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn={eso_role_arn}",
         "--wait", "--timeout", "5m",
     ], check=True)
+
+
+# blackbox-exporter probe 대상 — Row 8 가용성 패널 외부 합성 모니터링.
+#   dashboard / external-alb : http_2xx (200 기대)
+#   auth-pod /auth/login     : http_2xx_30x (Entra OIDC redirect 302 정상)
+BLACKBOX_PROBE_TARGETS_2XX = [
+    "https://bookflow.myosoon.store",
+    "http://bookflow-alb-external-1131217362.ap-northeast-1.elb.amazonaws.com/health",
+]
+BLACKBOX_PROBE_TARGETS_30X = [
+    "https://bookflow.myosoon.store/auth/login",
+]
+
+
+def _helm_install_blackbox_exporter() -> None:
+    """blackbox-exporter — 외부 엔드포인트 합성 모니터링 (Row 8 가용성 패널).
+    prometheus-community/prometheus-blackbox-exporter 차트, namespace monitoring.
+    Prometheus 의 blackbox scrape job 이 이 exporter 의 /probe 를 경유해
+    probe_success / probe_http_status_code / probe_duration_seconds /
+    probe_ssl_earliest_cert_expiry 메트릭을 수집.
+
+    module 2종:
+      http_2xx     — 차트 기본 (200 기대) · dashboard / external-alb
+      http_2xx_30x — 200·30x 모두 허용 (auth-pod /auth/login OIDC redirect 302)
+    """
+    import tempfile, yaml as _yaml
+    values_dict = {
+        "config": {
+            "modules": {
+                "http_2xx": {
+                    "prober": "http",
+                    "timeout": "10s",
+                    "http": {"valid_http_versions": ["HTTP/1.1", "HTTP/2.0"]},
+                },
+                "http_2xx_30x": {
+                    "prober": "http",
+                    "timeout": "10s",
+                    "http": {
+                        "valid_http_versions": ["HTTP/1.1", "HTTP/2.0"],
+                        "valid_status_codes": [200, 301, 302, 303, 307, 308],
+                    },
+                },
+            },
+        },
+    }
+    values = _yaml.safe_dump(values_dict, sort_keys=False, allow_unicode=True)
+    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+        f.write(values)
+        values_path = f.name
+    try:
+        log.info("helm upgrade --install prometheus-blackbox-exporter")
+        subprocess.run([
+            "helm", "upgrade", "--install", "prometheus-blackbox-exporter",
+            "prometheus-community/prometheus-blackbox-exporter",
+            "--namespace", "monitoring", "--create-namespace",
+            "--version", BLACKBOX_EXPORTER_VERSION,
+            "--values", values_path,
+            "--wait", "--timeout", "5m",
+        ], check=True)
+    finally:
+        os.unlink(values_path)
+
+
+def _blackbox_scrape_config() -> str:
+    """Prometheus extraScrapeConfigs 문자열 — blackbox job.
+    표준 relabel: __address__ 를 타깃 URL 로 치환 → __param_target,
+    실제 scrape 주소는 blackbox-exporter service 로 변경.
+    auth-pod 는 302(OIDC redirect) 가 정상이라 별도 job(blackbox-30x)으로 분리.
+    """
+    targets_2xx = "\n".join(f"      - {t}" for t in BLACKBOX_PROBE_TARGETS_2XX)
+    targets_30x = "\n".join(f"      - {t}" for t in BLACKBOX_PROBE_TARGETS_30X)
+    bb_svc = "prometheus-blackbox-exporter.monitoring.svc.cluster.local:9115"
+    return f"""- job_name: blackbox
+  metrics_path: /probe
+  params:
+    module: [http_2xx]
+  static_configs:
+  - targets:
+{targets_2xx}
+  relabel_configs:
+  - source_labels: [__address__]
+    target_label: __param_target
+  - source_labels: [__param_target]
+    target_label: instance
+  - target_label: __address__
+    replacement: {bb_svc}
+- job_name: blackbox-30x
+  metrics_path: /probe
+  params:
+    module: [http_2xx_30x]
+  static_configs:
+  - targets:
+{targets_30x}
+  relabel_configs:
+  - source_labels: [__address__]
+    target_label: __param_target
+  - source_labels: [__param_target]
+    target_label: instance
+  - target_label: __address__
+    replacement: {bb_svc}
+"""
+
+
+def _helm_install_prometheus() -> None:
+    """Prometheus server only — 엔지니어 운영 대시보드 Phase ② (B2).
+    alertmanager / pushgateway / node-exporter / kube-state-metrics 는 비활성 (최소 구성).
+    차트 기본 prometheus.yml 의 kubernetes-pods scrape job 은 그대로 둠 —
+    BookFlow 8 Pod 가 prometheus.io/scrape annotation 으로 수집됨.
+    extraScrapeConfigs 로 blackbox-exporter 경유 외부 엔드포인트 probe job 추가.
+    """
+    log.info("helm upgrade --install prometheus (server only)")
+    subprocess.run([
+        "helm", "upgrade", "--install", "prometheus", "prometheus-community/prometheus",
+        "--namespace", "monitoring", "--create-namespace",
+        "--version", PROMETHEUS_VERSION,
+        "--set", "alertmanager.enabled=false",
+        "--set", "prometheus-pushgateway.enabled=false",
+        "--set", "prometheus-node-exporter.enabled=false",
+        "--set", "kube-state-metrics.enabled=false",
+        "--set-string", "extraScrapeConfigs=" + _blackbox_scrape_config(),
+        "--wait", "--timeout", "5m",
+    ], check=True)
+
+
+def _ensure_grafana_admin_password() -> str:
+    """Grafana admin password — Secrets Manager `bookflow/grafana/admin` 조회 후 없으면 생성.
+    bookflow/rds/master-password 패턴 참고. 매 redeploy 시 동일 값 (idempotent).
+    """
+    import boto3, json, secrets
+    sm = boto3.client("secretsmanager", region_name=os.environ.get("AWS_REGION", "ap-northeast-1"))
+    try:
+        val = json.loads(sm.get_secret_value(SecretId="bookflow/grafana/admin")["SecretString"])
+        log.info("  grafana admin password · 기존 Secrets Manager 값 사용")
+        return val["password"]
+    except sm.exceptions.ResourceNotFoundException:
+        pw = secrets.token_urlsafe(16)
+        sm.create_secret(
+            Name="bookflow/grafana/admin",
+            SecretString=json.dumps({"username": "admin", "password": pw}),
+        )
+        log.info("  grafana admin password · bookflow/grafana/admin Secret 신규 생성")
+        return pw
+
+
+def _is_placeholder_cred(cred: dict, key: str) -> bool:
+    """Tier 00 CFN 이 만든 placeholder secret 판별 — 값 미투입 시 datasource skip 용.
+    key 가 없거나 빈 문자열이거나 'PLACEHOLDER' 면 True."""
+    val = cred.get(key)
+    return not val or val == "PLACEHOLDER"
+
+
+def _helm_install_grafana() -> None:
+    """Grafana — 엔지니어 운영 대시보드 Phase ② (B3) + Phase ③ 트랙 4 멀티클라우드 datasource.
+    Prometheus (default) + CloudWatch (IRSA) + Azure Monitor + GCP Monitoring datasource provisioning.
+    ingress-nginx /grafana sub-path 서빙. admin password 는 Secrets Manager
+    bookflow/grafana/admin (idempotent). 대시보드 패널은 다음 Phase ④.
+    """
+    import boto3, json, yaml as _yaml
+    region = os.environ.get("AWS_REGION", "ap-northeast-1")
+    admin_pw = _ensure_grafana_admin_password()
+
+    # datasource 목록 — Prometheus 는 항상 · CloudWatch/Azure 는 자격증명 가용 시
+    # uid 는 고정값 — 코드 정의 대시보드(infra/observability/dashboards) JSON 이
+    # 이 고정 UID 를 참조하므로 datasource provisioning 에 명시 부여한다.
+    datasources = [
+        {
+            "name": "Prometheus",
+            "uid": "prometheus",
+            "type": "prometheus",
+            "access": "proxy",
+            "url": "http://prometheus-server.monitoring.svc.cluster.local",
+            "isDefault": True,
+        },
+    ]
+
+    # CloudWatch datasource — authType default → Grafana Pod 의 IRSA 사용.
+    # IRSA role ARN 은 CFN export bookflow-grafana-cloudwatch-role-arn (cert-manager 패턴).
+    cf = boto3.client("cloudformation", region_name=region)
+    cw_role_arn = next(
+        (e["Value"] for e in cf.list_exports()["Exports"] if e["Name"] == "bookflow-grafana-cloudwatch-role-arn"),
+        None,
+    )
+    datasources.append({
+        "name": "CloudWatch",
+        "uid": "cloudwatch",
+        "type": "cloudwatch",
+        "access": "proxy",
+        "jsonData": {"authType": "default", "defaultRegion": "ap-northeast-1"},
+    })
+    if cw_role_arn:
+        log.info(f"  grafana CloudWatch datasource · IRSA={cw_role_arn}")
+    else:
+        log.warn("bookflow-grafana-cloudwatch-role-arn export missing · IRSA annotation 없이 진행 (CloudWatch 인증 미동작 가능)")
+
+    # Azure Monitor datasource — 자격증명은 Secrets Manager bookflow/azure/grafana-monitor.
+    # grafana-azure-monitor-datasource 는 Grafana core 번들 → 별도 plugin install 불필요.
+    sm = boto3.client("secretsmanager", region_name=region)
+    try:
+        azure_cred = json.loads(sm.get_secret_value(SecretId="bookflow/azure/grafana-monitor")["SecretString"])
+        if _is_placeholder_cred(azure_cred, "clientSecret"):
+            log.warn("bookflow/azure/grafana-monitor secret 값 미투입 (placeholder) · Azure Monitor datasource skip")
+        else:
+            datasources.append({
+                "name": "Azure Monitor",
+                "uid": "azure-monitor",
+                "type": "grafana-azure-monitor-datasource",
+                "access": "proxy",
+                "jsonData": {
+                    "azureAuthType": "clientsecret",
+                    "cloudName": "azuremonitor",
+                    "tenantId": azure_cred["tenantId"],
+                    "clientId": azure_cred["clientId"],
+                    "subscriptionId": azure_cred["subscriptionId"],
+                },
+                "secureJsonData": {"clientSecret": azure_cred["clientSecret"]},
+            })
+            log.info("  grafana Azure Monitor datasource · bookflow/azure/grafana-monitor 자격증명 사용")
+    except sm.exceptions.ResourceNotFoundException:
+        log.warn("bookflow/azure/grafana-monitor secret missing · Azure Monitor datasource skip")
+
+    # GCP Cloud Monitoring datasource — 자격증명은 Secrets Manager bookflow/gcp/grafana-monitor
+    # (GCP SA key JSON 전체). stackdriver datasource 는 Grafana core 번들 → plugin install 불필요.
+    try:
+        gcp_cred = json.loads(sm.get_secret_value(SecretId="bookflow/gcp/grafana-monitor")["SecretString"])
+        if _is_placeholder_cred(gcp_cred, "private_key"):
+            log.warn("bookflow/gcp/grafana-monitor secret 값 미투입 (placeholder) · GCP Monitoring datasource skip")
+        else:
+            datasources.append({
+                "name": "GCP Monitoring",
+                "uid": "gcp-monitoring",
+                "type": "stackdriver",
+                "access": "proxy",
+                "jsonData": {
+                    "authenticationType": "jwt",
+                    "defaultProject": gcp_cred.get("project_id", "project-8ab6bf05-54d2-4f5d-b8d"),
+                    "clientEmail": gcp_cred["client_email"],
+                    "tokenUri": gcp_cred["token_uri"],
+                },
+                "secureJsonData": {"privateKey": gcp_cred["private_key"]},
+            })
+            log.info("  grafana GCP Monitoring datasource · bookflow/gcp/grafana-monitor 자격증명 사용")
+    except sm.exceptions.ResourceNotFoundException:
+        log.warn("bookflow/gcp/grafana-monitor secret missing · GCP Monitoring datasource skip")
+
+    values_dict = {
+        "adminUser": "admin",
+        "adminPassword": admin_pw,
+        "datasources": {
+            "datasources.yaml": {"apiVersion": 1, "datasources": datasources},
+        },
+        # 대시보드 sidecar — monitoring ns 의 라벨된 configmap 을 자동 로드.
+        # _apply_grafana_dashboards() 가 grafana_dashboard=1 라벨 configmap 을 만든다.
+        "sidecar": {
+            "dashboards": {
+                "enabled": True,
+                "label": "grafana_dashboard",
+                "labelValue": "1",
+                "folder": "/tmp/dashboards",
+                "provider": {"foldersFromFilesStructure": False},
+                "searchNamespace": "monitoring",
+            },
+        },
+        "grafana.ini": {
+            "server": {
+                "root_url": "%(protocol)s://%(domain)s/grafana/",
+                "serve_from_sub_path": True,
+            },
+            # auth.proxy — engineer 통합 로그인 (Phase ⑤).
+            # ingress forward-auth 가 BookFlow 인증 통과한 engineer 요청에만
+            # X-WEBAUTH-USER 헤더를 주입 → Grafana 가 그 헤더로 자동 로그인.
+            # Grafana 자체 로그인 화면은 안 뜸. whitelist 는 in-cluster CIDR
+            # (ingress-nginx Pod → grafana svc) 만 허용 — 외부 직접 위조 차단.
+            "auth.proxy": {
+                "enabled": True,
+                "header_name": "X-WEBAUTH-USER",
+                "header_property": "username",
+                "auto_sign_up": True,
+                "whitelist": "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16",
+                # forward-auth 가 매 요청 X-WEBAUTH-USER 주입 → Grafana 세션 로그인 토큰 불필요.
+                # 차트 기본값 true 면 SPA 가 auth-tokens/rotate 401 → 새로고침 루프 발생.
+                "enable_login_token": False,
+            },
+            "users": {
+                "auto_assign_org_role": "Editor",
+            },
+        },
+        "ingress": {
+            "enabled": True,
+            "ingressClassName": "nginx",
+            "hosts": ["bookflow.myosoon.store"],
+            "path": "/grafana",
+            # forward-auth: 모든 /grafana 요청을 dashboard-svc 가 검증.
+            # role==engineer 면 200 + X-WEBAUTH-USER 응답헤더 → auth-response-headers
+            # 로 upstream(Grafana) 에 전달. 아니면 401.
+            # configuration-snippet(more_clear_input_headers) 제거: 클러스터 보안정책
+            # allow-snippet-annotations=false 로 비활성 · auth-response-headers 의
+            # proxy_set_header 가 위조 X-WEBAUTH-USER 를 auth 응답값으로 override → 중복 방어.
+            "annotations": {
+                "nginx.ingress.kubernetes.io/auth-url":
+                    "http://dashboard-svc.bookflow.svc.cluster.local/internal/grafana-auth",
+                "nginx.ingress.kubernetes.io/auth-response-headers": "X-WEBAUTH-USER",
+            },
+        },
+    }
+    # CloudWatch IRSA — Grafana SA 에 role-arn annotation (export 가용 시에만)
+    if cw_role_arn:
+        values_dict["serviceAccount"] = {
+            "annotations": {"eks.amazonaws.com/role-arn": cw_role_arn},
+        }
+    values = _yaml.safe_dump(values_dict, sort_keys=False, allow_unicode=True)
+
+    import tempfile
+    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+        f.write(values)
+        values_path = f.name
+    try:
+        log.info("helm upgrade --install grafana")
+        subprocess.run([
+            "helm", "upgrade", "--install", "grafana", "grafana/grafana",
+            "--namespace", "monitoring", "--create-namespace",
+            "--version", GRAFANA_VERSION,
+            "--values", values_path,
+            "--wait", "--timeout", "5m",
+        ], check=True)
+    finally:
+        os.unlink(values_path)
+
+
+def _apply_grafana_dashboards() -> None:
+    """BookFlow 운영 대시보드 9개를 monitoring ns 의 configmap 으로 배포.
+
+    infra/observability/dashboards/generated/*.json (레포 tracked · 빌드 산출물
+    commit 본) 을 configmap 으로 만든다. grafana_dashboard=1 라벨이 붙어 있어
+    Grafana sidecar 가 자동 로드한다. 배포 경로는 Foundation SDK 빌드에 의존하지
+    않는다 — generated/ JSON 만 사용."""
+    import json as _json
+
+    platform_root = Path(__file__).resolve().parents[3]
+    gen_dir = platform_root / "infra" / "observability" / "dashboards" / "generated"
+    json_files = sorted(gen_dir.glob("row*.json"))
+    if not json_files:
+        log.warn(f"운영 대시보드 JSON 없음 ({gen_dir}) · configmap skip")
+        return
+
+    cm = {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": {
+            "name": "bookflow-ops-dashboards",
+            "namespace": "monitoring",
+            "labels": {"grafana_dashboard": "1", "app.kubernetes.io/part-of": "bookflow"},
+        },
+        "data": {f.name: f.read_text(encoding="utf-8") for f in json_files},
+    }
+    log.info(f"운영 대시보드 configmap bookflow-ops-dashboards · {len(json_files)}개 대시보드")
+
+    import tempfile
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as f:
+        f.write(_json.dumps(cm))
+        cm_path = f.name
+    try:
+        subprocess.run(["kubectl", "apply", "-f", cm_path], check=True)
+    finally:
+        os.unlink(cm_path)
 
 
 ROUTE53_HOSTED_ZONE_ID = "Z0061717U502ZCK2HCCF"  # myosoon.store (deploy 계정 소유 영구 zone)
@@ -204,6 +573,35 @@ spec:
 """.lstrip()
     subprocess.run(["kubectl", "apply", "-f", "-"], input=yaml, text=True, check=True)
     log.info("  ✓ ClusterSecretStore bookflow-aws-secrets")
+
+
+def _apply_storage_class() -> None:
+    """default StorageClass `gp3` (EBS CSI) — k8s 1.33 에서 in-tree provisioner(kubernetes.io/aws-ebs)
+    가 제거돼 기본 gp2 SC 가 죽음. ebs.csi.aws.com 애드온을 쓰는 gp3 SC 를 새 default 로 지정.
+    WaitForFirstConsumer 로 Pod scheduling 후 zone 일치하는 EBS 생성. Prometheus PVC bind 전제.
+    """
+    yaml = """
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: ebs.csi.aws.com
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+parameters:
+  type: gp3
+""".lstrip()
+    subprocess.run(["kubectl", "apply", "-f", "-"], input=yaml, text=True, check=True)
+    log.info("  ✓ StorageClass gp3 (default · ebs.csi.aws.com)")
+    # 기존 in-tree gp2 SC 의 default annotation 제거 — 둘 다 default 면 충돌. gp2 없으면 무시.
+    subprocess.run(
+        ["kubectl", "patch", "storageclass", "gp2", "-p",
+         '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"false"}}}'],
+        check=False,
+    )
+    log.info("  ✓ StorageClass gp2 default annotation 제거 (있을 경우)")
 
 
 def _helm_install_webhook_duckdns(token: str) -> None:
@@ -421,6 +819,11 @@ def deploy() -> None:
     _helm_install_cert_manager()
     _helm_install_external_secrets()
     _apply_cluster_secret_store()
+    _apply_storage_class()
+    _helm_install_blackbox_exporter()
+    _helm_install_prometheus()
+    _helm_install_grafana()
+    _apply_grafana_dashboards()
     _update_route53_a_alias()
     _apply_manifests()
     # BOOKFLOW_SKIP_RDS_SYNC=1 이면 ALTER ROLE + rollout restart 건너뜀
@@ -451,9 +854,13 @@ def destroy() -> None:
 
     # Reverse order
     for cmd in [
+        ["helm", "uninstall", "grafana", "-n", "monitoring", "--ignore-not-found"],
+        ["helm", "uninstall", "prometheus", "-n", "monitoring", "--ignore-not-found"],
+        ["helm", "uninstall", "prometheus-blackbox-exporter", "-n", "monitoring", "--ignore-not-found"],
         ["helm", "uninstall", "cert-manager-webhook-duckdns", "-n", "cert-manager", "--ignore-not-found"],
         ["helm", "uninstall", "cert-manager", "-n", "cert-manager", "--ignore-not-found"],
         ["helm", "uninstall", "ingress-nginx", "-n", "ingress-nginx", "--ignore-not-found"],
+        ["kubectl", "delete", "namespace", "monitoring", "--ignore-not-found=true"],
         ["kubectl", "delete", "namespace", "cert-manager", "--ignore-not-found=true"],
         ["kubectl", "delete", "namespace", "ingress-nginx", "--ignore-not-found=true"],
     ]:

@@ -1,0 +1,1455 @@
+{
+  "annotations": {},
+  "description": "POS → Kinesis → Glue ETL → S3 Mart → GCS → BQ → forecast 파이프라인 관측 (CloudWatch · ap-northeast-1). Glue job 상태·duration·에러 · 단계별 유입/산출/지연 · 데이터 신선도. GCS/BQ 단계는 Row 3(GCP) 참조.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 0,
+      "panels": [],
+      "title": "Row 5 · ETL — Glue (job 상태 / 처리량 / DPU)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "커스텀 ns `Glue` glue.driver.aggregate.recordsRead — JobName 차원. 각 ETL job 이 처리한 입력 레코드 수.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 1
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "JobName": "bookflow-raw-pos-mart",
+            "JobRunId": "ALL",
+            "Type": "count"
+          },
+          "id": "",
+          "label": "raw-pos-mart",
+          "matchExact": true,
+          "metricName": "glue.driver.aggregate.recordsRead",
+          "namespace": "Glue",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "R0",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "JobName": "bookflow-raw-aladin-mart",
+            "JobRunId": "ALL",
+            "Type": "count"
+          },
+          "id": "",
+          "label": "raw-aladin-mart",
+          "matchExact": true,
+          "metricName": "glue.driver.aggregate.recordsRead",
+          "namespace": "Glue",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "R1",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "JobName": "bookflow-raw-event-mart",
+            "JobRunId": "ALL",
+            "Type": "count"
+          },
+          "id": "",
+          "label": "raw-event-mart",
+          "matchExact": true,
+          "metricName": "glue.driver.aggregate.recordsRead",
+          "namespace": "Glue",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "R2",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "JobName": "bookflow-raw-sns-mart",
+            "JobRunId": "ALL",
+            "Type": "count"
+          },
+          "id": "",
+          "label": "raw-sns-mart",
+          "matchExact": true,
+          "metricName": "glue.driver.aggregate.recordsRead",
+          "namespace": "Glue",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "R3",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "JobName": "bookflow-sales-daily-agg",
+            "JobRunId": "ALL",
+            "Type": "count"
+          },
+          "id": "",
+          "label": "sales-daily-agg",
+          "matchExact": true,
+          "metricName": "glue.driver.aggregate.recordsRead",
+          "namespace": "Glue",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "R4",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "JobName": "bookflow-features-build",
+            "JobRunId": "ALL",
+            "Type": "count"
+          },
+          "id": "",
+          "label": "features-build",
+          "matchExact": true,
+          "metricName": "glue.driver.aggregate.recordsRead",
+          "namespace": "Glue",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "R5",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "Glue · job 별 처리 레코드",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "커스텀 ns `Glue` glue.driver.aggregate.elapsedTime — JobName 차원. 각 ETL job duration. 급증 시 데이터량/리소스 점검.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "JobName": "bookflow-raw-pos-mart",
+            "JobRunId": "ALL",
+            "Type": "gauge"
+          },
+          "id": "",
+          "label": "raw-pos-mart",
+          "matchExact": true,
+          "metricName": "glue.driver.aggregate.elapsedTime",
+          "namespace": "Glue",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "D0",
+          "region": "ap-northeast-1",
+          "statistic": "Maximum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "JobName": "bookflow-raw-aladin-mart",
+            "JobRunId": "ALL",
+            "Type": "gauge"
+          },
+          "id": "",
+          "label": "raw-aladin-mart",
+          "matchExact": true,
+          "metricName": "glue.driver.aggregate.elapsedTime",
+          "namespace": "Glue",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "D1",
+          "region": "ap-northeast-1",
+          "statistic": "Maximum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "JobName": "bookflow-raw-event-mart",
+            "JobRunId": "ALL",
+            "Type": "gauge"
+          },
+          "id": "",
+          "label": "raw-event-mart",
+          "matchExact": true,
+          "metricName": "glue.driver.aggregate.elapsedTime",
+          "namespace": "Glue",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "D2",
+          "region": "ap-northeast-1",
+          "statistic": "Maximum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "JobName": "bookflow-raw-sns-mart",
+            "JobRunId": "ALL",
+            "Type": "gauge"
+          },
+          "id": "",
+          "label": "raw-sns-mart",
+          "matchExact": true,
+          "metricName": "glue.driver.aggregate.elapsedTime",
+          "namespace": "Glue",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "D3",
+          "region": "ap-northeast-1",
+          "statistic": "Maximum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "JobName": "bookflow-sales-daily-agg",
+            "JobRunId": "ALL",
+            "Type": "gauge"
+          },
+          "id": "",
+          "label": "sales-daily-agg",
+          "matchExact": true,
+          "metricName": "glue.driver.aggregate.elapsedTime",
+          "namespace": "Glue",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "D4",
+          "region": "ap-northeast-1",
+          "statistic": "Maximum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "JobName": "bookflow-features-build",
+            "JobRunId": "ALL",
+            "Type": "gauge"
+          },
+          "id": "",
+          "label": "features-build",
+          "matchExact": true,
+          "metricName": "glue.driver.aggregate.elapsedTime",
+          "namespace": "Glue",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "D5",
+          "region": "ap-northeast-1",
+          "statistic": "Maximum"
+        }
+      ],
+      "title": "Glue · job 별 실행시간",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/Glue ResourceUsage — Type=Resource·Resource=JobRun. ETL job run 의 DPU·시간 리소스 소비.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 9
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "Class": "None",
+            "Resource": "JobRun",
+            "Service": "Glue",
+            "Type": "Resource"
+          },
+          "id": "",
+          "label": "DPU·JobRun",
+          "matchExact": true,
+          "metricName": "ResourceUsage",
+          "namespace": "AWS/Glue",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "Glue · DPU 사용량 (JobRun)",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "커스텀 ns `Glue` glue.driver.aggregate.numFailedTasks 전 job 합계. >0 이면 ETL job 내 task 실패 발생 — 에러 사유는 우측 패널.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 12,
+        "y": 9
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "JobName": "bookflow-raw-pos-mart",
+            "JobRunId": "ALL",
+            "Type": "count"
+          },
+          "id": "",
+          "label": "raw-pos-mart",
+          "matchExact": true,
+          "metricName": "glue.driver.aggregate.numFailedTasks",
+          "namespace": "Glue",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "F0",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "JobName": "bookflow-raw-aladin-mart",
+            "JobRunId": "ALL",
+            "Type": "count"
+          },
+          "id": "",
+          "label": "raw-aladin-mart",
+          "matchExact": true,
+          "metricName": "glue.driver.aggregate.numFailedTasks",
+          "namespace": "Glue",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "F1",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "JobName": "bookflow-raw-event-mart",
+            "JobRunId": "ALL",
+            "Type": "count"
+          },
+          "id": "",
+          "label": "raw-event-mart",
+          "matchExact": true,
+          "metricName": "glue.driver.aggregate.numFailedTasks",
+          "namespace": "Glue",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "F2",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "JobName": "bookflow-raw-sns-mart",
+            "JobRunId": "ALL",
+            "Type": "count"
+          },
+          "id": "",
+          "label": "raw-sns-mart",
+          "matchExact": true,
+          "metricName": "glue.driver.aggregate.numFailedTasks",
+          "namespace": "Glue",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "F3",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "JobName": "bookflow-sales-daily-agg",
+            "JobRunId": "ALL",
+            "Type": "count"
+          },
+          "id": "",
+          "label": "sales-daily-agg",
+          "matchExact": true,
+          "metricName": "glue.driver.aggregate.numFailedTasks",
+          "namespace": "Glue",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "F4",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "JobName": "bookflow-features-build",
+            "JobRunId": "ALL",
+            "Type": "count"
+          },
+          "id": "",
+          "label": "features-build",
+          "matchExact": true,
+          "metricName": "glue.driver.aggregate.numFailedTasks",
+          "namespace": "Glue",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "F5",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "Glue · 실패 Task 합계",
+      "transparent": false,
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "CloudWatch Logs (/aws-glue/jobs/output) 시간대별 로그스트림 수. Crawler·Data Catalog 통계는 GetCrawlerMetrics 커스텀 메트릭 필요.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 18,
+        "y": 9
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "expression": "fields @logStream | stats count_distinct(@logStream) as run수 by bin(1h)",
+          "id": "",
+          "logGroupNames": [
+            "/aws-glue/jobs/output"
+          ],
+          "queryMode": "Logs",
+          "refId": "A",
+          "region": "ap-northeast-1"
+        }
+      ],
+      "title": "Glue · job run 활동량",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "CloudWatch Logs (/aws-glue/jobs/error). ERROR/Exception/Traceback 로그 라인 — 어느 job 이 왜 실패했나.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true,
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 17
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "expression": "fields @timestamp, @logStream, @message | filter @message like /(?i)(error|exception|traceback|failed)/ | sort @timestamp desc | limit 50",
+          "id": "",
+          "logGroupNames": [
+            "/aws-glue/jobs/error"
+          ],
+          "queryMode": "Logs",
+          "refId": "A",
+          "region": "ap-northeast-1"
+        }
+      ],
+      "title": "Glue · job 에러 / 사유",
+      "transparent": false,
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 26
+      },
+      "id": 0,
+      "panels": [],
+      "title": "Row 5 · ETL — 파이프라인 단계 (POS→Kinesis→Glue→Mart→GCS)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/Lambda Invocations·Errors — bookflow-pos-ingestor. POS 수집 단계.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 27
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-pos-ingestor"
+          },
+          "id": "",
+          "label": "호출",
+          "matchExact": true,
+          "metricName": "Invocations",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-pos-ingestor"
+          },
+          "id": "",
+          "label": "에러",
+          "matchExact": true,
+          "metricName": "Errors",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "B",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "① POS → pos-ingestor (Lambda)",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/Kinesis IncomingRecords·GetRecords.IteratorAgeMilliseconds — bookflow-pos-events. iterator age 가 크면 Glue 소비 지연.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 27
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "StreamName": "bookflow-pos-events"
+          },
+          "id": "",
+          "label": "유입 레코드",
+          "matchExact": true,
+          "metricName": "IncomingRecords",
+          "namespace": "AWS/Kinesis",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "StreamName": "bookflow-pos-events"
+          },
+          "id": "",
+          "label": "iterator age(ms)",
+          "matchExact": true,
+          "metricName": "GetRecords.IteratorAgeMilliseconds",
+          "namespace": "AWS/Kinesis",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "B",
+          "region": "ap-northeast-1",
+          "statistic": "Maximum"
+        }
+      ],
+      "title": "② Kinesis 유입 / 소비 지연",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "커스텀 ns `Glue` recordsRead·numFailedTasks — bookflow-raw-pos-mart. Kinesis→S3 Mart 변환 단계의 산출/실패.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 35
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "JobName": "bookflow-raw-pos-mart",
+            "JobRunId": "ALL",
+            "Type": "count"
+          },
+          "id": "",
+          "label": "처리 레코드",
+          "matchExact": true,
+          "metricName": "glue.driver.aggregate.recordsRead",
+          "namespace": "Glue",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "JobName": "bookflow-raw-pos-mart",
+            "JobRunId": "ALL",
+            "Type": "count"
+          },
+          "id": "",
+          "label": "실패 task",
+          "matchExact": true,
+          "metricName": "glue.driver.aggregate.numFailedTasks",
+          "namespace": "Glue",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "B",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "③ Glue ETL (raw-pos-mart) 처리/실패",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/Lambda Invocations·Errors·Duration — bookflow-mart-to-gcs. AWS→GCP 경계. 이후 BQ load·forecast 는 Row 3(GCP).",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 35
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-mart-to-gcs"
+          },
+          "id": "",
+          "label": "호출",
+          "matchExact": true,
+          "metricName": "Invocations",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-mart-to-gcs"
+          },
+          "id": "",
+          "label": "에러",
+          "matchExact": true,
+          "metricName": "Errors",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "B",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-mart-to-gcs"
+          },
+          "id": "",
+          "label": "duration(ms)",
+          "matchExact": true,
+          "metricName": "Duration",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "C",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        }
+      ],
+      "title": "④ S3 Mart → GCS (mart-to-gcs Lambda)",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/Lambda Invocations·Errors — bookflow-forecast-trigger. forecast 산출 → RDS forecast_cache 동기화 트리거.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 43
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-forecast-trigger"
+          },
+          "id": "",
+          "label": "호출",
+          "matchExact": true,
+          "metricName": "Invocations",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "FunctionName": "bookflow-forecast-trigger"
+          },
+          "id": "",
+          "label": "에러",
+          "matchExact": true,
+          "metricName": "Errors",
+          "namespace": "AWS/Lambda",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "B",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "⑤ forecast-trigger (Lambda)",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 51
+      },
+      "id": 0,
+      "panels": [],
+      "title": "Row 5 · ETL — 데이터 신선도",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/S3 NumberOfObjects — bookflow-mart 버킷. ETL 산출물 누적. 일 1회 갱신 메트릭 — 증가가 멈추면 ETL 정체 신호.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 52
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "BucketName": "bookflow-mart-354493396671",
+            "StorageType": "AllStorageTypes"
+          },
+          "id": "",
+          "label": "Mart 객체 수",
+          "matchExact": true,
+          "metricName": "NumberOfObjects",
+          "namespace": "AWS/S3",
+          "period": "86400",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        }
+      ],
+      "title": "데이터 신선도 · S3 Mart 객체 수",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/S3 BucketSizeBytes — bookflow-mart. 일 1회 갱신.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 52
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "BucketName": "bookflow-mart-354493396671",
+            "StorageType": "StandardStorage"
+          },
+          "id": "",
+          "label": "Mart 크기",
+          "matchExact": true,
+          "metricName": "BucketSizeBytes",
+          "namespace": "AWS/S3",
+          "period": "86400",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        }
+      ],
+      "title": "데이터 신선도 · S3 Mart 크기",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/S3 NumberOfObjects — bookflow-raw. POS/aladin/event/sns 원천 적재량. 증가 정체 시 수집 단계(Lambda/Firehose) 점검.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 60
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "BucketName": "bookflow-raw-354493396671",
+            "StorageType": "AllStorageTypes"
+          },
+          "id": "",
+          "label": "Raw 객체 수",
+          "matchExact": true,
+          "metricName": "NumberOfObjects",
+          "namespace": "AWS/S3",
+          "period": "86400",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "ap-northeast-1",
+          "statistic": "Average"
+        }
+      ],
+      "title": "데이터 신선도 · S3 Raw 객체 수",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/Kinesis GetRecords.IteratorAgeMilliseconds — AWS 구간 소비 지연. POS→BQ 전구간 지연은 Row 3(BQ 적재일)과 함께 판단.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 60000
+              },
+              {
+                "color": "red",
+                "value": 300000
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 12,
+        "y": 60
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "StreamName": "bookflow-pos-events"
+          },
+          "id": "",
+          "label": "지연(ms)",
+          "matchExact": true,
+          "metricName": "GetRecords.IteratorAgeMilliseconds",
+          "namespace": "AWS/Kinesis",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "ap-northeast-1",
+          "statistic": "Maximum"
+        }
+      ],
+      "title": "데이터 신선도 · 파이프라인 지연 (Kinesis lag)",
+      "transparent": false,
+      "type": "stat"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 41,
+  "tags": [
+    "bookflow",
+    "ops"
+  ],
+  "templating": {},
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "BookFlow 운영 — ETL / 데이터 파이프라인 (Row 5)",
+  "uid": "bookflow-ops-row5-etl"
+}

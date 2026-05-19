@@ -1,0 +1,73 @@
+# .github/workflows/observability-redeploy.yml
+# 흐름: dashboards 소스 push → 대시보드 JSON 빌드 → dist/ → generated/ 동기 커밋
+# 라이프사이클: 🔒 build-only (클러스터 미접근) · generated/*.json 은 tracked
+#
+# 실제 Grafana provisioning 은 이 워크플로가 하지 않는다 — start-day 의
+# eks_addons.py `_apply_grafana_dashboards()` 가 generated/*.json 을 읽어
+# monitoring ns 의 dashboard configmap 으로 apply 한다. 즉 이 워크플로는
+# generated/ 를 최신 상태로만 유지하고, provisioning 은 daily EKS 기동에 위임.
+#
+# 풀 push-to-live (GHA → 클러스터 직접 provisioning) 로 전환하려면 IaC 선행 3건 필요:
+#   (1) iam.yaml — GhaGlueRedeployRole OIDC trust 에 `aws` 브랜치 sub 조건 추가
+#   (2) ansible-node.yaml — UserData 에 kubectl 설치 추가
+#   (3) eks-cluster.yaml — ansible-node role EKS AccessEntry + eks:DescribeCluster 권한
+# 위 3건은 deploy 계정 이관 시 적용한다. 그 전까지는 build-only.
+
+name: observability-redeploy
+
+on:
+  push:
+    branches: [aws]
+    # 대시보드 소스만 트리거. generated/** 는 제외한다 — 이 워크플로가
+    # generated/ 를 커밋하므로 포함 시 self-trigger 무한루프.
+    paths:
+      - 'infra/observability/dashboards/dashboards/**'
+      - 'infra/observability/dashboards/lib/**'
+      - 'infra/observability/dashboards/build.py'
+
+permissions:
+  contents: write   # generated/ 커밋 push 필수
+
+jobs:
+  build:
+    name: Ops dashboards → build + generated/ 커밋
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. checkout ────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. Python setup + 빌드 의존성 설치 ──────────────────
+      - name: Python setup
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: pip install (grafana-foundation-sdk)
+        run: pip install -r infra/observability/dashboards/requirements.txt
+
+      # ── 3. 대시보드 JSON 빌드 (dist/ → generated/) ──────────
+      # build.py 는 dist/*.json 으로 출력. provisioning(_apply_grafana_dashboards)이
+      # 사용하는 generated/*.json 으로 동기화한다 (dist/ 는 .gitignore · generated/ 는 tracked).
+      - name: Build ops dashboards
+        working-directory: infra/observability/dashboards
+        run: |
+          python build.py
+          rm -f generated/*.json
+          cp dist/*.json generated/
+
+      # ── 4. generated/ 변경 시 커밋 + push ──────────────────
+      # 커밋 메시지에 [skip ci] 포함 — path filter 에서 generated/ 를 이미
+      # 제외했지만 이중 안전장치로 self-trigger 를 한번 더 차단한다.
+      - name: Commit generated dashboards
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add infra/observability/dashboards/generated
+          if git diff --cached --quiet; then
+            echo "generated/ 변경 없음 — 커밋 생략"
+            exit 0
+          fi
+          git commit -m "chore(observability): rebuild ops dashboards generated/ [skip ci]"
+          git push origin aws
