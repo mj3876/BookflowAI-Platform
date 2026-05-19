@@ -1,0 +1,149 @@
+# .github/workflows/observability-redeploy.yml
+# 흐름: dashboards/** push → OIDC → 대시보드 JSON 빌드 → SSM Send-Command → Ansible CN → Grafana configmap apply
+# 라이프사이클: ⏰ daily EKS (Grafana monitoring ns) · provisioning 결과는 eks_addons.py 의 _apply_grafana_dashboards() 와 동일
+
+name: observability-redeploy
+
+on:
+  push:
+    branches: [aws]
+    paths: ['infra/observability/dashboards/**']
+
+permissions:
+  id-token: write   # OIDC 필수
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-1
+
+jobs:
+  deploy:
+    name: Ops dashboards → build + Grafana provisioning
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. checkout ────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. Python setup + 빌드 의존성 설치 ──────────────────
+      - name: Python setup
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: pip install (grafana-foundation-sdk)
+        run: pip install -r infra/observability/dashboards/requirements.txt
+
+      # ── 3. 대시보드 JSON 빌드 (dist/ → generated/) ──────────
+      # build.py 는 dist/*.json 으로 출력. provisioning(_apply_grafana_dashboards)이
+      # 사용하는 generated/*.json 으로 동기화한다 (dist/ 는 .gitignore · generated/ 는 tracked).
+      - name: Build ops dashboards
+        working-directory: infra/observability/dashboards
+        run: |
+          python build.py
+          rm -f generated/*.json
+          cp dist/*.json generated/
+
+      # ── 4. OIDC 인증 ───────────────────────────────────────
+      - name: OIDC → bookflow-gha-glue-redeploy
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/bookflow-gha-glue-redeploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      # ── 5. Ansible CN 인스턴스 ID 조회 ─────────────────────
+      - name: Ansible CN 인스턴스 ID 조회
+        id: get-instance
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters \
+              "Name=tag:Name,Values=bookflow-ansible-node" \
+              "Name=instance-state-name,Values=running" \
+            --region "${{ env.AWS_REGION }}" \
+            --query "Reservations[0].Instances[0].InstanceId" \
+            --output text)
+
+          if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ]; then
+            echo "::error::Ansible CN(bookflow-ansible-node) 없음 또는 stopped 상태"
+            exit 1
+          fi
+
+          echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
+          echo "Ansible CN: $INSTANCE_ID"
+
+      # ── 6. configmap 매니페스트 인코딩 ─────────────────────
+      # generated/*.json 9개를 단일 configmap(bookflow-ops-dashboards · monitoring ns ·
+      # grafana_dashboard=1 라벨)으로 묶는다 — _apply_grafana_dashboards() 와 동일 결과물.
+      # 매니페스트를 base64 로 SSM 파라미터에 실어 Ansible CN 에서 kubectl apply.
+      - name: configmap 매니페스트 빌드
+        id: build-cm
+        working-directory: infra/observability/dashboards
+        run: |
+          python - <<'PY' > /tmp/bookflow-ops-dashboards.json
+          import json, glob, os
+          files = sorted(glob.glob("generated/row*.json"))
+          cm = {
+              "apiVersion": "v1",
+              "kind": "ConfigMap",
+              "metadata": {
+                  "name": "bookflow-ops-dashboards",
+                  "namespace": "monitoring",
+                  "labels": {"grafana_dashboard": "1", "app.kubernetes.io/part-of": "bookflow"},
+              },
+              "data": {os.path.basename(f): open(f, encoding="utf-8").read() for f in files},
+          }
+          print(json.dumps(cm))
+          PY
+          CM_B64=$(base64 -w0 /tmp/bookflow-ops-dashboards.json)
+          echo "cm_b64=$CM_B64" >> "$GITHUB_OUTPUT"
+          echo "configmap 매니페스트 빌드 완료 ($(wc -c < /tmp/bookflow-ops-dashboards.json) bytes)"
+
+      # ── 7. SSM Send-Command (kubectl apply configmap) ──────
+      - name: SSM Send-Command
+        id: send-command
+        run: |
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "${{ steps.get-instance.outputs.instance_id }}" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "{\"commands\":[
+              \"set -e\",
+              \"aws eks update-kubeconfig --name bookflow-eks --region ${{ env.AWS_REGION }}\",
+              \"echo ${{ steps.build-cm.outputs.cm_b64 }} | base64 -d > /tmp/bookflow-ops-dashboards.json\",
+              \"kubectl apply -f /tmp/bookflow-ops-dashboards.json\"
+            ]}" \
+            --timeout-seconds 600 \
+            --region "${{ env.AWS_REGION }}" \
+            --query "Command.CommandId" \
+            --output text)
+
+          echo "command_id=$COMMAND_ID" >> "$GITHUB_OUTPUT"
+          echo "SSM Command ID: $COMMAND_ID"
+
+      # ── 8. 완료 대기 (최대 10분) ───────────────────────────
+      - name: SSM 명령 완료 대기
+        run: |
+          aws ssm wait command-executed \
+            --command-id "${{ steps.send-command.outputs.command_id }}" \
+            --instance-id "${{ steps.get-instance.outputs.instance_id }}" \
+            --region "${{ env.AWS_REGION }}"
+
+      # ── 9. 결과 출력 (성공/실패 모두) ───────────────────────
+      - name: SSM 실행 결과 출력
+        if: always()
+        run: |
+          RESULT=$(aws ssm get-command-invocation \
+            --command-id "${{ steps.send-command.outputs.command_id }}" \
+            --instance-id "${{ steps.get-instance.outputs.instance_id }}" \
+            --region "${{ env.AWS_REGION }}" \
+            --output json)
+
+          STATUS=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['Status'])")
+          STDOUT=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['StandardOutputContent'])")
+          STDERR=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['StandardErrorContent'])")
+
+          echo "=== Status: $STATUS ==="
+          echo "$STDOUT"
+          [ -n "$STDERR" ] && echo "=== Stderr ===" && echo "$STDERR"
+
+          [ "$STATUS" = "Success" ] || exit 1
