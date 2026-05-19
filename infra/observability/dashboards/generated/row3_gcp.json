@@ -1,0 +1,692 @@
+{
+  "annotations": {},
+  "description": "GCP Cloud Monitoring 기반 GCP 리소스 운영 현황. BigQuery 쿼리/슬롯/row/적재 · Vertex AI 예측 · Cloud Functions 3개 호출·에러 · Workflows 실행 · GCS 버킷. project-8ab6bf05-54d2-4f5d-b8d.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 0,
+      "panels": [],
+      "title": "Row 3 · GCP (Cloud Monitoring)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "gcp-monitoring"
+      },
+      "description": "bigquery query/count · ALIGN_SUM (구간 쿼리 건수 · priority 별).",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 1
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "aliasBy": "{{metric.label.priority}}",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcp-monitoring"
+          },
+          "queryType": "timeSeriesList",
+          "refId": "",
+          "timeSeriesList": {
+            "alignmentPeriod": "+300s",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "filters": [
+              "metric.type=\"bigquery.googleapis.com/query/count\""
+            ],
+            "groupBys": [
+              "metric.label.priority"
+            ],
+            "perSeriesAligner": "ALIGN_SUM",
+            "projectName": "project-8ab6bf05-54d2-4f5d-b8d"
+          }
+        }
+      ],
+      "title": "BigQuery 쿼리 실행 수",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "gcp-monitoring"
+      },
+      "description": "bigquery slots/allocated_for_project · ALIGN_MEAN.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "aliasBy": "할당 슬롯",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcp-monitoring"
+          },
+          "queryType": "timeSeriesList",
+          "refId": "",
+          "timeSeriesList": {
+            "alignmentPeriod": "+300s",
+            "crossSeriesReducer": "REDUCE_MEAN",
+            "filters": [
+              "metric.type=\"bigquery.googleapis.com/slots/allocated_for_project\""
+            ],
+            "perSeriesAligner": "ALIGN_MEAN",
+            "projectName": "project-8ab6bf05-54d2-4f5d-b8d"
+          }
+        }
+      ],
+      "title": "BigQuery 할당 슬롯",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "gcp-monitoring"
+      },
+      "description": "bigquery storage/table_count · 데이터셋 내 테이블 수. 테이블별 row 수 플랫폼 메트릭 부재 → 테이블 수로 적재 현황 대체.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "yellow",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 9
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "aliasBy": "테이블 수",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcp-monitoring"
+          },
+          "queryType": "timeSeriesList",
+          "refId": "",
+          "timeSeriesList": {
+            "alignmentPeriod": "+300s",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "filters": [
+              "metric.type=\"bigquery.googleapis.com/storage/table_count\""
+            ],
+            "perSeriesAligner": "ALIGN_MEAN",
+            "projectName": "project-8ab6bf05-54d2-4f5d-b8d"
+          }
+        }
+      ],
+      "title": "BigQuery 테이블 수 (적재 현황)",
+      "transparent": false,
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "gcp-monitoring"
+      },
+      "description": "bigquery storage/uploaded_row_count · ALIGN_SUM. 마지막 포인트 시각이 최신 적재 시각.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 9
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "aliasBy": "적재 row",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcp-monitoring"
+          },
+          "queryType": "timeSeriesList",
+          "refId": "",
+          "timeSeriesList": {
+            "alignmentPeriod": "+300s",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "filters": [
+              "metric.type=\"bigquery.googleapis.com/storage/uploaded_row_count\""
+            ],
+            "perSeriesAligner": "ALIGN_SUM",
+            "projectName": "project-8ab6bf05-54d2-4f5d-b8d"
+          }
+        }
+      ],
+      "title": "BigQuery 적재 row 수 (최신 적재)",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "gcp-monitoring"
+      },
+      "description": "aiplatform prediction/online/prediction_count · ALIGN_SUM. 온라인 Endpoint 추론 트래픽 (현재 데이터 0 · 배치 위주 운영).",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 9
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "aliasBy": "예측 호출",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcp-monitoring"
+          },
+          "queryType": "timeSeriesList",
+          "refId": "",
+          "timeSeriesList": {
+            "alignmentPeriod": "+300s",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "filters": [
+              "metric.type=\"aiplatform.googleapis.com/prediction/online/prediction_count\""
+            ],
+            "perSeriesAligner": "ALIGN_SUM",
+            "projectName": "project-8ab6bf05-54d2-4f5d-b8d"
+          }
+        }
+      ],
+      "title": "Vertex AI 온라인 예측 호출 수",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "gcp-monitoring"
+      },
+      "description": "cloudfunctions function/execution_count · ALIGN_SUM. bq-load·feature-assemble·vertex-invoke 함수별.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 17
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "aliasBy": "{{resource.label.function_name}}",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcp-monitoring"
+          },
+          "queryType": "timeSeriesList",
+          "refId": "",
+          "timeSeriesList": {
+            "alignmentPeriod": "+300s",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "filters": [
+              "metric.type=\"cloudfunctions.googleapis.com/function/execution_count\""
+            ],
+            "groupBys": [
+              "resource.label.function_name"
+            ],
+            "perSeriesAligner": "ALIGN_SUM",
+            "projectName": "project-8ab6bf05-54d2-4f5d-b8d"
+          }
+        }
+      ],
+      "title": "Cloud Functions 호출 수 (3개)",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "gcp-monitoring"
+      },
+      "description": "cloudfunctions function/execution_count · status!=ok 필터. 함수별 실패 호출 수.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 17
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "aliasBy": "{{resource.label.function_name}}",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcp-monitoring"
+          },
+          "queryType": "timeSeriesList",
+          "refId": "",
+          "timeSeriesList": {
+            "alignmentPeriod": "+300s",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "filters": [
+              "metric.type=\"cloudfunctions.googleapis.com/function/execution_count\"",
+              "metric.label.status!=\"ok\""
+            ],
+            "groupBys": [
+              "resource.label.function_name"
+            ],
+            "perSeriesAligner": "ALIGN_SUM",
+            "projectName": "project-8ab6bf05-54d2-4f5d-b8d"
+          }
+        }
+      ],
+      "title": "Cloud Functions 에러 호출 (3개)",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "gcp-monitoring"
+      },
+      "description": "workflows finished_execution_count · ALIGN_SUM · status 별. 데이터 파이프라인/배치예측 오케스트레이션 실행 결과.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 25
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "aliasBy": "{{metric.label.status}}",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcp-monitoring"
+          },
+          "queryType": "timeSeriesList",
+          "refId": "",
+          "timeSeriesList": {
+            "alignmentPeriod": "+300s",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "filters": [
+              "metric.type=\"workflows.googleapis.com/finished_execution_count\""
+            ],
+            "groupBys": [
+              "metric.label.status"
+            ],
+            "perSeriesAligner": "ALIGN_SUM",
+            "projectName": "project-8ab6bf05-54d2-4f5d-b8d"
+          }
+        }
+      ],
+      "title": "Workflows 실행 완료 (상태별)",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "gcp-monitoring"
+      },
+      "description": "storage storage/total_bytes · ALIGN_MEAN · 버킷별.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 25
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "aliasBy": "{{resource.label.bucket_name}}",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcp-monitoring"
+          },
+          "queryType": "timeSeriesList",
+          "refId": "",
+          "timeSeriesList": {
+            "alignmentPeriod": "+3600s",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "filters": [
+              "metric.type=\"storage.googleapis.com/storage/total_bytes\""
+            ],
+            "groupBys": [
+              "resource.label.bucket_name"
+            ],
+            "perSeriesAligner": "ALIGN_MEAN",
+            "projectName": "project-8ab6bf05-54d2-4f5d-b8d"
+          }
+        }
+      ],
+      "title": "GCS 버킷 사용량",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "gcp-monitoring"
+      },
+      "description": "storage storage/object_count · 전체 버킷 합계.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "yellow",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 33
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "aliasBy": "객체 수",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcp-monitoring"
+          },
+          "queryType": "timeSeriesList",
+          "refId": "",
+          "timeSeriesList": {
+            "alignmentPeriod": "+3600s",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "filters": [
+              "metric.type=\"storage.googleapis.com/storage/object_count\""
+            ],
+            "perSeriesAligner": "ALIGN_MEAN",
+            "projectName": "project-8ab6bf05-54d2-4f5d-b8d"
+          }
+        }
+      ],
+      "title": "GCS 객체 수 (전체 버킷)",
+      "transparent": false,
+      "type": "stat"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 41,
+  "tags": [
+    "bookflow",
+    "ops"
+  ],
+  "templating": {},
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "BookFlow 운영 — GCP (Row 3)",
+  "uid": "bookflow-ops-row3-gcp"
+}

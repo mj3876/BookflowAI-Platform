@@ -24,6 +24,7 @@ from grafana_foundation_sdk.builders import (
 )
 from grafana_foundation_sdk.builders.common import (
     ReduceDataOptions,
+    StackingConfig,
     VizLegendOptions,
 )
 from grafana_foundation_sdk.builders.dashboard import ThresholdsConfig
@@ -196,7 +197,7 @@ def timeseries_panel(
         .legend(legend)
     )
     if stack:
-        p = p.stacking(StackingMode.NORMAL)
+        p = p.stacking(StackingConfig().mode(StackingMode.NORMAL))
     if thresholds is not None:
         p = p.thresholds(thresholds)
     return p

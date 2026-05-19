@@ -28,13 +28,21 @@ ROOT = Path(__file__).parent.resolve()
 DIST = ROOT / "dist"
 DASHBOARDS_PKG = "dashboards"
 
-# 빌드 대상 — 새 Row 모듈을 추가하면 여기에 등록한다.
-DASHBOARD_MODULES = [
-    "row0_overview",
-]
-
 # lib/ 와 dashboards/ import 가능하도록
 sys.path.insert(0, str(ROOT))
+
+
+def discover_modules() -> list[str]:
+    """dashboards/row*.py 를 자동 발견해 모듈명을 정렬 반환.
+
+    새 Row 모듈을 추가하면 별도 등록 없이 자동으로 빌드 대상이 된다.
+    """
+    pkg_dir = ROOT / DASHBOARDS_PKG
+    return sorted(p.stem for p in pkg_dir.glob("row*.py"))
+
+
+# 빌드 대상 — dashboards/row*.py 자동 발견.
+DASHBOARD_MODULES = discover_modules()
 
 
 def build_one(module_name: str) -> dict:

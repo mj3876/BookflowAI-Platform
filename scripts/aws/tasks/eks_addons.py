@@ -295,9 +295,12 @@ def _helm_install_grafana() -> None:
     admin_pw = _ensure_grafana_admin_password()
 
     # datasource 목록 — Prometheus 는 항상 · CloudWatch/Azure 는 자격증명 가용 시
+    # uid 는 고정값 — 코드 정의 대시보드(infra/observability/dashboards) JSON 이
+    # 이 고정 UID 를 참조하므로 datasource provisioning 에 명시 부여한다.
     datasources = [
         {
             "name": "Prometheus",
+            "uid": "prometheus",
             "type": "prometheus",
             "access": "proxy",
             "url": "http://prometheus-server.monitoring.svc.cluster.local",
@@ -314,6 +317,7 @@ def _helm_install_grafana() -> None:
     )
     datasources.append({
         "name": "CloudWatch",
+        "uid": "cloudwatch",
         "type": "cloudwatch",
         "access": "proxy",
         "jsonData": {"authType": "default", "defaultRegion": "ap-northeast-1"},
@@ -333,6 +337,7 @@ def _helm_install_grafana() -> None:
         else:
             datasources.append({
                 "name": "Azure Monitor",
+                "uid": "azure-monitor",
                 "type": "grafana-azure-monitor-datasource",
                 "access": "proxy",
                 "jsonData": {
@@ -357,6 +362,7 @@ def _helm_install_grafana() -> None:
         else:
             datasources.append({
                 "name": "GCP Monitoring",
+                "uid": "gcp-monitoring",
                 "type": "stackdriver",
                 "access": "proxy",
                 "jsonData": {
@@ -376,6 +382,18 @@ def _helm_install_grafana() -> None:
         "adminPassword": admin_pw,
         "datasources": {
             "datasources.yaml": {"apiVersion": 1, "datasources": datasources},
+        },
+        # 대시보드 sidecar — monitoring ns 의 라벨된 configmap 을 자동 로드.
+        # _apply_grafana_dashboards() 가 grafana_dashboard=1 라벨 configmap 을 만든다.
+        "sidecar": {
+            "dashboards": {
+                "enabled": True,
+                "label": "grafana_dashboard",
+                "labelValue": "1",
+                "folder": "/tmp/dashboards",
+                "provider": {"foldersFromFilesStructure": False},
+                "searchNamespace": "monitoring",
+            },
         },
         "grafana.ini": {
             "server": {
@@ -438,6 +456,44 @@ def _helm_install_grafana() -> None:
         ], check=True)
     finally:
         os.unlink(values_path)
+
+
+def _apply_grafana_dashboards() -> None:
+    """BookFlow 운영 대시보드 9개를 monitoring ns 의 configmap 으로 배포.
+
+    infra/observability/dashboards/generated/*.json (레포 tracked · 빌드 산출물
+    commit 본) 을 configmap 으로 만든다. grafana_dashboard=1 라벨이 붙어 있어
+    Grafana sidecar 가 자동 로드한다. 배포 경로는 Foundation SDK 빌드에 의존하지
+    않는다 — generated/ JSON 만 사용."""
+    import json as _json
+
+    platform_root = Path(__file__).resolve().parents[3]
+    gen_dir = platform_root / "infra" / "observability" / "dashboards" / "generated"
+    json_files = sorted(gen_dir.glob("row*.json"))
+    if not json_files:
+        log.warn(f"운영 대시보드 JSON 없음 ({gen_dir}) · configmap skip")
+        return
+
+    cm = {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": {
+            "name": "bookflow-ops-dashboards",
+            "namespace": "monitoring",
+            "labels": {"grafana_dashboard": "1", "app.kubernetes.io/part-of": "bookflow"},
+        },
+        "data": {f.name: f.read_text(encoding="utf-8") for f in json_files},
+    }
+    log.info(f"운영 대시보드 configmap bookflow-ops-dashboards · {len(json_files)}개 대시보드")
+
+    import tempfile
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as f:
+        f.write(_json.dumps(cm))
+        cm_path = f.name
+    try:
+        subprocess.run(["kubectl", "apply", "-f", cm_path], check=True)
+    finally:
+        os.unlink(cm_path)
 
 
 ROUTE53_HOSTED_ZONE_ID = "Z0061717U502ZCK2HCCF"  # myosoon.store (deploy 계정 소유 영구 zone)
@@ -758,6 +814,7 @@ def deploy() -> None:
     _helm_install_blackbox_exporter()
     _helm_install_prometheus()
     _helm_install_grafana()
+    _apply_grafana_dashboards()
     _update_route53_a_alias()
     _apply_manifests()
     _sync_rds_pod_roles()

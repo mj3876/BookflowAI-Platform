@@ -1,0 +1,656 @@
+{
+  "annotations": {},
+  "description": "AWS·Azure·GCP 비용 상세 + $203/월 예산 추적 (영구 $16 · daily $111 · phase $77 분해). AWS 는 CloudWatch AWS/Billing · Azure/GCP 는 cost exporter 연결 대기.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 0,
+      "panels": [],
+      "title": "Row 7 · 멀티클라우드 비용",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/Billing EstimatedCharges (us-east-1 · Currency=USD · Maximum). billing 메트릭 게시 시 동작 — 미게시 시 N/A.",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 162.4
+              },
+              {
+                "color": "red",
+                "value": 203.0
+              }
+            ]
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "Currency": "USD"
+          },
+          "id": "",
+          "label": "AWS",
+          "metricName": "EstimatedCharges",
+          "namespace": "AWS/Billing",
+          "period": "21600",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "us-east-1",
+          "statistic": "Maximum"
+        }
+      ],
+      "title": "AWS 비용 (이번 달 누적)",
+      "transparent": false,
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Azure Cost Management 비용 (placeholder — cost exporter 미연결, `bookflow_cloud_cost_usd{cloud=\"azure\"}` push 시 교체).",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 162.4
+              },
+              {
+                "color": "red",
+                "value": 203.0
+              }
+            ]
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "expr": "sum(bookflow_cloud_cost_usd{cloud=\"azure\"}) or vector(0)",
+          "instant": true,
+          "legendFormat": "Azure",
+          "range": false,
+          "refId": ""
+        }
+      ],
+      "title": "Azure 비용 (이번 달 누적)",
+      "transparent": false,
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "GCP Billing 비용 (placeholder — cost exporter 미연결, `bookflow_cloud_cost_usd{cloud=\"gcp\"}` push 시 교체).",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 162.4
+              },
+              {
+                "color": "red",
+                "value": 203.0
+              }
+            ]
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "expr": "sum(bookflow_cloud_cost_usd{cloud=\"gcp\"}) or vector(0)",
+          "instant": true,
+          "legendFormat": "GCP",
+          "range": false,
+          "refId": ""
+        }
+      ],
+      "title": "GCP 비용 (이번 달 누적)",
+      "transparent": false,
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "AWS+Azure+GCP 월 누적 vs $203 예산 (placeholder — `bookflow_cloud_cost_usd` 통합 push 시 교체).",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "max": 203.0,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 162.4
+              },
+              {
+                "color": "red",
+                "value": 203.0
+              }
+            ]
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
+      "options": {
+        "minVizHeight": 75,
+        "minVizWidth": 75,
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "sizing": "auto"
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "expr": "sum(bookflow_cloud_cost_usd) or vector(0)",
+          "instant": true,
+          "legendFormat": "3사 합계",
+          "range": false,
+          "refId": ""
+        }
+      ],
+      "title": "3사 비용 합계 (이번 달 누적)",
+      "transparent": false,
+      "type": "gauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "영구 자원 비용 vs $16 (S3·ECR·Secrets·KMS·ACM·CloudTrail·Route53). placeholder — `bookflow_cloud_cost_usd{bucket=\"permanent\"}` 미연결.",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "max": 16.0,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 12.8
+              },
+              {
+                "color": "red",
+                "value": 16.0
+              }
+            ]
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 9
+      },
+      "options": {
+        "minVizHeight": 75,
+        "minVizWidth": 75,
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "sizing": "auto"
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "expr": "sum(bookflow_cloud_cost_usd{bucket=\"permanent\"}) or vector(0)",
+          "instant": true,
+          "legendFormat": "permanent",
+          "range": false,
+          "refId": ""
+        }
+      ],
+      "title": "예산 · 🔒 영구 ($16)",
+      "transparent": false,
+      "type": "gauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "매일 destroy/create 자원 비용 vs $111 (VPC·EKS·ECS·RDS·Redis 등). placeholder — `bookflow_cloud_cost_usd{bucket=\"daily\"}` 미연결.",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "max": 111.0,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 88.80000000000001
+              },
+              {
+                "color": "red",
+                "value": 111.0
+              }
+            ]
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 9
+      },
+      "options": {
+        "minVizHeight": 75,
+        "minVizWidth": 75,
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "sizing": "auto"
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "expr": "sum(bookflow_cloud_cost_usd{bucket=\"daily\"}) or vector(0)",
+          "instant": true,
+          "legendFormat": "daily",
+          "range": false,
+          "refId": ""
+        }
+      ],
+      "title": "예산 · ⏰ daily ($111)",
+      "transparent": false,
+      "type": "gauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Phase 기반 자원 비용 vs $77 (TGW·VPN·Client VPN·WAF·Glue). placeholder — `bookflow_cloud_cost_usd{bucket=\"phase\"}` 미연결.",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "max": 77.0,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 61.6
+              },
+              {
+                "color": "red",
+                "value": 77.0
+              }
+            ]
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 9
+      },
+      "options": {
+        "minVizHeight": 75,
+        "minVizWidth": 75,
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "sizing": "auto"
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "expr": "sum(bookflow_cloud_cost_usd{bucket=\"phase\"}) or vector(0)",
+          "instant": true,
+          "legendFormat": "phase",
+          "range": false,
+          "refId": ""
+        }
+      ],
+      "title": "예산 · 📆 phase ($77)",
+      "transparent": false,
+      "type": "gauge"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/Billing EstimatedCharges 추세 (us-east-1 · USD · Maximum). 월 누적 — 월초 리셋.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 17
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "Currency": "USD"
+          },
+          "id": "",
+          "label": "AWS 누적",
+          "metricName": "EstimatedCharges",
+          "namespace": "AWS/Billing",
+          "period": "21600",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "us-east-1",
+          "statistic": "Maximum"
+        }
+      ],
+      "title": "AWS 비용 추세 (월 누적)",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "AWS·Azure·GCP cloud 별 누적 비용 추세 (placeholder — `bookflow_cloud_cost_usd` 통합 push 시 동작).",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 17
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "expr": "sum by (cloud) (bookflow_cloud_cost_usd) or vector(0)",
+          "legendFormat": "{{cloud}}",
+          "refId": ""
+        }
+      ],
+      "title": "3사 비용 추세 (cloud 별)",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "cloud × service 비용 분해 표 (placeholder — `bookflow_cloud_cost_usd{cloud=,service=}` 미연결. AWS/Billing ServiceName dimension 라이브 빈 값).",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true,
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 25
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "expr": "sum by (cloud, service) (bookflow_cloud_cost_usd) or vector(0)",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": ""
+        }
+      ],
+      "title": "서비스별 비용 상세",
+      "transparent": false,
+      "type": "table"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 41,
+  "tags": [
+    "bookflow",
+    "ops"
+  ],
+  "templating": {},
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "BookFlow 운영 — 멀티클라우드 비용 (Row 7)",
+  "uid": "bookflow-ops-row7-cost"
+}

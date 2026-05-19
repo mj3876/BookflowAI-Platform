@@ -1,0 +1,560 @@
+{
+  "annotations": {},
+  "description": "EKS bookflow 7 service Pod 의 prometheus-fastapi-instrumentator 계측. Pod별 RPS·p50/p95 지연·에러율 · cascade 발의/처리 · notification 발송 · 신간 감지 트래픽. publisher-watcher 는 CronJob 이라 /metrics 미계측.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 0,
+      "panels": [],
+      "title": "Row 4 · 애플리케이션 (Prometheus 계측)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "bookflow 7 service Pod 초당 요청수 합계",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "green",
+                "value": 2
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"kubernetes-pods\",namespace=\"bookflow\"}[5m]))",
+          "instant": true,
+          "legendFormat": "전체 RPS",
+          "range": false,
+          "refId": ""
+        }
+      ],
+      "title": "전체 RPS",
+      "transparent": false,
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "전체 요청 중 4xx 비율(%) — 클라이언트 오류 추세",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "red",
+                "value": 20
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "expr": "100 * (sum(rate(http_requests_total{job=\"kubernetes-pods\",namespace=\"bookflow\",status=\"4xx\"}[5m])) / clamp_min(sum(rate(http_requests_total{job=\"kubernetes-pods\",namespace=\"bookflow\"}[5m])), 0.001))",
+          "instant": true,
+          "legendFormat": "4xx 비율",
+          "range": false,
+          "refId": ""
+        }
+      ],
+      "title": "전체 4xx 비율",
+      "transparent": false,
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Pod(app)별 초당 요청수 — sum by(app) rate(http_requests_total[5m])",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "expr": "sum by (app) (rate(http_requests_total{job=\"kubernetes-pods\",namespace=\"bookflow\"}[5m]))",
+          "legendFormat": "{{app}}",
+          "refId": ""
+        }
+      ],
+      "title": "Pod별 RPS",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "histogram_quantile(0.50, http_request_duration_highr_seconds_bucket) — app별",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 9
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (app, le) (rate(http_request_duration_highr_seconds_bucket{job=\"kubernetes-pods\",namespace=\"bookflow\"}[5m])))",
+          "legendFormat": "{{app}}",
+          "refId": ""
+        }
+      ],
+      "title": "Pod별 p50 지연",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "histogram_quantile(0.95, http_request_duration_highr_seconds_bucket) — app별",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 9
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (app, le) (rate(http_request_duration_highr_seconds_bucket{job=\"kubernetes-pods\",namespace=\"bookflow\"}[5m])))",
+          "legendFormat": "{{app}}",
+          "refId": ""
+        }
+      ],
+      "title": "Pod별 p95 지연",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "5xx 응답 비율(%) — sum by(app) status=5xx / 전체 ×100",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 17
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "expr": "100 * (sum by (app) (rate(http_requests_total{job=\"kubernetes-pods\",namespace=\"bookflow\",status=\"5xx\"}[5m])) / clamp_min(sum by (app) (rate(http_requests_total{job=\"kubernetes-pods\",namespace=\"bookflow\"}[5m])), 0.001))",
+          "legendFormat": "{{app}}",
+          "refId": ""
+        }
+      ],
+      "title": "Pod별 에러율 (5xx %)",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "intervention-svc 발주 cascade 단계별 호출량(rate). approve=발의 · dispatch/receive=처리. handler 라벨 기반 대리 지표.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 17
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "expr": "sum by (handler) (rate(http_requests_total{job=\"kubernetes-pods\",namespace=\"bookflow\",app=\"intervention-svc\",handler=~\"/intervention/orders/.*\"}[5m]))",
+          "legendFormat": "{{handler}}",
+          "refId": ""
+        }
+      ],
+      "title": "cascade 발의/처리량",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "notification-svc /notification/send 호출량 — status 별. 2xx=성공 · 4xx/5xx=실패. 메일 실제 발송률은 Row 2(Logic Apps).",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 25
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(http_requests_total{job=\"kubernetes-pods\",namespace=\"bookflow\",app=\"notification-svc\",handler=\"/notification/send\"}[5m]))",
+          "legendFormat": "{{status}}",
+          "refId": ""
+        }
+      ],
+      "title": "notification 발송 (성공/실패)",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "dashboard-svc /dashboard/new-book-requests 조회량(rate) — publisher-watcher(CronJob·미계측) 신간 편입 흐름 대리 지표.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 25
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "expr": "sum (rate(http_requests_total{job=\"kubernetes-pods\",namespace=\"bookflow\",app=\"dashboard-svc\",handler=~\"/dashboard/new-book-requests\"}[5m]))",
+          "legendFormat": "신간 요청 조회",
+          "refId": ""
+        }
+      ],
+      "title": "신간 감지 관련 트래픽",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "dashboard-svc process_open_fds — WebSocket 전용 게이지 부재로 열린 소켓 수 대리 추세. websocket_active_connections 노출 시 교체.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 33
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "expr": "sum by (app) (process_open_fds{job=\"kubernetes-pods\",namespace=\"bookflow\",app=\"dashboard-svc\"})",
+          "legendFormat": "{{app}} open fds",
+          "refId": ""
+        }
+      ],
+      "title": "WebSocket 연결 (대리: open FDs)",
+      "transparent": false,
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 41,
+  "tags": [
+    "bookflow",
+    "ops"
+  ],
+  "templating": {},
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "BookFlow 운영 — 애플리케이션 (Row 4)",
+  "uid": "bookflow-ops-row4-application"
+}
