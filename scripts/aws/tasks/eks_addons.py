@@ -173,6 +173,13 @@ def _ensure_grafana_admin_password() -> str:
         return pw
 
 
+def _is_placeholder_cred(cred: dict, key: str) -> bool:
+    """Tier 00 CFN 이 만든 placeholder secret 판별 — 값 미투입 시 datasource skip 용.
+    key 가 없거나 빈 문자열이거나 'PLACEHOLDER' 면 True."""
+    val = cred.get(key)
+    return not val or val == "PLACEHOLDER"
+
+
 def _helm_install_grafana() -> None:
     """Grafana — 엔지니어 운영 대시보드 Phase ② (B3) + Phase ③ 트랙 4 멀티클라우드 datasource.
     Prometheus (default) + CloudWatch (IRSA) + Azure Monitor datasource provisioning.
@@ -218,20 +225,23 @@ def _helm_install_grafana() -> None:
     sm = boto3.client("secretsmanager", region_name=region)
     try:
         azure_cred = json.loads(sm.get_secret_value(SecretId="bookflow/azure/grafana-monitor")["SecretString"])
-        datasources.append({
-            "name": "Azure Monitor",
-            "type": "grafana-azure-monitor-datasource",
-            "access": "proxy",
-            "jsonData": {
-                "azureAuthType": "clientsecret",
-                "cloudName": "azuremonitor",
-                "tenantId": azure_cred["tenantId"],
-                "clientId": azure_cred["clientId"],
-                "subscriptionId": azure_cred["subscriptionId"],
-            },
-            "secureJsonData": {"clientSecret": azure_cred["clientSecret"]},
-        })
-        log.info("  grafana Azure Monitor datasource · bookflow/azure/grafana-monitor 자격증명 사용")
+        if _is_placeholder_cred(azure_cred, "clientSecret"):
+            log.warn("bookflow/azure/grafana-monitor secret 값 미투입 (placeholder) · Azure Monitor datasource skip")
+        else:
+            datasources.append({
+                "name": "Azure Monitor",
+                "type": "grafana-azure-monitor-datasource",
+                "access": "proxy",
+                "jsonData": {
+                    "azureAuthType": "clientsecret",
+                    "cloudName": "azuremonitor",
+                    "tenantId": azure_cred["tenantId"],
+                    "clientId": azure_cred["clientId"],
+                    "subscriptionId": azure_cred["subscriptionId"],
+                },
+                "secureJsonData": {"clientSecret": azure_cred["clientSecret"]},
+            })
+            log.info("  grafana Azure Monitor datasource · bookflow/azure/grafana-monitor 자격증명 사용")
     except sm.exceptions.ResourceNotFoundException:
         log.warn("bookflow/azure/grafana-monitor secret missing · Azure Monitor datasource skip")
 
