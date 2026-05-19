@@ -1,0 +1,98 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: BOOKFLOW - Tier 30 - Grafana CloudWatch datasource IRSA Role (운영 대시보드 Phase ③ C1 · monitoring:grafana SA)
+Parameters:
+  ProjectName:
+    Type: String
+    Default: bookflow
+  ServiceAccountNamespace:
+    Type: String
+    Default: monitoring
+    Description: Grafana Helm chart ServiceAccount namespace
+  ServiceAccountName:
+    Type: String
+    Default: grafana
+    Description: Grafana Helm chart ServiceAccount name (kube-prometheus-stack / grafana 차트 기본값)
+
+Resources:
+  GrafanaCloudWatchRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-grafana-cloudwatch
+      AssumeRolePolicyDocument: !Sub
+        - |
+          {
+            "Version": "2012-10-17",
+            "Statement": [{
+              "Effect": "Allow",
+              "Principal": {"Federated": "${IdP}"},
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "${OidcHost}:sub": "system:serviceaccount:${Ns}:${Sa}",
+                  "${OidcHost}:aud": "sts.amazonaws.com"
+                }
+              }
+            }]
+          }
+        - IdP: !ImportValue
+            Fn::Sub: ${ProjectName}-eks-oidc-provider-arn
+          OidcHost: !Select
+            - 1
+            - !Split
+              - 'https://'
+              - !ImportValue
+                Fn::Sub: ${ProjectName}-eks-oidc-issuer-url
+          Ns: !Ref ServiceAccountNamespace
+          Sa: !Ref ServiceAccountName
+      Policies:
+        - PolicyName: GrafanaCloudWatchDatasource
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # CloudWatch metrics · alarms (Grafana 공식 권장 정책)
+              - Sid: AllowReadingMetricsFromCloudWatch
+                Effect: Allow
+                Action:
+                  - cloudwatch:DescribeAlarmsForMetric
+                  - cloudwatch:DescribeAlarmHistory
+                  - cloudwatch:DescribeAlarms
+                  - cloudwatch:ListMetrics
+                  - cloudwatch:GetMetricData
+                  - cloudwatch:GetMetricStatistics
+                  - cloudwatch:GetInsightRuleReport
+                Resource: '*'
+              # CloudWatch Logs (Logs Insights 패널)
+              - Sid: AllowReadingLogsFromCloudWatch
+                Effect: Allow
+                Action:
+                  - logs:DescribeLogGroups
+                  - logs:GetLogGroupFields
+                  - logs:StartQuery
+                  - logs:StopQuery
+                  - logs:GetQueryResults
+                  - logs:GetLogEvents
+                  - logs:FilterLogEvents
+                  - logs:DescribeLogStreams
+                Resource: '*'
+              # 리전/EC2 메타데이터 · 태그 (datasource 디스커버리)
+              - Sid: AllowReadingResourcesForTags
+                Effect: Allow
+                Action:
+                  - ec2:DescribeRegions
+                  - ec2:DescribeInstances
+                  - ec2:DescribeTags
+                  - tag:GetResources
+                Resource: '*'
+              # CloudTrail 이벤트 패널
+              - Sid: AllowCloudTrailLookup
+                Effect: Allow
+                Action: cloudtrail:LookupEvents
+                Resource: '*'
+
+Outputs:
+  GrafanaCloudWatchRoleArn:
+    Value: !GetAtt GrafanaCloudWatchRole.Arn
+    Export: { Name: !Sub '${ProjectName}-grafana-cloudwatch-role-arn' }
+  GrafanaCloudWatchRoleName:
+    Value: !Ref GrafanaCloudWatchRole
+    Export: { Name: !Sub '${ProjectName}-grafana-cloudwatch-role-name' }
