@@ -36,6 +36,7 @@ from grafana_foundation_sdk.builders.cloudwatch import (
     CloudWatchMetricsQuery as CWMetrics,
 )
 from grafana_foundation_sdk.builders.dashboard import Dashboard, Row
+from grafana_foundation_sdk.builders.prometheus import Dataquery as PromQuery
 from grafana_foundation_sdk.models.cloudwatch import CloudWatchQueryMode
 
 from lib import datasources as ds
@@ -113,54 +114,58 @@ def _logs(ref_id, log_group, expression):
 
 
 # ── EKS ─────────────────────────────────────────────────────────────────
+def _prom(ref_id, expr, label=""):
+    """Prometheus 쿼리 빌더 — EKS 컨트롤플레인 등 CloudWatch 에 없는 메트릭."""
+    q = PromQuery().datasource(ds.ref(ds.PROMETHEUS)).expr(expr).ref_id(ref_id)
+    if label:
+        q = q.legend_format(label)
+    return q
+
+
 def _eks_apiserver_requests():
-    """EKS API server 요청량 — 컨트롤플레인 헬스 추세."""
+    """EKS API server 요청률 — kube-apiserver Prometheus 계측."""
     p = pb.timeseries_panel(
         "EKS · API server 요청률",
         unit="reqps",
         description=(
-            "AWS/EKS apiserver_request_total. Container Insights 미활성 → "
-            "노드/Pod 헬스는 Row 4·Row 8(Prometheus). 여기선 컨트롤플레인."
+            "apiserver_request_total rate (Prometheus kubernetes-apiservers 잡). "
+            "AWS/EKS CloudWatch 미발행 — 컨트롤플레인 /metrics 스크레이프."
         ),
     )
-    return p.datasource(ds.ref(ds.CLOUDWATCH)).with_target(
-        _metric("A", "AWS/EKS", "apiserver_request_total",
-                {"ClusterName": EKS_CLUSTER}, stat="Sum", label="API 요청"),
+    return p.datasource(ds.ref(ds.PROMETHEUS)).with_target(
+        _prom("A", 'sum(rate(apiserver_request_total{job="kubernetes-apiservers"}[5m]))',
+              label="API 요청"),
     )
 
 
 def _eks_apiserver_errors():
-    """EKS API server 4XX/5XX/429 — 컨트롤플레인 에러."""
+    """EKS API server 4XX/5XX/429 — kube-apiserver Prometheus 계측."""
     p = pb.timeseries_panel(
         "EKS · API server 에러 (4XX/5XX/429)",
-        unit="short",
-        description="AWS/EKS apiserver_request_total_4XX·5XX·429 — 컨트롤플레인 이상.",
+        unit="reqps",
+        description="apiserver_request_total code 별 rate (Prometheus) — 컨트롤플레인 이상.",
     )
     return (
-        p.datasource(ds.ref(ds.CLOUDWATCH))
-        .with_target(_metric("A", "AWS/EKS", "apiserver_request_total_4XX",
-                             {"ClusterName": EKS_CLUSTER}, stat="Sum", label="4XX"))
-        .with_target(_metric("B", "AWS/EKS", "apiserver_request_total_5XX",
-                             {"ClusterName": EKS_CLUSTER}, stat="Sum", label="5XX"))
-        .with_target(_metric("C", "AWS/EKS", "apiserver_request_total_429",
-                             {"ClusterName": EKS_CLUSTER}, stat="Sum", label="429"))
+        p.datasource(ds.ref(ds.PROMETHEUS))
+        .with_target(_prom("A", 'sum(rate(apiserver_request_total{job="kubernetes-apiservers",code=~"4.."}[5m]))', label="4XX"))
+        .with_target(_prom("B", 'sum(rate(apiserver_request_total{job="kubernetes-apiservers",code=~"5.."}[5m]))', label="5XX"))
+        .with_target(_prom("C", 'sum(rate(apiserver_request_total{job="kubernetes-apiservers",code="429"}[5m]))', label="429"))
     )
 
 
-def _eks_scheduler_pending():
-    """EKS 스케줄러 대기 Pod — 미스케줄 Pod 신호 (CronJob/Pod 배치 지연 대리)."""
+def _eks_nodes_ready():
+    """EKS Ready 노드 수 — Prometheus kubernetes-nodes 잡 up."""
     p = pb.stat_panel(
-        "EKS · 미스케줄 Pod",
+        "EKS · 노드 Ready",
         unit="short",
-        thresholds=pb._thresholds([(None, pb.GREEN), (1, pb.YELLOW), (5, pb.RED)]),
+        thresholds=pb._thresholds([(None, pb.RED), (1, pb.YELLOW), (2, pb.GREEN)]),
         description=(
-            "AWS/EKS scheduler_pending_pods_UNSCHEDULABLE. CronJob 4종·8 Pod 의 "
-            "성공/실패 카운트는 Row 4(Prometheus) — Container Insights 미활성."
+            "Ready 상태 노드 수 (Prometheus kubernetes-nodes 잡 up 합). "
+            "Pod 미스케줄/단위 헬스는 Row 4·8 — kube-state-metrics 미설치."
         ),
     )
-    return p.datasource(ds.ref(ds.CLOUDWATCH)).with_target(
-        _metric("A", "AWS/EKS", "scheduler_pending_pods_UNSCHEDULABLE",
-                {"ClusterName": EKS_CLUSTER}, stat="Maximum", label="미스케줄"),
+    return p.datasource(ds.ref(ds.PROMETHEUS)).with_target(
+        _prom("A", 'sum(up{job="kubernetes-nodes"})', label="Ready 노드"),
     )
 
 
@@ -535,7 +540,7 @@ def dashboard() -> Dashboard:
         .with_row(Row("Row 1 · AWS — EKS (컨트롤플레인)"))
         .with_panel(_eks_apiserver_requests())
         .with_panel(_eks_apiserver_errors())
-        .with_panel(_eks_scheduler_pending())
+        .with_panel(_eks_nodes_ready())
         # ── ECS ────────────────────────────────────────────────────────
         .with_row(Row("Row 1 · AWS — ECS"))
         .with_panel(_ecs_running_tasks())

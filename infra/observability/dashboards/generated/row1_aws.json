@@ -20,10 +20,10 @@
     },
     {
       "datasource": {
-        "type": "cloudwatch",
-        "uid": "cloudwatch"
+        "type": "prometheus",
+        "uid": "prometheus"
       },
-      "description": "AWS/EKS apiserver_request_total. Container Insights 미활성 → 노드/Pod 헬스는 Row 4·Row 8(Prometheus). 여기선 컨트롤플레인.",
+      "description": "apiserver_request_total rate (Prometheus kubernetes-apiservers 잡). AWS/EKS CloudWatch 미발행 — 컨트롤플레인 /metrics 스크레이프.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -59,22 +59,12 @@
       "targets": [
         {
           "datasource": {
-            "type": "cloudwatch",
-            "uid": "cloudwatch"
+            "type": "prometheus",
+            "uid": "prometheus"
           },
-          "dimensions": {
-            "ClusterName": "bookflow-eks"
-          },
-          "id": "",
-          "label": "API 요청",
-          "matchExact": true,
-          "metricName": "apiserver_request_total",
-          "namespace": "AWS/EKS",
-          "period": "300",
-          "queryMode": "Metrics",
-          "refId": "A",
-          "region": "ap-northeast-1",
-          "statistic": "Sum"
+          "expr": "sum(rate(apiserver_request_total{job=\"kubernetes-apiservers\"}[5m]))",
+          "legendFormat": "API 요청",
+          "refId": "A"
         }
       ],
       "title": "EKS · API server 요청률",
@@ -83,10 +73,10 @@
     },
     {
       "datasource": {
-        "type": "cloudwatch",
-        "uid": "cloudwatch"
+        "type": "prometheus",
+        "uid": "prometheus"
       },
-      "description": "AWS/EKS apiserver_request_total_4XX·5XX·429 — 컨트롤플레인 이상.",
+      "description": "apiserver_request_total code 별 rate (Prometheus) — 컨트롤플레인 이상.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -96,7 +86,7 @@
             "lineWidth": 2,
             "showPoints": "never"
           },
-          "unit": "short"
+          "unit": "reqps"
         },
         "overrides": []
       },
@@ -122,60 +112,30 @@
       "targets": [
         {
           "datasource": {
-            "type": "cloudwatch",
-            "uid": "cloudwatch"
+            "type": "prometheus",
+            "uid": "prometheus"
           },
-          "dimensions": {
-            "ClusterName": "bookflow-eks"
-          },
-          "id": "",
-          "label": "4XX",
-          "matchExact": true,
-          "metricName": "apiserver_request_total_4XX",
-          "namespace": "AWS/EKS",
-          "period": "300",
-          "queryMode": "Metrics",
-          "refId": "A",
-          "region": "ap-northeast-1",
-          "statistic": "Sum"
+          "expr": "sum(rate(apiserver_request_total{job=\"kubernetes-apiservers\",code=~\"4..\"}[5m]))",
+          "legendFormat": "4XX",
+          "refId": "A"
         },
         {
           "datasource": {
-            "type": "cloudwatch",
-            "uid": "cloudwatch"
+            "type": "prometheus",
+            "uid": "prometheus"
           },
-          "dimensions": {
-            "ClusterName": "bookflow-eks"
-          },
-          "id": "",
-          "label": "5XX",
-          "matchExact": true,
-          "metricName": "apiserver_request_total_5XX",
-          "namespace": "AWS/EKS",
-          "period": "300",
-          "queryMode": "Metrics",
-          "refId": "B",
-          "region": "ap-northeast-1",
-          "statistic": "Sum"
+          "expr": "sum(rate(apiserver_request_total{job=\"kubernetes-apiservers\",code=~\"5..\"}[5m]))",
+          "legendFormat": "5XX",
+          "refId": "B"
         },
         {
           "datasource": {
-            "type": "cloudwatch",
-            "uid": "cloudwatch"
+            "type": "prometheus",
+            "uid": "prometheus"
           },
-          "dimensions": {
-            "ClusterName": "bookflow-eks"
-          },
-          "id": "",
-          "label": "429",
-          "matchExact": true,
-          "metricName": "apiserver_request_total_429",
-          "namespace": "AWS/EKS",
-          "period": "300",
-          "queryMode": "Metrics",
-          "refId": "C",
-          "region": "ap-northeast-1",
-          "statistic": "Sum"
+          "expr": "sum(rate(apiserver_request_total{job=\"kubernetes-apiservers\",code=\"429\"}[5m]))",
+          "legendFormat": "429",
+          "refId": "C"
         }
       ],
       "title": "EKS · API server 에러 (4XX/5XX/429)",
@@ -184,17 +144,17 @@
     },
     {
       "datasource": {
-        "type": "cloudwatch",
-        "uid": "cloudwatch"
+        "type": "prometheus",
+        "uid": "prometheus"
       },
-      "description": "AWS/EKS scheduler_pending_pods_UNSCHEDULABLE. CronJob 4종·8 Pod 의 성공/실패 카운트는 Row 4(Prometheus) — Container Insights 미활성.",
+      "description": "Ready 상태 노드 수 (Prometheus kubernetes-nodes 잡 up 합). Pod 미스케줄/단위 헬스는 Row 4·8 — kube-state-metrics 미설치.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "red",
                 "value": null
               },
               {
@@ -202,8 +162,8 @@
                 "value": 1
               },
               {
-                "color": "red",
-                "value": 5
+                "color": "green",
+                "value": 2
               }
             ]
           },
@@ -237,25 +197,15 @@
       "targets": [
         {
           "datasource": {
-            "type": "cloudwatch",
-            "uid": "cloudwatch"
+            "type": "prometheus",
+            "uid": "prometheus"
           },
-          "dimensions": {
-            "ClusterName": "bookflow-eks"
-          },
-          "id": "",
-          "label": "미스케줄",
-          "matchExact": true,
-          "metricName": "scheduler_pending_pods_UNSCHEDULABLE",
-          "namespace": "AWS/EKS",
-          "period": "300",
-          "queryMode": "Metrics",
-          "refId": "A",
-          "region": "ap-northeast-1",
-          "statistic": "Maximum"
+          "expr": "sum(up{job=\"kubernetes-nodes\"})",
+          "legendFormat": "Ready 노드",
+          "refId": "A"
         }
       ],
-      "title": "EKS · 미스케줄 Pod",
+      "title": "EKS · 노드 Ready",
       "transparent": false,
       "type": "stat"
     },
