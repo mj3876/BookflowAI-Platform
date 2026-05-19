@@ -19,6 +19,16 @@ try:
 except Exception:  # pragma: no cover - optional dependency
     XGBRegressor = None
 
+try:
+    from lightgbm import LGBMRegressor
+except Exception:  # pragma: no cover - optional dependency
+    LGBMRegressor = None
+
+try:
+    from catboost import CatBoostRegressor
+except Exception:  # pragma: no cover - optional dependency
+    CatBoostRegressor = None
+
 
 @dataclass(frozen=True)
 class Metric:
@@ -204,6 +214,47 @@ def candidate_models(random_state: int, mode: str) -> dict[str, object]:
                 n_jobs=-1,
                 random_state=random_state,
             )
+    if LGBMRegressor is not None:
+        models["lightgbm_poisson"] = LGBMRegressor(
+            objective="poisson",
+            n_estimators=160 if mode == "fast" else 500,
+            learning_rate=0.045,
+            num_leaves=31,
+            min_child_samples=40,
+            subsample=0.9,
+            colsample_bytree=0.9,
+            reg_lambda=4.0,
+            n_jobs=-1,
+            random_state=random_state,
+            verbosity=-1,
+        )
+        if mode != "fast":
+            models["lightgbm_tweedie"] = LGBMRegressor(
+                objective="tweedie",
+                tweedie_variance_power=1.2,
+                n_estimators=500,
+                learning_rate=0.045,
+                num_leaves=31,
+                min_child_samples=40,
+                subsample=0.9,
+                colsample_bytree=0.9,
+                reg_lambda=4.0,
+                n_jobs=-1,
+                random_state=random_state,
+                verbosity=-1,
+            )
+    if CatBoostRegressor is not None:
+        models["catboost_poisson"] = CatBoostRegressor(
+            loss_function="Poisson",
+            iterations=180 if mode == "fast" else 500,
+            learning_rate=0.045,
+            depth=6,
+            l2_leaf_reg=6.0,
+            random_seed=random_state,
+            verbose=False,
+            allow_writing_files=False,
+            thread_count=-1,
+        )
     return models
 
 

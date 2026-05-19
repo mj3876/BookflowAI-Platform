@@ -1,0 +1,46 @@
+{
+  "feature_columns": [
+    "store_id",
+    "wh_id",
+    "channel",
+    "location_type",
+    "store_size",
+    "region",
+    "on_hand",
+    "reserved_qty",
+    "safety_stock",
+    "holiday_flag",
+    "day_of_week",
+    "month",
+    "weekend_flag",
+    "event_nearby_days",
+    "sns_mentions_1d",
+    "sns_mentions_7d",
+    "book_age_days",
+    "days_since_last_stockout",
+    "category_id",
+    "price_tier",
+    "sales_point",
+    "bestseller_flag",
+    "author_experience_years",
+    "qty_lag_1",
+    "qty_lag_7",
+    "qty_rolling_7d",
+    "qty_rolling_28d",
+    "demand_segment"
+  ],
+  "categorical_columns": [
+    "channel",
+    "location_type",
+    "store_size",
+    "region",
+    "price_tier",
+    "demand_segment"
+  ],
+  "target_column": "qty_sold",
+  "policy": {
+    "high": "lightgbm",
+    "medium": "qty_rolling_7d",
+    "low": "qty_rolling_28d"
+  }
+}

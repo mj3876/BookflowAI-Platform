@@ -16,6 +16,21 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OrdinalEncoder
 
+try:
+    from lightgbm import LGBMRegressor
+except Exception:  # pragma: no cover - optional dependency
+    LGBMRegressor = None
+
+try:
+    from xgboost import XGBRegressor
+except Exception:  # pragma: no cover - optional dependency
+    XGBRegressor = None
+
+try:
+    from catboost import CatBoostRegressor
+except Exception:  # pragma: no cover - optional dependency
+    CatBoostRegressor = None
+
 
 FEATURE_COLUMNS = [
     "store_id",
@@ -141,11 +156,71 @@ def pass_gate(metrics: list[dict], max_all_wape: float, max_high_wape: float, ma
     return not reasons, reasons
 
 
+def make_regressor(model_family: str, hgb_loss: str):
+    if model_family == "hgb":
+        return HistGradientBoostingRegressor(
+            loss=hgb_loss,
+            max_iter=120 if hgb_loss == "poisson" else 100,
+            learning_rate=0.06,
+            max_leaf_nodes=31,
+            l2_regularization=0.05,
+            random_state=42,
+        )
+    if model_family == "lightgbm":
+        if LGBMRegressor is None:
+            raise RuntimeError("lightgbm is not installed.")
+        return LGBMRegressor(
+            objective="poisson",
+            n_estimators=160,
+            learning_rate=0.045,
+            num_leaves=31,
+            min_child_samples=40,
+            subsample=0.9,
+            colsample_bytree=0.9,
+            reg_lambda=4.0,
+            n_jobs=-1,
+            random_state=42,
+            verbosity=-1,
+        )
+    if model_family == "xgboost":
+        if XGBRegressor is None:
+            raise RuntimeError("xgboost is not installed.")
+        return XGBRegressor(
+            objective="count:poisson",
+            n_estimators=80,
+            max_depth=6,
+            learning_rate=0.045,
+            subsample=0.9,
+            colsample_bytree=0.9,
+            reg_lambda=4.0,
+            tree_method="hist",
+            n_jobs=-1,
+            random_state=42,
+        )
+    if model_family == "catboost":
+        if CatBoostRegressor is None:
+            raise RuntimeError("catboost is not installed.")
+        return CatBoostRegressor(
+            loss_function="Poisson",
+            iterations=180,
+            learning_rate=0.045,
+            depth=6,
+            l2_leaf_reg=6.0,
+            random_seed=42,
+            verbose=False,
+            allow_writing_files=False,
+            thread_count=-1,
+        )
+    raise ValueError(f"Unsupported model family: {model_family}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Train low-cost BOOKFLOW store demand champion artifact.")
     parser.add_argument("--input-csv", required=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--model-version", default="")
+    parser.add_argument("--model-family", choices=["hgb", "lightgbm", "xgboost", "catboost"], default="lightgbm")
+    parser.add_argument("--hgb-loss", choices=["poisson", "squared_error"], default="poisson")
     parser.add_argument("--max-all-wape", type=float, default=0.526)
     parser.add_argument("--max-high-wape", type=float, default=0.522)
     parser.add_argument("--max-medium-wape", type=float, default=1.005)
@@ -162,14 +237,7 @@ def main() -> None:
             ("preprocess", make_preprocessor()),
             (
                 "model",
-                HistGradientBoostingRegressor(
-                    loss="squared_error",
-                    max_iter=100,
-                    learning_rate=0.06,
-                    max_leaf_nodes=31,
-                    l2_regularization=0.05,
-                    random_state=42,
-                ),
+                make_regressor(args.model_family, args.hgb_loss),
             ),
         ]
     )
@@ -177,7 +245,9 @@ def main() -> None:
 
     champion_pred, _ = predict_policy(model, holdout)
     baseline_pred = holdout["qty_rolling_28d"].fillna(0).to_numpy(dtype=float)
-    metrics = metric_rows("store_demand_champion_hgb_high_ma7_medium", holdout["qty_sold"], champion_pred, holdout["demand_segment"])
+    family_label = args.model_family if args.model_family != "hgb" else f"hgb_{args.hgb_loss}"
+    model_name = f"store_demand_champion_{family_label}_high_ma7_medium"
+    metrics = metric_rows(model_name, holdout["qty_sold"], champion_pred, holdout["demand_segment"])
     baseline_metrics = metric_rows("baseline_ma28", holdout["qty_sold"], baseline_pred, holdout["demand_segment"])
     passed, reject_reasons = pass_gate(metrics, args.max_all_wape, args.max_high_wape, args.max_medium_wape)
 
@@ -194,7 +264,7 @@ def main() -> None:
                 "categorical_columns": CATEGORICAL_COLUMNS,
                 "target_column": "qty_sold",
                 "policy": {
-                    "high": "hist_gradient_boosting_squared_error",
+                    "high": family_label,
                     "medium": "qty_rolling_7d",
                     "low": "qty_rolling_28d",
                 },
@@ -207,6 +277,8 @@ def main() -> None:
         "model_version": model_version,
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "training_mode": "local_cpu_low_cost",
+        "model_family": args.model_family,
+        "hgb_loss": args.hgb_loss,
         "input_csv": str(Path(args.input_csv).resolve()),
         "train_rows_high": int(len(train)),
         "holdout_rows": int(len(holdout)),
