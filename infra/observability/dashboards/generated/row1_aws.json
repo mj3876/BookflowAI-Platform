@@ -403,7 +403,7 @@
         "type": "cloudwatch",
         "uid": "cloudwatch"
       },
-      "description": "ECS/ContainerInsights CpuUtilized·MemoryUtilized — 3 서비스.",
+      "description": "AWS/ECS CPUUtilization·MemoryUtilization (%) — 3 서비스. ContainerInsights 의 raw MiB/CPU units 아닌 표준 % 메트릭 사용.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -450,9 +450,9 @@
           "label": "inventory-api CPU",
           "matchExact": true,
           "metricEditorMode": 0,
-          "metricName": "CpuUtilized",
+          "metricName": "CPUUtilization",
           "metricQueryType": 0,
-          "namespace": "ECS/ContainerInsights",
+          "namespace": "AWS/ECS",
           "period": "300",
           "queryMode": "Metrics",
           "refId": "C0",
@@ -472,9 +472,9 @@
           "label": "inventory-api Mem",
           "matchExact": true,
           "metricEditorMode": 0,
-          "metricName": "MemoryUtilized",
+          "metricName": "MemoryUtilization",
           "metricQueryType": 0,
-          "namespace": "ECS/ContainerInsights",
+          "namespace": "AWS/ECS",
           "period": "300",
           "queryMode": "Metrics",
           "refId": "M0",
@@ -494,9 +494,9 @@
           "label": "online-sim CPU",
           "matchExact": true,
           "metricEditorMode": 0,
-          "metricName": "CpuUtilized",
+          "metricName": "CPUUtilization",
           "metricQueryType": 0,
-          "namespace": "ECS/ContainerInsights",
+          "namespace": "AWS/ECS",
           "period": "300",
           "queryMode": "Metrics",
           "refId": "C1",
@@ -516,9 +516,9 @@
           "label": "online-sim Mem",
           "matchExact": true,
           "metricEditorMode": 0,
-          "metricName": "MemoryUtilized",
+          "metricName": "MemoryUtilization",
           "metricQueryType": 0,
-          "namespace": "ECS/ContainerInsights",
+          "namespace": "AWS/ECS",
           "period": "300",
           "queryMode": "Metrics",
           "refId": "M1",
@@ -538,9 +538,9 @@
           "label": "offline-sim CPU",
           "matchExact": true,
           "metricEditorMode": 0,
-          "metricName": "CpuUtilized",
+          "metricName": "CPUUtilization",
           "metricQueryType": 0,
-          "namespace": "ECS/ContainerInsights",
+          "namespace": "AWS/ECS",
           "period": "300",
           "queryMode": "Metrics",
           "refId": "C2",
@@ -560,9 +560,9 @@
           "label": "offline-sim Mem",
           "matchExact": true,
           "metricEditorMode": 0,
-          "metricName": "MemoryUtilized",
+          "metricName": "MemoryUtilization",
           "metricQueryType": 0,
-          "namespace": "ECS/ContainerInsights",
+          "namespace": "AWS/ECS",
           "period": "300",
           "queryMode": "Metrics",
           "refId": "M2",
@@ -2115,23 +2115,19 @@
         "type": "cloudwatch",
         "uid": "cloudwatch"
       },
-      "description": "cp-eks·cp-ecs·publisher-bg. CodePipeline 은 CW 메트릭 네이티브 미발행 → EventBridge 커스텀 메트릭 필요. 데일리 자원·현재 미배포.",
+      "description": "AWS/CodePipeline PipelineDuration SampleCount = 24h 실행 횟수. cp-eks · cp-ecs · publisher-bg. 0 = 대기(blue), ≥1 = 활동(green).",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "blue",
                 "value": null
               },
               {
-                "color": "yellow",
-                "value": 1
-              },
-              {
                 "color": "green",
-                "value": 2
+                "value": 1
               }
             ]
           },
@@ -2169,20 +2165,20 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "PipelineName": "cp-eks"
+            "Pipeline": "cp-eks"
           },
           "id": "",
           "label": "cp-eks",
           "matchExact": true,
           "metricEditorMode": 0,
-          "metricName": "SucceededPipeline",
+          "metricName": "PipelineDuration",
           "metricQueryType": 0,
-          "namespace": "BookFlow/CodePipeline",
+          "namespace": "AWS/CodePipeline",
           "period": "300",
           "queryMode": "Metrics",
           "refId": "P0",
           "region": "ap-northeast-1",
-          "statistic": "Maximum"
+          "statistic": "SampleCount"
         },
         {
           "datasource": {
@@ -2190,18 +2186,118 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "PipelineName": "cp-ecs"
+            "Pipeline": "cp-ecs"
           },
           "id": "",
           "label": "cp-ecs",
           "matchExact": true,
           "metricEditorMode": 0,
-          "metricName": "SucceededPipeline",
+          "metricName": "PipelineDuration",
           "metricQueryType": 0,
-          "namespace": "BookFlow/CodePipeline",
+          "namespace": "AWS/CodePipeline",
           "period": "300",
           "queryMode": "Metrics",
           "refId": "P1",
+          "region": "ap-northeast-1",
+          "statistic": "SampleCount"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "Pipeline": "publisher-bg"
+          },
+          "id": "",
+          "label": "publisher-bg",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "PipelineDuration",
+          "metricQueryType": 0,
+          "namespace": "AWS/CodePipeline",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "P2",
+          "region": "ap-northeast-1",
+          "statistic": "SampleCount"
+        }
+      ],
+      "title": "CodePipeline · 24h 실행 횟수",
+      "transparent": false,
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/CodePipeline PipelineDuration 최댓값(24h). 5분<green<10분<yellow<red",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 300
+              },
+              {
+                "color": "red",
+                "value": 600
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 12,
+        "y": 83
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "Pipeline": "cp-eks"
+          },
+          "id": "",
+          "label": "cp-eks",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "PipelineDuration",
+          "metricQueryType": 0,
+          "namespace": "AWS/CodePipeline",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "D0",
           "region": "ap-northeast-1",
           "statistic": "Maximum"
         },
@@ -2211,23 +2307,161 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "PipelineName": "publisher-bg"
+            "Pipeline": "cp-ecs"
+          },
+          "id": "",
+          "label": "cp-ecs",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "PipelineDuration",
+          "metricQueryType": 0,
+          "namespace": "AWS/CodePipeline",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "D1",
+          "region": "ap-northeast-1",
+          "statistic": "Maximum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "Pipeline": "publisher-bg"
           },
           "id": "",
           "label": "publisher-bg",
           "matchExact": true,
           "metricEditorMode": 0,
-          "metricName": "SucceededPipeline",
+          "metricName": "PipelineDuration",
           "metricQueryType": 0,
-          "namespace": "BookFlow/CodePipeline",
+          "namespace": "AWS/CodePipeline",
           "period": "300",
           "queryMode": "Metrics",
-          "refId": "P2",
+          "refId": "D2",
           "region": "ap-northeast-1",
           "statistic": "Maximum"
         }
       ],
-      "title": "CodePipeline · 최근 실행 결과",
+      "title": "CodePipeline · 마지막 Duration (24h · max sec)",
+      "transparent": false,
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/CodePipeline FailedPipelineExecutions Sum 24h. 0 = 정상(green) · ≥1 = 실패(red).",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 18,
+        "y": 83
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "Pipeline": "cp-eks"
+          },
+          "id": "",
+          "label": "cp-eks",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "FailedPipelineExecutions",
+          "metricQueryType": 0,
+          "namespace": "AWS/CodePipeline",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "F0",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "Pipeline": "cp-ecs"
+          },
+          "id": "",
+          "label": "cp-ecs",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "FailedPipelineExecutions",
+          "metricQueryType": 0,
+          "namespace": "AWS/CodePipeline",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "F1",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "Pipeline": "publisher-bg"
+          },
+          "id": "",
+          "label": "publisher-bg",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "FailedPipelineExecutions",
+          "metricQueryType": 0,
+          "namespace": "AWS/CodePipeline",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "F2",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "CodePipeline · 24h 실패 횟수",
       "transparent": false,
       "type": "stat"
     },
@@ -2397,7 +2631,7 @@
   ],
   "templating": {},
   "time": {
-    "from": "now-6h",
+    "from": "now-24h",
     "to": "now"
   },
   "timezone": "browser",

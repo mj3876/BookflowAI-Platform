@@ -148,6 +148,17 @@ module logicapp 'modules/logicapp.bicep' = {
   }
 }
 
+// ── 9-1b. Logic Apps Consumption diagnosticSettings (3개 워크플로 · Portal 생성분) ──
+// approval-request / stock-depart / stock-arrival — 워크플로 본체는 Portal 관리,
+// 진단 설정만 IaC 로 보장 (law-bookflowmj 라우팅 누락 시 대시보드에서 안 보이는 문제 방지).
+module logicappConsumptionDiag 'modules/logicapp-consumption-diag.bicep' = {
+  name: 'logicapp-consumption-diag-deploy'
+  dependsOn: [monitor]
+  params: {
+    logAnalyticsWorkspaceId: monitor.outputs.workspaceId
+  }
+}
+
 // ── 9-2. VPN Gateway (VNet 참조) ──
 module vpn 'modules/vpn.bicep' = {
   name: 'vpn-deploy'

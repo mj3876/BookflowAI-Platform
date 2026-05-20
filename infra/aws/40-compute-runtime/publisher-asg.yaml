@@ -194,6 +194,20 @@ Resources:
         - !Ref AWS::NoValue
       HealthCheckType: !If [HasTargetGroup, ELB, EC2]
       HealthCheckGracePeriod: 300
+      # CloudWatch Group* 메트릭 수집 (SCN-04 대시보드용)
+      # NOTE: CodeDeploy Blue/Green 의 COPY_AUTO_SCALING_GROUP 는 MetricsCollection 을 propagate 하지 않음.
+      # 새 green ASG 에는 publisher-asg-metrics-automation.yaml 의 EventBridge+Lambda 가 자동 재적용.
+      MetricsCollection:
+        - Granularity: 1Minute
+          Metrics:
+            - GroupDesiredCapacity
+            - GroupInServiceInstances
+            - GroupPendingInstances
+            - GroupStandbyInstances
+            - GroupTerminatingInstances
+            - GroupTotalInstances
+            - GroupMinSize
+            - GroupMaxSize
       Tags:
         - Key: Name
           Value: !Sub ${ProjectName}-publisher

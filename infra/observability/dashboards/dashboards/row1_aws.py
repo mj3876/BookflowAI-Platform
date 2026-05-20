@@ -197,20 +197,21 @@ def _ecs_running_tasks():
 
 
 def _ecs_cpu_mem():
-    """ECS CPU/메모리 사용률 — task 리소스 헬스."""
+    """ECS CPU/메모리 사용률 — task 리소스 헬스 (실 % 메트릭)."""
     p = pb.timeseries_panel(
         "ECS · CPU / 메모리 사용률",
         unit="percent",
-        description="ECS/ContainerInsights CpuUtilized·MemoryUtilized — 3 서비스.",
+        description="AWS/ECS CPUUtilization·MemoryUtilization (%) — 3 서비스. "
+                    "ContainerInsights 의 raw MiB/CPU units 아닌 표준 % 메트릭 사용.",
     )
     p = p.datasource(ds.ref(ds.CLOUDWATCH))
     for i, svc in enumerate(ECS_SERVICES):
         p = p.with_target(_metric(
-            f"C{i}", "ECS/ContainerInsights", "CpuUtilized",
+            f"C{i}", "AWS/ECS", "CPUUtilization",
             {"ClusterName": ECS_CLUSTER, "ServiceName": svc},
             stat="Average", label=f"{svc} CPU"))
         p = p.with_target(_metric(
-            f"M{i}", "ECS/ContainerInsights", "MemoryUtilized",
+            f"M{i}", "AWS/ECS", "MemoryUtilization",
             {"ClusterName": ECS_CLUSTER, "ServiceName": svc},
             stat="Average", label=f"{svc} Mem"))
     return p
@@ -452,27 +453,63 @@ def _alb_targets():
 
 # ── CodePipeline ────────────────────────────────────────────────────────
 def _codepipeline_status():
-    """CodePipeline 3종 실행 상태.
+    """CodePipeline 3종 24h 실행 횟수 (SampleCount of PipelineDuration).
 
-    CodePipeline 은 CloudWatch 메트릭을 네이티브 발행하지 않는다(EventBridge
-    경유 커스텀 메트릭 필요). 데일리 자원이라 현재 미배포 → 데이터 없음.
-    파이프라인 배포 시 SucceededPipeline/FailedPipeline 커스텀 메트릭으로 동작.
+    sparse 데이터(하루 1-6회)는 timeseries 로는 안 보여 stat 으로 표시.
+    threshold: 0 = 대기(blue) · ≥1 = 활동(green). 실패는 별도 panel.
     """
     p = pb.stat_panel(
-        "CodePipeline · 최근 실행 결과",
+        "CodePipeline · 24h 실행 횟수",
         unit="short",
         mappings=[],
-        thresholds=pb.health_thresholds(),
+        thresholds=pb._thresholds([(None, pb.BLUE), (1, pb.GREEN)]),
         description=(
-            "cp-eks·cp-ecs·publisher-bg. CodePipeline 은 CW 메트릭 네이티브 "
-            "미발행 → EventBridge 커스텀 메트릭 필요. 데일리 자원·현재 미배포."
+            "AWS/CodePipeline PipelineDuration SampleCount = 24h 실행 횟수. "
+            "cp-eks · cp-ecs · publisher-bg. 0 = 대기(blue), ≥1 = 활동(green)."
         ),
     )
     p = p.datasource(ds.ref(ds.CLOUDWATCH))
     for i, pl in enumerate(CODEPIPELINES):
         p = p.with_target(_metric(
-            f"P{i}", "BookFlow/CodePipeline", "SucceededPipeline",
-            {"PipelineName": pl}, stat="Maximum", label=pl))
+            f"P{i}", "AWS/CodePipeline", "PipelineDuration",
+            {"Pipeline": pl}, stat="SampleCount", label=pl))
+    return p
+
+
+def _codepipeline_last_duration():
+    """CodePipeline 마지막 실행 duration (Maximum 24h · 초)."""
+    p = pb.stat_panel(
+        "CodePipeline · 마지막 Duration (24h · max sec)",
+        unit="s",
+        mappings=[],
+        thresholds=pb._thresholds([(None, pb.GREEN), (300, pb.YELLOW), (600, pb.RED)]),
+        description="AWS/CodePipeline PipelineDuration 최댓값(24h). 5분<green<10분<yellow<red",
+    )
+    p = p.datasource(ds.ref(ds.CLOUDWATCH))
+    for i, pl in enumerate(CODEPIPELINES):
+        p = p.with_target(_metric(
+            f"D{i}", "AWS/CodePipeline", "PipelineDuration",
+            {"Pipeline": pl}, stat="Maximum", label=pl))
+    return p
+
+
+def _codepipeline_failures():
+    """CodePipeline 실패 횟수 (24h · FailedPipelineExecutions Sum)."""
+    p = pb.stat_panel(
+        "CodePipeline · 24h 실패 횟수",
+        unit="short",
+        mappings=[],
+        thresholds=pb._thresholds([(None, pb.GREEN), (1, pb.RED)]),
+        description=(
+            "AWS/CodePipeline FailedPipelineExecutions Sum 24h. "
+            "0 = 정상(green) · ≥1 = 실패(red)."
+        ),
+    )
+    p = p.datasource(ds.ref(ds.CLOUDWATCH))
+    for i, pl in enumerate(CODEPIPELINES):
+        p = p.with_target(_metric(
+            f"F{i}", "AWS/CodePipeline", "FailedPipelineExecutions",
+            {"Pipeline": pl}, stat="Sum", label=pl))
     return p
 
 
@@ -573,6 +610,8 @@ def dashboard() -> Dashboard:
         .with_panel(_alb_5xx())
         .with_panel(_alb_targets())
         .with_panel(_codepipeline_status())
+        .with_panel(_codepipeline_last_duration())
+        .with_panel(_codepipeline_failures())
         # ── CloudTrail ─────────────────────────────────────────────────
         .with_row(Row("Row 1 · AWS — CloudTrail (감사)"))
         .with_panel(_cloudtrail_activity())

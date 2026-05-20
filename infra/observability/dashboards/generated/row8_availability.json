@@ -797,10 +797,10 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
       },
-      "description": "AWS↔GCP HA VPN 터널 24h uptime % (CloudWatch VPN 메트릭 연결 시 교체)",
+      "description": "AWS/VPN TunnelState avg × 100 (vpn-0acce17f17cf493e7 · 0=DOWN, 1=UP)",
       "fieldConfig": {
         "defaults": {
           "decimals": 2,
@@ -863,14 +863,18 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
           },
-          "expr": "100 * vector(1)",
-          "instant": true,
-          "legendFormat": "AWS↔GCP",
-          "range": false,
-          "refId": ""
+          "expression": "SEARCH('{AWS/VPN,VpnId} MetricName=\"TunnelState\" VpnId=\"vpn-0acce17f17cf493e7\"', 'Average', 300) * 100",
+          "id": "",
+          "label": "AWS↔GCP",
+          "metricEditorMode": 1,
+          "metricQueryType": 0,
+          "namespace": "",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "ap-northeast-1"
         }
       ],
       "title": "VPN uptime · AWS↔GCP (24h)",
@@ -879,10 +883,10 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
       },
-      "description": "AWS↔Azure S2S VPN 24h uptime % (Notion §5 Phase 1 연결 대기)",
+      "description": "AWS/VPN TunnelState avg × 100 (vpn-0c5c1f736a382cd41 · 0=DOWN, 1=UP)",
       "fieldConfig": {
         "defaults": {
           "decimals": 2,
@@ -945,14 +949,18 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
           },
-          "expr": "100 * vector(0)",
-          "instant": true,
-          "legendFormat": "AWS↔Azure",
-          "range": false,
-          "refId": ""
+          "expression": "SEARCH('{AWS/VPN,VpnId} MetricName=\"TunnelState\" VpnId=\"vpn-0c5c1f736a382cd41\"', 'Average', 300) * 100",
+          "id": "",
+          "label": "AWS↔Azure",
+          "metricEditorMode": 1,
+          "metricQueryType": 0,
+          "namespace": "",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "ap-northeast-1"
         }
       ],
       "title": "VPN uptime · AWS↔Azure (24h)",
@@ -968,7 +976,7 @@
   ],
   "templating": {},
   "time": {
-    "from": "now-6h",
+    "from": "now-24h",
     "to": "now"
   },
   "timezone": "browser",

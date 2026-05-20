@@ -293,13 +293,7 @@ def _redis_available_stat() -> object:
 
 # ── VPN 터널 가용성 % ───────────────────────────────────────────────────
 def _vpn_aws_gcp_uptime() -> object:
-    """AWS↔GCP HA VPN 터널 uptime %.
-
-    CloudWatch VPN 메트릭(aws_vpn_tunnelstate)이 아직 Grafana 데이터소스에
-    연결되지 않았다 — Row 0 와 동일하게 placeholder(vector). GCP HA VPN 은
-    연결 완료(Notion §5 Phase 1)이므로 100 으로 가정. 메트릭 연결 시
-    100×avg_over_time(aws_vpn_tunnelstate[24h]) 로 교체한다.
-    """
+    """AWS↔GCP HA VPN 터널 uptime % (실 CloudWatch TunnelState avg × 100)."""
     panel = pb.stat_panel(
         "VPN uptime · AWS↔GCP (24h)",
         unit="percent",
@@ -307,22 +301,23 @@ def _vpn_aws_gcp_uptime() -> object:
         mappings=[_NODATA_MAP],
         span=pb.SPAN_QUARTER,
         decimals=2,
-        description="AWS↔GCP HA VPN 터널 24h uptime % (CloudWatch VPN 메트릭 연결 시 교체)",
+        description="AWS/VPN TunnelState avg × 100 (vpn-0acce17f17cf493e7 · 0=DOWN, 1=UP)",
     )
-    return panel.datasource(ds.ref(ds.PROMETHEUS)).with_target(
-        PromQuery().datasource(ds.ref(ds.PROMETHEUS))
-        .expr("100 * vector(1)")
-        .instant()
-        .legend_format("AWS↔GCP")
+    return panel.datasource(ds.ref(ds.CLOUDWATCH)).with_target(
+        CloudWatchMetricsQuery()
+        .datasource(ds.ref(ds.CLOUDWATCH))
+        .query_mode(CloudWatchQueryMode.METRICS)
+        .metric_query_type(MetricQueryType.SEARCH)
+        .metric_editor_mode(MetricEditorMode.CODE)
+        .region(_CW_REGION)
+        .expression("SEARCH('{AWS/VPN,VpnId} MetricName=\"TunnelState\" VpnId=\"vpn-0acce17f17cf493e7\"', 'Average', 300) * 100")
+        .ref_id("A")
+        .label("AWS↔GCP")
     )
 
 
 def _vpn_aws_azure_uptime() -> object:
-    """AWS↔Azure S2S VPN 터널 uptime %.
-
-    Notion §5 Phase 1 — AWS↔Azure VPN 은 연결 대기 중. 미연결이므로 0.
-    연결 후 CloudWatch VPN 메트릭으로 교체한다.
-    """
+    """AWS↔Azure S2S VPN 터널 uptime % (실 CloudWatch TunnelState avg × 100)."""
     panel = pb.stat_panel(
         "VPN uptime · AWS↔Azure (24h)",
         unit="percent",
@@ -330,13 +325,18 @@ def _vpn_aws_azure_uptime() -> object:
         mappings=[_NODATA_MAP],
         span=pb.SPAN_QUARTER,
         decimals=2,
-        description="AWS↔Azure S2S VPN 24h uptime % (Notion §5 Phase 1 연결 대기)",
+        description="AWS/VPN TunnelState avg × 100 (vpn-0c5c1f736a382cd41 · 0=DOWN, 1=UP)",
     )
-    return panel.datasource(ds.ref(ds.PROMETHEUS)).with_target(
-        PromQuery().datasource(ds.ref(ds.PROMETHEUS))
-        .expr("100 * vector(0)")
-        .instant()
-        .legend_format("AWS↔Azure")
+    return panel.datasource(ds.ref(ds.CLOUDWATCH)).with_target(
+        CloudWatchMetricsQuery()
+        .datasource(ds.ref(ds.CLOUDWATCH))
+        .query_mode(CloudWatchQueryMode.METRICS)
+        .metric_query_type(MetricQueryType.SEARCH)
+        .metric_editor_mode(MetricEditorMode.CODE)
+        .region(_CW_REGION)
+        .expression("SEARCH('{AWS/VPN,VpnId} MetricName=\"TunnelState\" VpnId=\"vpn-0c5c1f736a382cd41\"', 'Average', 300) * 100")
+        .ref_id("A")
+        .label("AWS↔Azure")
     )
 
 

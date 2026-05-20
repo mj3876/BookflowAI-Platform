@@ -1,6 +1,6 @@
 {
   "annotations": {},
-  "description": "Azure Monitor 기반 Azure 리소스 운영 현황. Logic Apps 12개 실행/메일 발송률 · Function App 호출·에러 · Event Grid 이벤트 · Key Vault 접근/가용성. rg-bookflow (subscription e98a94bb-…). Entra OIDC 로그인은 §하단 노트 참조.",
+  "description": "Azure Monitor 기반 Azure 리소스 운영 현황. Logic Apps 6개 실행/메일 발송률 · Function App 호출·에러 · Event Grid 이벤트 · Key Vault 접근/가용성. rg-bookflow (subscription e98a94bb-…). Entra OIDC 로그인은 §하단 노트 참조.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
@@ -60,7 +60,7 @@
         {
           "azureLogAnalytics": {
             "dashboardTime": true,
-            "query": "SigninLogs | where TimeGenerated > ago(6h) | summarize 성공=countif(ResultType==0), 실패=countif(ResultType!=0) by bin(TimeGenerated, 15m) | order by TimeGenerated asc",
+            "query": "SigninLogs | summarize succeeded=countif(ResultType==0), failed=countif(ResultType!=0) by bin(TimeGenerated, 15m) | order by TimeGenerated asc",
             "resources": [
               "/subscriptions/e98a94bb-7532-4e49-8a36-bc42e30d5a81/resourceGroups/rg-bookflow/providers/Microsoft.OperationalInsights/workspaces/law-bookflowmj"
             ],
@@ -121,7 +121,7 @@
         {
           "azureLogAnalytics": {
             "dashboardTime": true,
-            "query": "AzureDiagnostics | where ResourceProvider == 'MICROSOFT.LOGIC' | where TimeGenerated > ago(6h) | summarize 완료=countif(status_s=='Succeeded'), 실패=countif(status_s=='Failed') by bin(TimeGenerated, 15m) | order by TimeGenerated asc",
+            "query": "AzureDiagnostics | where ResourceProvider == 'MICROSOFT.LOGIC' | summarize succeeded=countif(status_s=='Succeeded'), failed=countif(status_s=='Failed') by bin(TimeGenerated, 15m) | order by TimeGenerated asc",
             "resources": [
               "/subscriptions/e98a94bb-7532-4e49-8a36-bc42e30d5a81/resourceGroups/rg-bookflow/providers/Microsoft.OperationalInsights/workspaces/law-bookflowmj"
             ],
@@ -136,7 +136,7 @@
           "subscription": "e98a94bb-7532-4e49-8a36-bc42e30d5a81"
         }
       ],
-      "title": "Logic Apps 실행 추세 (완료/실패 · 12개 합계)",
+      "title": "Logic Apps 실행 추세 (완료/실패 · 6개 합계)",
       "transparent": false,
       "type": "timeseries"
     },
@@ -145,7 +145,7 @@
         "type": "grafana-azure-monitor-datasource",
         "uid": "azure-monitor"
       },
-      "description": "AzureDiagnostics WorkflowRuntime 6h 집계. 워크플로별 실행/성공/실패/실행중/스킵. 실패 많은 순 정렬.",
+      "description": "AzureDiagnostics WorkflowRuntime 6h 집계. 워크플로별 실행/성공/실패/실행중/스킵. 실패 많은 순 정렬. 주의: diagnosticSettings(WorkflowRuntime → law-bookflowmj) 미설정 워크플로는 본 표에 표시되지 않는다. Consumption 3개는 logicapp-consumption-diag.bicep 으로 IaC 화.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -167,7 +167,7 @@
         {
           "azureLogAnalytics": {
             "dashboardTime": true,
-            "query": "AzureDiagnostics | where ResourceProvider == 'MICROSOFT.LOGIC' | where TimeGenerated > ago(6h) | summarize 실행=count(), 성공=countif(status_s=='Succeeded'), 실패=countif(status_s=='Failed'), 실행중=countif(status_s=='Running'), 스킵=countif(status_s=='Skipped') by 워크플로=resource_workflowName_s | order by 실패 desc, 실행 desc",
+            "query": "AzureDiagnostics | where ResourceProvider == 'MICROSOFT.LOGIC' | summarize runs=count(), succeeded=countif(status_s=='Succeeded'), failed=countif(status_s=='Failed'), running=countif(status_s=='Running'), skipped=countif(status_s=='Skipped') by workflow=resource_workflowName_s | order by failed desc, runs desc",
             "resources": [
               "/subscriptions/e98a94bb-7532-4e49-8a36-bc42e30d5a81/resourceGroups/rg-bookflow/providers/Microsoft.OperationalInsights/workspaces/law-bookflowmj"
             ],
@@ -182,7 +182,7 @@
           "subscription": "e98a94bb-7532-4e49-8a36-bc42e30d5a81"
         }
       ],
-      "title": "Logic Apps 워크플로 실행 현황 (12개)",
+      "title": "Logic Apps 워크플로 실행 현황 (6개)",
       "transparent": false,
       "type": "table"
     },
@@ -191,7 +191,7 @@
         "type": "grafana-azure-monitor-datasource",
         "uid": "azure-monitor"
       },
-      "description": "la-bookflowmj-notification 발송 성공률. AzureDiagnostics 성공/(성공+실패) · 6h.",
+      "description": "Logic Apps 6개 워크플로 전체 성공률. AzureDiagnostics Succeeded/(Succeeded+Failed). notification 단독 발송률은 위 표에서 행별 확인.",
       "fieldConfig": {
         "defaults": {
           "decimals": 1,
@@ -243,7 +243,7 @@
         {
           "azureLogAnalytics": {
             "dashboardTime": true,
-            "query": "AzureDiagnostics | where ResourceProvider == 'MICROSOFT.LOGIC' | where resource_workflowName_s == 'la-bookflowmj-notification' | where TimeGenerated > ago(6h) | where status_s in ('Succeeded','Failed') | summarize 성공=countif(status_s=='Succeeded'), 총건=count() | extend 발송률 = iff(총건==0, real(null), round(100.0*성공/총건, 1)) | project 발송률",
+            "query": "AzureDiagnostics | where ResourceProvider == 'MICROSOFT.LOGIC' | where status_s in ('Succeeded','Failed') | summarize succeeded=countif(status_s=='Succeeded'), total=count() | extend rate = iff(total==0, real(null), round(100.0*succeeded/total, 1)) | project rate",
             "resources": [
               "/subscriptions/e98a94bb-7532-4e49-8a36-bc42e30d5a81/resourceGroups/rg-bookflow/providers/Microsoft.OperationalInsights/workspaces/law-bookflowmj"
             ],
@@ -258,7 +258,7 @@
           "subscription": "e98a94bb-7532-4e49-8a36-bc42e30d5a81"
         }
       ],
-      "title": "메일 발송 성공률 (notification)",
+      "title": "Logic Apps 성공률 (6개 합계)",
       "transparent": false,
       "type": "gauge"
     },
@@ -650,7 +650,7 @@
   ],
   "templating": {},
   "time": {
-    "from": "now-6h",
+    "from": "now-24h",
     "to": "now"
   },
   "timezone": "browser",

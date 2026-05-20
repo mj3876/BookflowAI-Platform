@@ -403,6 +403,14 @@ def _helm_install_grafana() -> None:
                 "root_url": "%(protocol)s://%(domain)s/grafana/",
                 "serve_from_sub_path": True,
             },
+            # auth — Grafana "Sign out" 클릭 시 redirect URL.
+            # auth.proxy + forward-auth 구성에선 Grafana 자체 signout 만으론 부족하다 —
+            # bookflow_session 쿠키가 그대로면 다음 요청에서 forward-auth 가 X-WEBAUTH-USER
+            # 를 다시 주입해 자동 재로그인 루프가 된다. signout_redirect_url 을 auth-pod 의
+            # /auth/logout 으로 보내 bookflow_session 쿠키 삭제 + Entra end_session 까지 진행.
+            "auth": {
+                "signout_redirect_url": "/auth/logout",
+            },
             # auth.proxy — engineer 통합 로그인 (Phase ⑤).
             # ingress forward-auth 가 BookFlow 인증 통과한 engineer 요청에만
             # X-WEBAUTH-USER 헤더를 주입 → Grafana 가 그 헤더로 자동 로그인.

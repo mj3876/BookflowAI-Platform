@@ -53,14 +53,19 @@ def _ts_query(
     alias: str = "",
     alignment_period: str = "+300s",
 ) -> CloudMonitoringQuery:
-    """단일 Cloud Monitoring 메트릭의 timeSeriesList 쿼리 빌더."""
-    filters = [f'metric.type="{metric_type}"']
+    """단일 Cloud Monitoring 메트릭의 timeSeriesList 쿼리 빌더.
+
+    Grafana 11.2 stackdriver datasource 는 `filters` 배열을 공백/AND 없이
+    그대로 concat 해 GCP API 에 400 INVALID_ARGUMENT 를 유발한다. 그래서
+    여러 절을 단일 문자열로 ` AND ` join 한 뒤 한 element 배열로 넘긴다.
+    """
+    parts = [f'metric.type="{metric_type}"']
     if extra_filters:
-        filters.extend(extra_filters)
+        parts.extend(extra_filters)
     tsl = (
         TimeSeriesList()
         .project_name(PROJECT)
-        .filters(filters)
+        .filters([" AND ".join(parts)])
         .per_series_aligner(aligner)
         .cross_series_reducer(reducer)
         .alignment_period(alignment_period)
@@ -72,6 +77,7 @@ def _ts_query(
         .query_type("timeSeriesList")
         .time_series_list(tsl)
         .datasource(ds.ref(ds.GCP_MONITORING))
+        .ref_id("A")  # Grafana 가 빈 refId 패널 렌더 못 함 — 명시
     )
     if alias:
         q = q.alias_by(alias)
@@ -153,27 +159,28 @@ def _bq_table_rows() -> object:
 
 
 def _bq_uploaded_rows() -> object:
-    """BigQuery 적재 row 수 추세 — 최신 적재 확인용.
+    """BigQuery 7d 적재 row 수 합계 (sparse 메트릭 → stat + time_from 7d 오버라이드).
 
     메트릭: bigquery.googleapis.com/storage/uploaded_row_count (DELTA).
-    라이브 확인: OK · 데이터 반환 (3 pts / 7d · streaming/load insert 시점만).
-    추세상 마지막 데이터 포인트 시각 = 최신 적재 시각.
+    데이터 sparse (7d 동안 ~3 datapoints) — 대시보드 기본 24h 윈도우엔 거의
+    안 보임. 패널-레벨 time_from = "now-7d" 로 7d 윈도우 지정 + stat 합산.
     """
-    panel = pb.timeseries_panel(
-        "BigQuery 적재 row 수 (최신 적재)",
+    panel = pb.stat_panel(
+        "BigQuery 7d 적재 row 합계",
         unit="short",
+        thresholds=pb._thresholds([(None, pb.BLUE), (1, pb.GREEN)]),
         span=pb.SPAN_QUARTER,
-        fill_opacity=20,
         description=(
-            "bigquery storage/uploaded_row_count · ALIGN_SUM. "
-            "마지막 포인트 시각이 최신 적재 시각."
+            "bigquery storage/uploaded_row_count · 7d 합계. "
+            "DELTA 메트릭 — 적재 이벤트 발생 시점만 publish. 0=적재 없음(blue)."
         ),
-    )
+    ).time_from("now-7d")
     return panel.datasource(ds.ref(ds.GCP_MONITORING)).with_target(
         _ts_query(
             "bigquery.googleapis.com/storage/uploaded_row_count",
             aligner="ALIGN_SUM", reducer="REDUCE_SUM",
-            alias="적재 row",
+            alias="7d 적재 row",
+            alignment_period="+3600s",
         )
     )
 
@@ -239,19 +246,15 @@ def _cf_executions() -> object:
 
 
 def _cf_errors() -> object:
-    """Cloud Functions 에러 호출 수 — status 라벨이 'ok' 아닌 호출.
-
-    메트릭: cloudfunctions.googleapis.com/function/execution_count.
-    동일 메트릭을 status!=ok 필터로 좁혀 에러만 집계.
-    """
-    panel = pb.timeseries_panel(
-        "Cloud Functions 에러 호출 (3개)",
+    """Cloud Functions 에러 호출 수 (24h · stat · 0=green=정상)."""
+    panel = pb.stat_panel(
+        "Cloud Functions 에러 (24h)",
         unit="short",
+        thresholds=pb._thresholds([(None, pb.GREEN), (1, pb.RED)]),
         span=pb.SPAN_HALF,
-        fill_opacity=20,
         description=(
-            "cloudfunctions function/execution_count · status!=ok 필터. "
-            "함수별 실패 호출 수."
+            "cloudfunctions function/execution_count · status!=ok · 함수별. "
+            "0 = 정상(green) · ≥1 = 실패(red)."
         ),
     )
     return panel.datasource(ds.ref(ds.GCP_MONITORING)).with_target(

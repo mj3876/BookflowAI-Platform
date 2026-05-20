@@ -215,6 +215,78 @@ def _vpn_traffic():
 
 
 # ── TGW attachment 상태 / 라우트 전파 ───────────────────────────────────
+# 라이브 7 attachment (admin 994878981869 · 2026-05-20 실측):
+TGW_ID = "tgw-0098d5980c95a9770"
+ATTACHMENT_TO_VPC = [
+    ("tgw-attach-00e48fdc9b237eca6", "bookflow-ai"),  # EKS Pod
+    ("tgw-attach-01ca13ae484a58789", "ansible"),
+    ("tgw-attach-070989bcce94a9a77", "sales-data"),
+    ("tgw-attach-0e50c4367602a85b7", "data"),          # RDS / Redis
+    ("tgw-attach-0fc3918eb6f66ba0d", "egress"),        # DMZ / NAT
+    ("tgw-attach-03a24f63e21f6ef81", "vpn-1"),         # cross-cloud VPN
+    ("tgw-attach-0442cc206fa2649cd", "vpn-2"),
+]
+
+
+# 기존 패널은 dimension 없는 plain metric builder 라 attachment 별 시리즈가
+# 안 잡혔다. SEARCH 식은 metricEditorMode=CODE 가 필수 — Builder 모드에서
+# expression 만 박으면 CloudWatch 가 metricName 필수 에러 (라이브 검증 2026-05-20).
+def _tgw_search(metric: str, stat: str = "Sum") -> str:
+    """attachment 별 시리즈 자동 매칭 SEARCH 식.
+
+    `{namespace,Dim1,Dim2,...}` 패턴은 해당 dimension 조합이 정확히 존재하는
+    메트릭만 매칭 — TGW 의 경우 attachment 별 시리즈 ((TransitGateway,
+    TransitGatewayAttachment)) 만 추출돼 cross-AZ aggregate 중복 제거.
+    """
+    return (
+        f"SEARCH('{{AWS/TransitGateway,TransitGateway,TransitGatewayAttachment}} "
+        f"MetricName=\"{metric}\"', '{stat}', 300)"
+    )
+
+
+def _tgw_search_query(metric: str, label: str, stat: str = "Sum") -> CWQuery:
+    """SEARCH 식 공용 CWQuery (CODE mode · metricName 비움).
+
+    Builder mode 로는 SEARCH 식이 안 먹힌다 (라이브 검증 — metricName empty 에러).
+    CODE mode 로 박으면 attachment 별 7 series 자동 추출.
+    """
+    return (
+        CWQuery()
+        .datasource(_cw())
+        .query_mode(CloudWatchQueryMode.METRICS)
+        .metric_query_type(MetricQueryType.SEARCH)
+        .metric_editor_mode(MetricEditorMode.CODE)
+        .region(AWS_REGION)
+        .namespace("AWS/TransitGateway")
+        .expression(_tgw_search(metric, stat))
+        .statistic(stat)
+        .period("300")
+        .label(label)
+    )
+
+
+def _tgw_per_vpc_query(metric: str, attachment_id: str, vpc_name: str, stat: str = "Sum") -> CWQuery:
+    """attachment-ID 별 Builder 쿼리 — VPC 이름을 legend 로 사용."""
+    return (
+        CWQuery()
+        .datasource(_cw())
+        .query_mode(CloudWatchQueryMode.METRICS)
+        .metric_query_type(MetricQueryType.SEARCH)
+        .metric_editor_mode(MetricEditorMode.BUILDER)
+        .region(AWS_REGION)
+        .namespace("AWS/TransitGateway")
+        .metric_name(metric)
+        .dimensions({
+            "TransitGateway": TGW_ID,
+            "TransitGatewayAttachment": attachment_id,
+        })
+        .match_exact(True)
+        .statistic(stat)
+        .period("300")
+        .label(vpc_name)
+    )
+
+
 def _tgw_attachment_traffic():
     """TGW attachment 별 트래픽 — attachment 활성·연결 상태 대리 신호.
 
@@ -222,12 +294,146 @@ def _tgw_attachment_traffic():
     없다. attachment 별 BytesIn/Out > 0 으로 활성·라우팅 정상 여부를 본다.
     """
     panel = pb.timeseries_panel(
-        "TGW attachment 트래픽",
+        "TGW attachment 트래픽 (Bytes In/Out · SEARCH)",
         unit="bytes",
         span=pb.SPAN_HALF,
         description=(
-            "TGW attachment 별 BytesIn/Out (AWS/TransitGateway · Sum). "
-            "attachment 활성·라우팅 정상 여부 대리 신호 — 라이브 7 attachment."
+            "TGW attachment 별 BytesIn/Out (AWS/TransitGateway · Sum · SEARCH). "
+            "attachment 활성·라우팅 정상 여부 대리 신호 — 라이브 7 attachment "
+            "(VPC 5 + VPN 2). attachment-ID → VPC: bookflow-ai/ansible/sales-data/"
+            "data/egress + vpn-1/vpn-2."
+        ),
+    )
+    panel = panel.datasource(_cw())
+    for metric, direction in (("BytesIn", "In"), ("BytesOut", "Out")):
+        panel = panel.with_target(
+            _tgw_search_query(metric, f"{{{{TransitGatewayAttachment}}}} {direction}")
+        )
+    return panel
+
+
+def _tgw_attachment_packets():
+    """TGW attachment 별 패킷 In/Out — 트래픽 율 가시화 (낮은 byte 변동 보강)."""
+    panel = pb.timeseries_panel(
+        "TGW attachment 패킷 (In/Out · SEARCH)",
+        unit="short",
+        span=pb.SPAN_HALF,
+        description=(
+            "TGW attachment 별 PacketsIn/Out (AWS/TransitGateway · Sum · SEARCH). "
+            "bytes 가 낮을 때도 packet rate 로 흐름 확인."
+        ),
+    )
+    panel = panel.datasource(_cw())
+    for metric, direction in (("PacketsIn", "In"), ("PacketsOut", "Out")):
+        panel = panel.with_target(
+            _tgw_search_query(metric, f"{{{{TransitGatewayAttachment}}}} {direction}")
+        )
+    return panel
+
+
+def _tgw_route_drops():
+    """TGW 라우트 전파 헬스 — NoRoute / Blackhole 패킷 드랍.
+
+    라우트 전파가 정상이면 NoRoute 드랍은 0 이어야 한다. > 0 이면 라우트
+    누락(전파 실패). Blackhole 은 명시 차단 — 함께 추세로 본다.
+    """
+    panel = pb.timeseries_panel(
+        "TGW 라우트 드랍 (NoRoute / Blackhole · attachment 별)",
+        unit="short",
+        span=pb.SPAN_HALF,
+        description=(
+            "TGW PacketDropCountNoRoute(라우트 전파 누락) · "
+            "PacketDropCountBlackhole(명시 차단) · attachment 별 SEARCH. "
+            "NoRoute>0 = 라우트 전파 실패."
+        ),
+    )
+    panel = panel.datasource(_cw())
+    for metric, label in (
+        ("PacketDropCountNoRoute", "NoRoute"),
+        ("PacketDropCountBlackhole", "Blackhole"),
+    ):
+        panel = panel.with_target(
+            _tgw_search_query(metric, f"{{{{TransitGatewayAttachment}}}} {label}")
+        )
+    return panel
+
+
+def _tgw_byte_drops():
+    """TGW 바이트 드랍 — BytesDropCount{NoRoute,Blackhole} (byte scale 영향)."""
+    panel = pb.timeseries_panel(
+        "TGW 바이트 드랍 (NoRoute / Blackhole · attachment 별)",
+        unit="bytes",
+        span=pb.SPAN_HALF,
+        description=(
+            "TGW BytesDropCountNoRoute · BytesDropCountBlackhole · attachment 별 "
+            "SEARCH. 드랍 트래픽 규모(bytes) 가시화."
+        ),
+    )
+    panel = panel.datasource(_cw())
+    for metric, label in (
+        ("BytesDropCountNoRoute", "NoRoute"),
+        ("BytesDropCountBlackhole", "Blackhole"),
+    ):
+        panel = panel.with_target(
+            _tgw_search_query(metric, f"{{{{TransitGatewayAttachment}}}} {label}")
+        )
+    return panel
+
+
+def _tgw_ttl_drops():
+    """TGW PacketDropCountTTLExpired — 라우팅 루프 신호.
+
+    TTL 만료 드랍 > 0 이면 라우팅 루프 가능성. attachment 별 시리즈.
+    """
+    panel = pb.timeseries_panel(
+        "TGW TTL 만료 드랍 (라우팅 루프 신호)",
+        unit="short",
+        span=pb.SPAN_HALF,
+        fill_opacity=20,
+        description=(
+            "AWS/TransitGateway PacketDropCountTTLExpired · attachment 별 "
+            "SEARCH. > 0 지속 시 라우팅 루프 의심."
+        ),
+    )
+    panel = panel.datasource(_cw())
+    panel = panel.with_target(
+        _tgw_search_query("PacketDropCountTTLExpired", "{{TransitGatewayAttachment}} TTL")
+    )
+    return panel
+
+
+def _tgw_attachment_count():
+    """활성 TGW attachment 수 — 트래픽이 관측된 attachment 수.
+
+    SEARCH 식으로 BytesIn 메트릭이 존재하는 attachment 를 카운트.
+    설계상 7개(VPC 5 + VPN 2) · Phase 3+ 에서만 활성.
+    """
+    panel = pb.stat_panel(
+        "TGW attachment 수 (관측)",
+        unit="short",
+        graph_mode=BigValueGraphMode.AREA,
+        thresholds=pb.updown_thresholds(),
+        span=pb.SPAN_QUARTER,
+        description=(
+            "트래픽이 관측된 TGW attachment 수 (SEARCH). "
+            "라이브 7개 — VPC 5 (bookflow-ai/ansible/sales-data/data/egress) + "
+            "VPN 2 · Phase 3+ 활성."
+        ),
+    )
+    return panel.datasource(_cw()).with_target(
+        _tgw_search_query("BytesIn", "attachments")
+    )
+
+
+def _tgw_total_traffic():
+    """TGW 전체 BytesIn/Out — 허브 단위 합계 (cross-AZ aggregate)."""
+    panel = pb.timeseries_panel(
+        "TGW 전체 트래픽 (허브 단위 · cross-AZ)",
+        unit="bytes",
+        span=pb.SPAN_HALF,
+        description=(
+            "AWS/TransitGateway BytesIn/Out · dimension={TransitGateway} 단일. "
+            "허브 전체 통과 트래픽 합계."
         ),
     )
     panel = panel.datasource(_cw())
@@ -241,89 +447,105 @@ def _tgw_attachment_traffic():
             .region(AWS_REGION)
             .namespace("AWS/TransitGateway")
             .metric_name(metric)
+            .dimensions({"TransitGateway": "tgw-0098d5980c95a9770"})
+            .match_exact(True)
             .statistic("Sum")
             .period("300")
-            .label(f"{{{{TransitGatewayAttachment}}}} {direction}")
+            .label(f"hub {direction}")
         )
     return panel
 
 
-def _tgw_route_drops():
-    """TGW 라우트 전파 헬스 — NoRoute / Blackhole 패킷 드랍.
-
-    라우트 전파가 정상이면 NoRoute 드랍은 0 이어야 한다. > 0 이면 라우트
-    누락(전파 실패). Blackhole 은 명시 차단 — 함께 추세로 본다.
-    """
+# ── TGW · VPC 별 트래픽 (attachment-ID alias → VPC name) ────────────────
+# 어느 VPC 가 가장 활발한지 한눈에. attachment-ID 별 builder 쿼리로 series
+# 이름을 VPC 명(bookflow-ai/data/egress 등)으로 고정 — 그래프 가독성 향상.
+def _tgw_vpc_traffic(metric: str, title: str, direction: str):
+    """VPC 별 BytesIn 또는 BytesOut timeseries."""
     panel = pb.timeseries_panel(
-        "TGW 라우트 드랍 (NoRoute / Blackhole)",
+        title,
+        unit="bytes",
+        span=pb.SPAN_HALF,
+        description=(
+            f"TGW attachment 별 {metric} (Sum · 300s) · attachment-ID 를 VPC "
+            "이름으로 alias. 어느 VPC 가 cross-VPC 트래픽의 주인공인지 "
+            "한눈에 — bookflow-ai (EKS) / data (RDS·Redis) / egress (DMZ) / "
+            "sales-data / ansible / vpn-1 / vpn-2."
+        ),
+        stack=True,
+    )
+    panel = panel.datasource(_cw())
+    for att_id, vpc_name in ATTACHMENT_TO_VPC:
+        panel = panel.with_target(
+            _tgw_per_vpc_query(metric, att_id, vpc_name)
+        )
+    return panel
+
+
+def _tgw_vpc_traffic_in():
+    return _tgw_vpc_traffic(
+        "BytesIn",
+        "TGW · VPC 별 트래픽 IN (Sum · stacked)",
+        "In",
+    )
+
+
+def _tgw_vpc_traffic_out():
+    return _tgw_vpc_traffic(
+        "BytesOut",
+        "TGW · VPC 별 트래픽 OUT (Sum · stacked)",
+        "Out",
+    )
+
+
+def _tgw_vpc_packets_in():
+    """VPC 별 PacketsIn — 패킷 율로 활동도 비교."""
+    panel = pb.timeseries_panel(
+        "TGW · VPC 별 PacketsIn (Sum · stacked)",
         unit="short",
         span=pb.SPAN_HALF,
         description=(
-            "TGW PacketDropCountNoRoute(라우트 전파 누락) · "
-            "PacketDropCountBlackhole(명시 차단). NoRoute>0 = 라우트 전파 실패."
+            "TGW attachment 별 PacketsIn · attachment-ID 를 VPC 이름으로 alias. "
+            "bytes 가 낮을 때도 packet 율로 흐름 정상 여부 확인."
         ),
+        stack=True,
     )
     panel = panel.datasource(_cw())
-    for metric, label in (
-        ("PacketDropCountNoRoute", "NoRoute"),
-        ("PacketDropCountBlackhole", "Blackhole"),
-    ):
+    for att_id, vpc_name in ATTACHMENT_TO_VPC:
         panel = panel.with_target(
-            CWQuery()
-            .datasource(_cw())
-            .query_mode(CloudWatchQueryMode.METRICS)
-            .metric_query_type(MetricQueryType.SEARCH)
-            .metric_editor_mode(MetricEditorMode.BUILDER)
-            .region(AWS_REGION)
-            .namespace("AWS/TransitGateway")
-            .metric_name(metric)
-            .statistic("Sum")
-            .period("300")
-            .label(label)
+            _tgw_per_vpc_query("PacketsIn", att_id, vpc_name)
         )
     return panel
 
 
-def _tgw_attachment_count():
-    """활성 TGW attachment 수 — 트래픽이 관측된 attachment 수.
+def _tgw_vpc_total_table():
+    """24h VPC 별 총 트래픽 stat — 가장 활발한 VPC 순위 (BytesIn 기준).
 
-    SEARCH 식으로 BytesIn 메트릭이 존재하는 attachment 를 카운트.
-    설계상 6개(VPC 4 + VPN 2) · Phase 3+ 에서만 활성.
+    timeseries 가 stack 으로 분포 보여줘도 절대값 비교는 stat 가 직관적.
+    각 VPC 별로 stat 패널 1개씩, SPAN_QUARTER × 7 ≈ 두 줄.
     """
-    panel = pb.stat_panel(
-        "TGW attachment 수 (관측)",
-        unit="short",
-        graph_mode=BigValueGraphMode.AREA,
-        thresholds=pb.updown_thresholds(),
-        span=pb.SPAN_QUARTER,
-        description=(
-            "트래픽이 관측된 TGW attachment 수 (SEARCH). "
-            "설계 6개 — VPC 4 + VPN 2 · Phase 3+ 활성."
-        ),
-    )
-    search = (
-        "SEARCH('{AWS/TransitGateway,TransitGatewayAttachment} "
-        "MetricName=\"BytesIn\"', 'Sum', 300)"
-    )
-    query = (
-        CWQuery()
-        .datasource(_cw())
-        .query_mode(CloudWatchQueryMode.METRICS)
-        .metric_query_type(MetricQueryType.SEARCH)
-        .metric_editor_mode(MetricEditorMode.BUILDER)
-        .region(AWS_REGION)
-        .namespace("AWS/TransitGateway")
-        .expression(search)
-        .statistic("Sum")
-        .period("300")
-        .label("attachments")
-    )
-    return panel.datasource(_cw()).with_target(query)
+    panels = []
+    for att_id, vpc_name in ATTACHMENT_TO_VPC:
+        p = pb.stat_panel(
+            f"VPC · {vpc_name} (BytesIn)",
+            unit="bytes",
+            thresholds=pb.updown_thresholds(),
+            graph_mode=BigValueGraphMode.AREA,
+            span=pb.SPAN_QUARTER,
+            description=(
+                f"attachment {att_id} (VPC {vpc_name}) 의 BytesIn lastNotNull. "
+                "trend area 로 24h 활동 패턴."
+            ),
+        )
+        p = p.datasource(_cw()).with_target(
+            _tgw_per_vpc_query("BytesIn", att_id, vpc_name)
+        )
+        panels.append(p)
+    return panels
 
 
 def dashboard() -> Dashboard:
     """Row 6 대시보드 빌더를 반환. build.py 가 호출."""
-    return (
+    d = (
         base_dashboard(TITLE, UID, DESCRIPTION)
         # ── Row 6: cross-cloud 연결 ────────────────────────────────────
         .with_row(Row("Row 6 · cross-cloud 연결"))
@@ -335,10 +557,25 @@ def dashboard() -> Dashboard:
         .with_panel(_bgp_aws_azure())
         # VPN 터널 트래픽 추세
         .with_panel(_vpn_traffic())
-        # TGW attachment 트래픽
-        .with_panel(_tgw_attachment_traffic())
-        # TGW 라우트 드랍
-        .with_panel(_tgw_route_drops())
-        # TGW attachment 수
+        # TGW attachment 수 (stat) + TGW 전체 트래픽 (timeseries)
         .with_panel(_tgw_attachment_count())
+        .with_panel(_tgw_total_traffic())
+        # ── VPC 별 트래픽 (attachment-ID → VPC name alias) ─────────────
+        .with_panel(_tgw_vpc_traffic_in())
+        .with_panel(_tgw_vpc_traffic_out())
+        .with_panel(_tgw_vpc_packets_in())
+    )
+    # VPC 별 stat 7개 (BytesIn lastNotNull · 어느 VPC 가 활발한지 순위)
+    for p in _tgw_vpc_total_table():
+        d = d.with_panel(p)
+    return (
+        d
+        # TGW attachment 별 트래픽 (Bytes + Packets · SEARCH attachment-ID raw)
+        .with_panel(_tgw_attachment_traffic())
+        .with_panel(_tgw_attachment_packets())
+        # TGW 라우트 드랍 (packets + bytes)
+        .with_panel(_tgw_route_drops())
+        .with_panel(_tgw_byte_drops())
+        # TGW TTL 만료 (라우팅 루프 신호)
+        .with_panel(_tgw_ttl_drops())
     )

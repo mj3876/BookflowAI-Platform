@@ -1,6 +1,170 @@
-# RDS schema/seed/grants redeploy · git push → OIDC → SSM → CN → Ansible
-# 라이프사이클: 🔒 영구 (GHA)
-# BOOKFLOW V6.2
+# .github/workflows/rds-redeploy.yml
+# 흐름: cicd/ansible/sql/** OR infra/aws/20-data-persistent/seed-data/** push
+#       → OIDC → SSM Send-Command → Ansible CN → rds-schema 또는 rds-schema+seed 체인
+# 라이프사이클: 🔒 영구 (V6.2 Slide 23 · Glue 와 동일 GitOps 패턴)
+#
+# 자동 트리거 조건 (path 별 playbook 선택):
+#   sql/** 또는 rds-schema.yml 변경 → rds-schema (DDL + migrations)
+#   seed-data/** 변경 → rds-schema + rds-seed (CSV 재로드)
+#   rds-grants.yml 변경 → rds-grants
+# 수동: workflow_dispatch 로 임의 playbook 강제 실행 가능.
 
-# TODO: 팀원이 실제 스펙 정의
-# 참고: docs/ARCHITECTURE.md · docs/DEPLOYMENT.md
+name: rds-redeploy
+
+on:
+  push:
+    branches: [main, aws]
+    paths:
+      - 'cicd/ansible/sql/**'
+      - 'cicd/ansible/playbooks/rds-*.yml'
+      - 'cicd/ansible/roles/postgres-schema/**'
+      - 'infra/aws/20-data-persistent/seed-data/**'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: '실행 모드 (schema · seed · grants · verify · full)'
+        required: false
+        default: 'schema'
+        type: choice
+        options:
+          - schema
+          - seed
+          - grants
+          - verify
+          - full
+
+permissions:
+  id-token: write   # OIDC 필수
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-1
+
+jobs:
+  # ── 어떤 path 변경됐는지 감지해서 mode 결정 ────────────────────────
+  decide:
+    name: 적용 모드 결정
+    runs-on: ubuntu-latest
+    outputs:
+      mode: ${{ steps.set-mode.outputs.mode }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: changed paths → mode
+        id: set-mode
+        run: |
+          # workflow_dispatch 우선
+          if [ -n "${{ github.event.inputs.mode }}" ]; then
+            echo "mode=${{ github.event.inputs.mode }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # push: git diff 로 변경 path 검사
+          CHANGED=$(git diff --name-only HEAD^ HEAD 2>/dev/null || git diff --name-only)
+          echo "Changed files:"
+          echo "$CHANGED"
+          MODE="schema"
+          if echo "$CHANGED" | grep -qE 'infra/aws/20-data-persistent/seed-data/'; then
+            MODE="full"   # seed CSV 변경 → schema + seed + grants 체인
+          elif echo "$CHANGED" | grep -qE 'cicd/ansible/playbooks/rds-grants\.yml'; then
+            MODE="grants"
+          elif echo "$CHANGED" | grep -qE 'cicd/ansible/playbooks/rds-seed\.yml'; then
+            MODE="seed"
+          fi
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          echo "Selected mode: $MODE"
+
+  # ── Ansible CN 에 SSM Send-Command 로 적용 ────────────────────────
+  redeploy:
+    name: RDS Ansible 적용 (${{ needs.decide.outputs.mode }})
+    needs: decide
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: OIDC → bookflow-gha-rds-redeploy
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/bookflow-gha-rds-redeploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Ansible CN 인스턴스 ID 조회
+        id: get-instance
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters \
+              "Name=tag:Name,Values=bookflow-ansible-node" \
+              "Name=instance-state-name,Values=running" \
+            --region "${{ env.AWS_REGION }}" \
+            --query "Reservations[0].Instances[0].InstanceId" \
+            --output text)
+
+          if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ]; then
+            echo "::error::Ansible CN(bookflow-ansible-node) 없음 또는 stopped 상태"
+            exit 1
+          fi
+
+          echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
+
+      # mode 별 playbook 시퀀스 구성
+      - name: Playbook 시퀀스 결정
+        id: playbooks
+        run: |
+          case "${{ needs.decide.outputs.mode }}" in
+            schema)  SEQ='rds-schema' ;;
+            seed)    SEQ='rds-schema rds-seed' ;;
+            grants)  SEQ='rds-grants' ;;
+            verify)  SEQ='rds-verify' ;;
+            full)    SEQ='rds-schema rds-seed rds-grants rds-verify' ;;
+            *)       SEQ='rds-schema' ;;
+          esac
+          echo "seq=$SEQ" >> "$GITHUB_OUTPUT"
+          echo "Sequence: $SEQ"
+
+      # SSM Send-Command (git pull + 순서대로 playbook 실행)
+      - name: SSM Send-Command
+        id: send-command
+        run: |
+          # playbook 시퀀스를 shell 명령으로 조립
+          COMMANDS='["set -e", "cd /opt/bookflow && git pull origin ${{ github.ref_name }}"'
+          for p in ${{ steps.playbooks.outputs.seq }}; do
+            COMMANDS="$COMMANDS, \"ansible-playbook cicd/ansible/playbooks/${p}.yml --roles-path cicd/ansible/roles -e github_sha=${{ github.sha }}\""
+          done
+          COMMANDS="$COMMANDS]"
+
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "${{ steps.get-instance.outputs.instance_id }}" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "{\"commands\":$COMMANDS}" \
+            --timeout-seconds 1800 \
+            --region "${{ env.AWS_REGION }}" \
+            --query "Command.CommandId" \
+            --output text)
+
+          echo "command_id=$COMMAND_ID" >> "$GITHUB_OUTPUT"
+
+      - name: SSM 명령 완료 대기 (최대 30분)
+        run: |
+          aws ssm wait command-executed \
+            --command-id "${{ steps.send-command.outputs.command_id }}" \
+            --instance-id "${{ steps.get-instance.outputs.instance_id }}" \
+            --region "${{ env.AWS_REGION }}"
+
+      - name: SSM 실행 결과 출력
+        if: always()
+        run: |
+          RESULT=$(aws ssm get-command-invocation \
+            --command-id "${{ steps.send-command.outputs.command_id }}" \
+            --instance-id "${{ steps.get-instance.outputs.instance_id }}" \
+            --region "${{ env.AWS_REGION }}" \
+            --output json)
+
+          STATUS=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['Status'])")
+          STDOUT=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['StandardOutputContent'])")
+          STDERR=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['StandardErrorContent'])")
+
+          echo "=== Status: $STATUS ==="
+          echo "$STDOUT"
+          [ -n "$STDERR" ] && echo "=== Stderr ===" && echo "$STDERR"
+
+          [ "$STATUS" = "Success" ] || exit 1
