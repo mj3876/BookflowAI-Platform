@@ -453,27 +453,27 @@ def _alb_targets():
 
 # ── CodePipeline ────────────────────────────────────────────────────────
 def _codepipeline_status():
-    """CodePipeline 3종 실행 상태.
+    """CodePipeline 3종 24h 실행 횟수 (PipelineDuration SampleCount).
 
-    CodePipeline 은 CloudWatch 메트릭을 네이티브 발행하지 않는다(EventBridge
-    경유 커스텀 메트릭 필요). 데일리 자원이라 현재 미배포 → 데이터 없음.
-    파이프라인 배포 시 SucceededPipeline/FailedPipeline 커스텀 메트릭으로 동작.
+    AWS/CodePipeline 은 Succeeded 메트릭 미발행 — `PipelineDuration` 의
+    SampleCount (datapoint 개수) 가 곧 실행 횟수. `FailedPipelineExecutions` 은
+    별도 메트릭으로 추적 가능. 커스텀 namespace 필요 없음.
     """
     p = pb.stat_panel(
-        "CodePipeline · 최근 실행 결과",
+        "CodePipeline · 24h 실행 횟수",
         unit="short",
         mappings=[],
         thresholds=pb.health_thresholds(),
         description=(
-            "cp-eks·cp-ecs·publisher-bg. CodePipeline 은 CW 메트릭 네이티브 "
-            "미발행 → EventBridge 커스텀 메트릭 필요. 데일리 자원·현재 미배포."
+            "AWS/CodePipeline PipelineDuration SampleCount = 24h 실행 횟수. "
+            "cp-eks · cp-ecs · publisher-bg. 0 = 실행 없음, ≥1 = 활동."
         ),
     )
     p = p.datasource(ds.ref(ds.CLOUDWATCH))
     for i, pl in enumerate(CODEPIPELINES):
         p = p.with_target(_metric(
-            f"P{i}", "BookFlow/CodePipeline", "SucceededPipeline",
-            {"PipelineName": pl}, stat="Maximum", label=pl))
+            f"P{i}", "AWS/CodePipeline", "PipelineDuration",
+            {"PipelineName": pl}, stat="SampleCount", label=pl))
     return p
 
 

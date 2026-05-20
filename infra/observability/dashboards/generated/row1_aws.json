@@ -2115,7 +2115,7 @@
         "type": "cloudwatch",
         "uid": "cloudwatch"
       },
-      "description": "cp-eks·cp-ecs·publisher-bg. CodePipeline 은 CW 메트릭 네이티브 미발행 → EventBridge 커스텀 메트릭 필요. 데일리 자원·현재 미배포.",
+      "description": "AWS/CodePipeline PipelineDuration SampleCount = 24h 실행 횟수. cp-eks · cp-ecs · publisher-bg. 0 = 실행 없음, ≥1 = 활동.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -2175,14 +2175,14 @@
           "label": "cp-eks",
           "matchExact": true,
           "metricEditorMode": 0,
-          "metricName": "SucceededPipeline",
+          "metricName": "PipelineDuration",
           "metricQueryType": 0,
-          "namespace": "BookFlow/CodePipeline",
+          "namespace": "AWS/CodePipeline",
           "period": "300",
           "queryMode": "Metrics",
           "refId": "P0",
           "region": "ap-northeast-1",
-          "statistic": "Maximum"
+          "statistic": "SampleCount"
         },
         {
           "datasource": {
@@ -2196,14 +2196,14 @@
           "label": "cp-ecs",
           "matchExact": true,
           "metricEditorMode": 0,
-          "metricName": "SucceededPipeline",
+          "metricName": "PipelineDuration",
           "metricQueryType": 0,
-          "namespace": "BookFlow/CodePipeline",
+          "namespace": "AWS/CodePipeline",
           "period": "300",
           "queryMode": "Metrics",
           "refId": "P1",
           "region": "ap-northeast-1",
-          "statistic": "Maximum"
+          "statistic": "SampleCount"
         },
         {
           "datasource": {
@@ -2217,17 +2217,17 @@
           "label": "publisher-bg",
           "matchExact": true,
           "metricEditorMode": 0,
-          "metricName": "SucceededPipeline",
+          "metricName": "PipelineDuration",
           "metricQueryType": 0,
-          "namespace": "BookFlow/CodePipeline",
+          "namespace": "AWS/CodePipeline",
           "period": "300",
           "queryMode": "Metrics",
           "refId": "P2",
           "region": "ap-northeast-1",
-          "statistic": "Maximum"
+          "statistic": "SampleCount"
         }
       ],
-      "title": "CodePipeline · 최근 실행 결과",
+      "title": "CodePipeline · 24h 실행 횟수",
       "transparent": false,
       "type": "stat"
     },
