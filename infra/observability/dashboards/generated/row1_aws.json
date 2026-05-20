@@ -2169,7 +2169,7 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "PipelineName": "cp-eks"
+            "Pipeline": "cp-eks"
           },
           "id": "",
           "label": "cp-eks",
@@ -2190,7 +2190,7 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "PipelineName": "cp-ecs"
+            "Pipeline": "cp-ecs"
           },
           "id": "",
           "label": "cp-ecs",
@@ -2211,7 +2211,7 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "PipelineName": "publisher-bg"
+            "Pipeline": "publisher-bg"
           },
           "id": "",
           "label": "publisher-bg",

@@ -473,7 +473,7 @@ def _codepipeline_status():
     for i, pl in enumerate(CODEPIPELINES):
         p = p.with_target(_metric(
             f"P{i}", "AWS/CodePipeline", "PipelineDuration",
-            {"PipelineName": pl}, stat="SampleCount", label=pl))
+            {"Pipeline": pl}, stat="SampleCount", label=pl))
     return p
 
 
