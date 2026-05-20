@@ -1,0 +1,207 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: |
+  BOOKFLOW - Tier 40 - Publisher ASG Metrics Auto-Enabler (permanent resource).
+  CodeDeploy Blue/Green COPY_AUTO_SCALING_GROUP does not propagate MetricsCollection,
+  so this stack catches the deployment SUCCESS event via EventBridge and a Lambda
+  re-applies enable-metrics-collection on the new green ASG.
+  Result: SCN-04 dashboard metrics survive every Blue/Green deployment.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: bookflow
+  CodeDeployApplicationName:
+    Type: String
+    Default: bookflow-publisher
+    Description: Target CodeDeploy Application (only publisher-bg deployments are hooked)
+
+Resources:
+  # Lambda Execution Role
+  MetricsEnablerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-publisher-asg-metrics-enabler-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: AsgMetricsAndCodeDeployRead
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - autoscaling:EnableMetricsCollection
+                  - autoscaling:DescribeAutoScalingGroups
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - codedeploy:GetDeployment
+                  - codedeploy:GetDeploymentTarget
+                  - codedeploy:ListDeploymentTargets
+                Resource: '*'
+
+  # Lambda: enable Group* metrics on new green ASG
+  MetricsEnablerFn:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub ${ProjectName}-publisher-asg-metrics-enabler
+      Runtime: python3.13
+      Timeout: 60
+      MemorySize: 256
+      Role: !GetAtt MetricsEnablerRole.Arn
+      Handler: index.lambda_handler
+      Environment:
+        Variables:
+          PROJECT_NAME: !Ref ProjectName
+          TARGET_APP: !Ref CodeDeployApplicationName
+      Code:
+        ZipFile: |
+          """
+          publisher-asg-metrics-enabler
+          CodeDeploy Blue/Green SUCCESS event -> enable-metrics-collection on new green ASG.
+
+          Input event (EventBridge: aws.codedeploy / Deployment State-change Notification):
+            event['detail']['deploymentId']
+            event['detail']['application']
+            event['detail']['deploymentGroup']
+            event['detail']['state'] == 'SUCCESS'
+          """
+          import json
+          import os
+          import boto3
+
+          TARGET_APP = os.environ.get('TARGET_APP', 'bookflow-publisher')
+
+          METRICS = [
+              'GroupDesiredCapacity',
+              'GroupInServiceInstances',
+              'GroupPendingInstances',
+              'GroupStandbyInstances',
+              'GroupTerminatingInstances',
+              'GroupTotalInstances',
+              'GroupMinSize',
+              'GroupMaxSize',
+          ]
+
+          cd = boto3.client('codedeploy')
+          asg = boto3.client('autoscaling')
+
+
+          def _resolve_asg_names(deployment_id):
+              """Extract Blue/Green target ASG names from CodeDeploy GetDeployment response."""
+              resp = cd.get_deployment(deploymentId=deployment_id)
+              info = resp.get('deploymentInfo', {})
+              names = []
+              # For Blue/Green: targetInstances.autoScalingGroups may be populated.
+              tgt = info.get('targetInstances') or {}
+              for n in tgt.get('autoScalingGroups', []) or []:
+                  if n:
+                      names.append(n)
+              # Fallback path: convention name CodeDeploy_<group>_<deploymentId>
+              group = info.get('deploymentGroupName')
+              if group:
+                  conv = 'CodeDeploy_{}_{}'.format(group, deployment_id)
+                  if conv not in names:
+                      names.append(conv)
+              return names
+
+
+          def _filter_existing(names):
+              if not names:
+                  return []
+              # describe-auto-scaling-groups accepts up to 100 names.
+              resp = asg.describe_auto_scaling_groups(AutoScalingGroupNames=names)
+              return [g['AutoScalingGroupName'] for g in resp.get('AutoScalingGroups', [])]
+
+
+          def lambda_handler(event, context):
+              print(json.dumps({'event': event}))
+              detail = event.get('detail', {}) or {}
+              app = detail.get('application')
+              state = detail.get('state')
+              deployment_id = detail.get('deploymentId')
+
+              if app != TARGET_APP:
+                  return {'skipped': True, 'reason': 'app {} != {}'.format(app, TARGET_APP)}
+              if state != 'SUCCESS':
+                  return {'skipped': True, 'reason': 'state {} != SUCCESS'.format(state)}
+              if not deployment_id:
+                  return {'skipped': True, 'reason': 'no deploymentId'}
+
+              candidates = _resolve_asg_names(deployment_id)
+              existing = _filter_existing(candidates)
+
+              if not existing:
+                  # Fallback: tag-based scan to find all Publisher ASGs.
+                  resp = asg.describe_auto_scaling_groups()
+                  target_tag_value = '{}-bg'.format(TARGET_APP)
+                  existing = [
+                      g['AutoScalingGroupName']
+                      for g in resp.get('AutoScalingGroups', [])
+                      if any(
+                          t.get('Key') == 'CodeDeploy' and t.get('Value') == target_tag_value
+                          for t in g.get('Tags', [])
+                      )
+                  ]
+
+              results = []
+              for name in existing:
+                  asg.enable_metrics_collection(
+                      AutoScalingGroupName=name,
+                      Metrics=METRICS,
+                      Granularity='1Minute',
+                  )
+                  results.append(name)
+                  print('enabled metrics on ASG: ' + name)
+
+              return {'enabled_on': results, 'deploymentId': deployment_id}
+
+  MetricsEnablerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${ProjectName}-publisher-asg-metrics-enabler
+      RetentionInDays: 14
+
+  # EventBridge Rule: CodeDeploy SUCCESS on bookflow-publisher
+  DeploymentSuccessRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub ${ProjectName}-publisher-codedeploy-success
+      Description: CodeDeploy Blue/Green SUCCESS on bookflow-publisher -> enable ASG metrics
+      EventBusName: default
+      EventPattern:
+        source:
+          - aws.codedeploy
+        detail-type:
+          - CodeDeploy Deployment State-change Notification
+        detail:
+          state:
+            - SUCCESS
+          application:
+            - !Ref CodeDeployApplicationName
+      State: ENABLED
+      Targets:
+        - Id: MetricsEnabler
+          Arn: !GetAtt MetricsEnablerFn.Arn
+
+  MetricsEnablerInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref MetricsEnablerFn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt DeploymentSuccessRule.Arn
+
+Outputs:
+  MetricsEnablerFunctionArn:
+    Value: !GetAtt MetricsEnablerFn.Arn
+    Export: { Name: !Sub '${ProjectName}-publisher-asg-metrics-enabler-arn' }
+  DeploymentSuccessRuleArn:
+    Value: !GetAtt DeploymentSuccessRule.Arn
+    Export: { Name: !Sub '${ProjectName}-publisher-codedeploy-success-rule-arn' }
