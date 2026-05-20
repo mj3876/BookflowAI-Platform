@@ -246,13 +246,15 @@ def _azure_logs(kql: str, result_format: ResultFormat) -> AzureMonitorQuery:
 def _gcp_ts(metric_type: str, *, aligner="ALIGN_SUM", reducer="REDUCE_SUM",
             group_bys=None, extra_filters=None, alias="",
             alignment_period="+300s") -> CloudMonitoringQuery:
-    filters = [f'metric.type="{metric_type}"']
+    # Grafana 11.2 stackdriver datasource 는 `filters` 배열을 공백/AND 없이
+    # concat 해 400 INVALID_ARGUMENT 를 유발 → 단일 문자열 ` AND ` join 로 회피.
+    parts = [f'metric.type="{metric_type}"']
     if extra_filters:
-        filters.extend(extra_filters)
+        parts.extend(extra_filters)
     tsl = (
         TimeSeriesList()
         .project_name(GCP_PROJECT)
-        .filters(filters)
+        .filters([" AND ".join(parts)])
         .per_series_aligner(aligner)
         .cross_series_reducer(reducer)
         .alignment_period(alignment_period)

@@ -457,8 +457,7 @@
             "alignmentPeriod": "+300s",
             "crossSeriesReducer": "REDUCE_SUM",
             "filters": [
-              "metric.type=\"cloudfunctions.googleapis.com/function/execution_count\"",
-              "metric.label.status!=\"ok\""
+              "metric.type=\"cloudfunctions.googleapis.com/function/execution_count\" AND metric.label.status!=\"ok\""
             ],
             "groupBys": [
               "resource.label.function_name"

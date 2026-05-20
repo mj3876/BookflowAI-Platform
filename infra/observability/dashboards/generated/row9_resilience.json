@@ -3142,9 +3142,7 @@
             "alignmentPeriod": "+300s",
             "crossSeriesReducer": "REDUCE_SUM",
             "filters": [
-              "metric.type=\"cloudfunctions.googleapis.com/function/execution_count\"",
-              "resource.label.function_name=\"bookflow-bq-load\"",
-              "metric.label.status!=\"ok\""
+              "metric.type=\"cloudfunctions.googleapis.com/function/execution_count\" AND resource.label.function_name=\"bookflow-bq-load\" AND metric.label.status!=\"ok\""
             ],
             "perSeriesAligner": "ALIGN_SUM",
             "projectName": "project-8ab6bf05-54d2-4f5d-b8d"
@@ -3206,8 +3204,7 @@
             "alignmentPeriod": "+300s",
             "crossSeriesReducer": "REDUCE_SUM",
             "filters": [
-              "metric.type=\"cloudfunctions.googleapis.com/function/execution_count\"",
-              "resource.label.function_name=\"bookflow-bq-load\""
+              "metric.type=\"cloudfunctions.googleapis.com/function/execution_count\" AND resource.label.function_name=\"bookflow-bq-load\""
             ],
             "groupBys": [
               "metric.label.status"
@@ -3272,8 +3269,7 @@
             "alignmentPeriod": "+300s",
             "crossSeriesReducer": "REDUCE_MEAN",
             "filters": [
-              "metric.type=\"cloudfunctions.googleapis.com/function/execution_times\"",
-              "resource.label.function_name=\"bookflow-bq-load\""
+              "metric.type=\"cloudfunctions.googleapis.com/function/execution_times\" AND resource.label.function_name=\"bookflow-bq-load\""
             ],
             "perSeriesAligner": "ALIGN_PERCENTILE_95",
             "projectName": "project-8ab6bf05-54d2-4f5d-b8d"

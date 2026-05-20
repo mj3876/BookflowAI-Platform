@@ -53,14 +53,19 @@ def _ts_query(
     alias: str = "",
     alignment_period: str = "+300s",
 ) -> CloudMonitoringQuery:
-    """단일 Cloud Monitoring 메트릭의 timeSeriesList 쿼리 빌더."""
-    filters = [f'metric.type="{metric_type}"']
+    """단일 Cloud Monitoring 메트릭의 timeSeriesList 쿼리 빌더.
+
+    Grafana 11.2 stackdriver datasource 는 `filters` 배열을 공백/AND 없이
+    그대로 concat 해 GCP API 에 400 INVALID_ARGUMENT 를 유발한다. 그래서
+    여러 절을 단일 문자열로 ` AND ` join 한 뒤 한 element 배열로 넘긴다.
+    """
+    parts = [f'metric.type="{metric_type}"']
     if extra_filters:
-        filters.extend(extra_filters)
+        parts.extend(extra_filters)
     tsl = (
         TimeSeriesList()
         .project_name(PROJECT)
-        .filters(filters)
+        .filters([" AND ".join(parts)])
         .per_series_aligner(aligner)
         .cross_series_reducer(reducer)
         .alignment_period(alignment_period)
