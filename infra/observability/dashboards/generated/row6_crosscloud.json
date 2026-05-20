@@ -593,7 +593,7 @@
           "expression": "SEARCH('{AWS/TransitGateway,TransitGateway,TransitGatewayAttachment} MetricName=\"BytesIn\"', 'Sum', 300)",
           "id": "",
           "label": "attachments",
-          "metricEditorMode": 0,
+          "metricEditorMode": 1,
           "metricQueryType": 0,
           "namespace": "AWS/TransitGateway",
           "period": "300",
@@ -698,7 +698,7 @@
         "type": "cloudwatch",
         "uid": "cloudwatch"
       },
-      "description": "TGW attachment 별 BytesIn/Out (AWS/TransitGateway · Sum · SEARCH). attachment 활성·라우팅 정상 여부 대리 신호 — 라이브 7 attachment (VPC 5 + VPN 2).",
+      "description": "TGW attachment 별 BytesIn (Sum · 300s) · attachment-ID 를 VPC 이름으로 alias. 어느 VPC 가 cross-VPC 트래픽의 주인공인지 한눈에 — bookflow-ai (EKS) / data (RDS·Redis) / egress (DMZ) / sales-data / ansible / vpn-1 / vpn-2.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -706,7 +706,10 @@
             "fillOpacity": 10,
             "lineInterpolation": "smooth",
             "lineWidth": 2,
-            "showPoints": "never"
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
           },
           "unit": "bytes"
         },
@@ -737,10 +740,15 @@
             "type": "cloudwatch",
             "uid": "cloudwatch"
           },
-          "expression": "SEARCH('{AWS/TransitGateway,TransitGateway,TransitGatewayAttachment} MetricName=\"BytesIn\"', 'Sum', 300)",
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770",
+            "TransitGatewayAttachment": "tgw-attach-00e48fdc9b237eca6"
+          },
           "id": "",
-          "label": "{{TransitGatewayAttachment}} In",
+          "label": "bookflow-ai",
+          "matchExact": true,
           "metricEditorMode": 0,
+          "metricName": "BytesIn",
           "metricQueryType": 0,
           "namespace": "AWS/TransitGateway",
           "period": "300",
@@ -754,10 +762,125 @@
             "type": "cloudwatch",
             "uid": "cloudwatch"
           },
-          "expression": "SEARCH('{AWS/TransitGateway,TransitGateway,TransitGatewayAttachment} MetricName=\"BytesOut\"', 'Sum', 300)",
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770",
+            "TransitGatewayAttachment": "tgw-attach-01ca13ae484a58789"
+          },
           "id": "",
-          "label": "{{TransitGatewayAttachment}} Out",
+          "label": "ansible",
+          "matchExact": true,
           "metricEditorMode": 0,
+          "metricName": "BytesIn",
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770",
+            "TransitGatewayAttachment": "tgw-attach-070989bcce94a9a77"
+          },
+          "id": "",
+          "label": "sales-data",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "BytesIn",
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770",
+            "TransitGatewayAttachment": "tgw-attach-0e50c4367602a85b7"
+          },
+          "id": "",
+          "label": "data",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "BytesIn",
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770",
+            "TransitGatewayAttachment": "tgw-attach-0fc3918eb6f66ba0d"
+          },
+          "id": "",
+          "label": "egress",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "BytesIn",
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770",
+            "TransitGatewayAttachment": "tgw-attach-03a24f63e21f6ef81"
+          },
+          "id": "",
+          "label": "vpn-1",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "BytesIn",
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770",
+            "TransitGatewayAttachment": "tgw-attach-0442cc206fa2649cd"
+          },
+          "id": "",
+          "label": "vpn-2",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "BytesIn",
           "metricQueryType": 0,
           "namespace": "AWS/TransitGateway",
           "period": "300",
@@ -767,7 +890,7 @@
           "statistic": "Sum"
         }
       ],
-      "title": "TGW attachment 트래픽 (Bytes In/Out)",
+      "title": "TGW · VPC 별 트래픽 IN (Sum · stacked)",
       "transparent": false,
       "type": "timeseries"
     },
@@ -776,7 +899,7 @@
         "type": "cloudwatch",
         "uid": "cloudwatch"
       },
-      "description": "TGW attachment 별 PacketsIn/Out (AWS/TransitGateway · Sum · SEARCH). bytes 가 낮을 때도 packet rate 로 흐름 확인.",
+      "description": "TGW attachment 별 BytesOut (Sum · 300s) · attachment-ID 를 VPC 이름으로 alias. 어느 VPC 가 cross-VPC 트래픽의 주인공인지 한눈에 — bookflow-ai (EKS) / data (RDS·Redis) / egress (DMZ) / sales-data / ansible / vpn-1 / vpn-2.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -784,9 +907,12 @@
             "fillOpacity": 10,
             "lineInterpolation": "smooth",
             "lineWidth": 2,
-            "showPoints": "never"
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
           },
-          "unit": "short"
+          "unit": "bytes"
         },
         "overrides": []
       },
@@ -815,10 +941,15 @@
             "type": "cloudwatch",
             "uid": "cloudwatch"
           },
-          "expression": "SEARCH('{AWS/TransitGateway,TransitGateway,TransitGatewayAttachment} MetricName=\"PacketsIn\"', 'Sum', 300)",
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770",
+            "TransitGatewayAttachment": "tgw-attach-00e48fdc9b237eca6"
+          },
           "id": "",
-          "label": "{{TransitGatewayAttachment}} In",
+          "label": "bookflow-ai",
+          "matchExact": true,
           "metricEditorMode": 0,
+          "metricName": "BytesOut",
           "metricQueryType": 0,
           "namespace": "AWS/TransitGateway",
           "period": "300",
@@ -832,10 +963,125 @@
             "type": "cloudwatch",
             "uid": "cloudwatch"
           },
-          "expression": "SEARCH('{AWS/TransitGateway,TransitGateway,TransitGatewayAttachment} MetricName=\"PacketsOut\"', 'Sum', 300)",
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770",
+            "TransitGatewayAttachment": "tgw-attach-01ca13ae484a58789"
+          },
           "id": "",
-          "label": "{{TransitGatewayAttachment}} Out",
+          "label": "ansible",
+          "matchExact": true,
           "metricEditorMode": 0,
+          "metricName": "BytesOut",
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770",
+            "TransitGatewayAttachment": "tgw-attach-070989bcce94a9a77"
+          },
+          "id": "",
+          "label": "sales-data",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "BytesOut",
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770",
+            "TransitGatewayAttachment": "tgw-attach-0e50c4367602a85b7"
+          },
+          "id": "",
+          "label": "data",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "BytesOut",
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770",
+            "TransitGatewayAttachment": "tgw-attach-0fc3918eb6f66ba0d"
+          },
+          "id": "",
+          "label": "egress",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "BytesOut",
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770",
+            "TransitGatewayAttachment": "tgw-attach-03a24f63e21f6ef81"
+          },
+          "id": "",
+          "label": "vpn-1",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "BytesOut",
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770",
+            "TransitGatewayAttachment": "tgw-attach-0442cc206fa2649cd"
+          },
+          "id": "",
+          "label": "vpn-2",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "BytesOut",
           "metricQueryType": 0,
           "namespace": "AWS/TransitGateway",
           "period": "300",
@@ -845,7 +1091,7 @@
           "statistic": "Sum"
         }
       ],
-      "title": "TGW attachment 패킷 (In/Out)",
+      "title": "TGW · VPC 별 트래픽 OUT (Sum · stacked)",
       "transparent": false,
       "type": "timeseries"
     },
@@ -854,7 +1100,7 @@
         "type": "cloudwatch",
         "uid": "cloudwatch"
       },
-      "description": "TGW PacketDropCountNoRoute(라우트 전파 누락) · PacketDropCountBlackhole(명시 차단) · attachment 별 SEARCH. NoRoute>0 = 라우트 전파 실패.",
+      "description": "TGW attachment 별 PacketsIn · attachment-ID 를 VPC 이름으로 alias. bytes 가 낮을 때도 packet 율로 흐름 정상 여부 확인.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -862,7 +1108,10 @@
             "fillOpacity": 10,
             "lineInterpolation": "smooth",
             "lineWidth": 2,
-            "showPoints": "never"
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
           },
           "unit": "short"
         },
@@ -893,10 +1142,896 @@
             "type": "cloudwatch",
             "uid": "cloudwatch"
           },
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770",
+            "TransitGatewayAttachment": "tgw-attach-00e48fdc9b237eca6"
+          },
+          "id": "",
+          "label": "bookflow-ai",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "PacketsIn",
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770",
+            "TransitGatewayAttachment": "tgw-attach-01ca13ae484a58789"
+          },
+          "id": "",
+          "label": "ansible",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "PacketsIn",
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770",
+            "TransitGatewayAttachment": "tgw-attach-070989bcce94a9a77"
+          },
+          "id": "",
+          "label": "sales-data",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "PacketsIn",
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770",
+            "TransitGatewayAttachment": "tgw-attach-0e50c4367602a85b7"
+          },
+          "id": "",
+          "label": "data",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "PacketsIn",
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770",
+            "TransitGatewayAttachment": "tgw-attach-0fc3918eb6f66ba0d"
+          },
+          "id": "",
+          "label": "egress",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "PacketsIn",
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770",
+            "TransitGatewayAttachment": "tgw-attach-03a24f63e21f6ef81"
+          },
+          "id": "",
+          "label": "vpn-1",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "PacketsIn",
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770",
+            "TransitGatewayAttachment": "tgw-attach-0442cc206fa2649cd"
+          },
+          "id": "",
+          "label": "vpn-2",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "PacketsIn",
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "TGW · VPC 별 PacketsIn (Sum · stacked)",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "attachment tgw-attach-00e48fdc9b237eca6 (VPC bookflow-ai) 의 BytesIn lastNotNull. trend area 로 24h 활동 패턴.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 12,
+        "y": 23
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770",
+            "TransitGatewayAttachment": "tgw-attach-00e48fdc9b237eca6"
+          },
+          "id": "",
+          "label": "bookflow-ai",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "BytesIn",
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "VPC · bookflow-ai (BytesIn)",
+      "transparent": false,
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "attachment tgw-attach-01ca13ae484a58789 (VPC ansible) 의 BytesIn lastNotNull. trend area 로 24h 활동 패턴.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 18,
+        "y": 23
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770",
+            "TransitGatewayAttachment": "tgw-attach-01ca13ae484a58789"
+          },
+          "id": "",
+          "label": "ansible",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "BytesIn",
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "VPC · ansible (BytesIn)",
+      "transparent": false,
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "attachment tgw-attach-070989bcce94a9a77 (VPC sales-data) 의 BytesIn lastNotNull. trend area 로 24h 활동 패턴.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 31
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770",
+            "TransitGatewayAttachment": "tgw-attach-070989bcce94a9a77"
+          },
+          "id": "",
+          "label": "sales-data",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "BytesIn",
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "VPC · sales-data (BytesIn)",
+      "transparent": false,
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "attachment tgw-attach-0e50c4367602a85b7 (VPC data) 의 BytesIn lastNotNull. trend area 로 24h 활동 패턴.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 6,
+        "y": 31
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770",
+            "TransitGatewayAttachment": "tgw-attach-0e50c4367602a85b7"
+          },
+          "id": "",
+          "label": "data",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "BytesIn",
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "VPC · data (BytesIn)",
+      "transparent": false,
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "attachment tgw-attach-0fc3918eb6f66ba0d (VPC egress) 의 BytesIn lastNotNull. trend area 로 24h 활동 패턴.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 12,
+        "y": 31
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770",
+            "TransitGatewayAttachment": "tgw-attach-0fc3918eb6f66ba0d"
+          },
+          "id": "",
+          "label": "egress",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "BytesIn",
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "VPC · egress (BytesIn)",
+      "transparent": false,
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "attachment tgw-attach-03a24f63e21f6ef81 (VPC vpn-1) 의 BytesIn lastNotNull. trend area 로 24h 활동 패턴.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 18,
+        "y": 31
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770",
+            "TransitGatewayAttachment": "tgw-attach-03a24f63e21f6ef81"
+          },
+          "id": "",
+          "label": "vpn-1",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "BytesIn",
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "VPC · vpn-1 (BytesIn)",
+      "transparent": false,
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "attachment tgw-attach-0442cc206fa2649cd (VPC vpn-2) 의 BytesIn lastNotNull. trend area 로 24h 활동 패턴.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 37
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770",
+            "TransitGatewayAttachment": "tgw-attach-0442cc206fa2649cd"
+          },
+          "id": "",
+          "label": "vpn-2",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "BytesIn",
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "VPC · vpn-2 (BytesIn)",
+      "transparent": false,
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "TGW attachment 별 BytesIn/Out (AWS/TransitGateway · Sum · SEARCH). attachment 활성·라우팅 정상 여부 대리 신호 — 라이브 7 attachment (VPC 5 + VPN 2). attachment-ID → VPC: bookflow-ai/ansible/sales-data/data/egress + vpn-1/vpn-2.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 6,
+        "y": 37
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "expression": "SEARCH('{AWS/TransitGateway,TransitGateway,TransitGatewayAttachment} MetricName=\"BytesIn\"', 'Sum', 300)",
+          "id": "",
+          "label": "{{TransitGatewayAttachment}} In",
+          "metricEditorMode": 1,
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "expression": "SEARCH('{AWS/TransitGateway,TransitGateway,TransitGatewayAttachment} MetricName=\"BytesOut\"', 'Sum', 300)",
+          "id": "",
+          "label": "{{TransitGatewayAttachment}} Out",
+          "metricEditorMode": 1,
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "TGW attachment 트래픽 (Bytes In/Out · SEARCH)",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "TGW attachment 별 PacketsIn/Out (AWS/TransitGateway · Sum · SEARCH). bytes 가 낮을 때도 packet rate 로 흐름 확인.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 18,
+        "y": 37
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "expression": "SEARCH('{AWS/TransitGateway,TransitGateway,TransitGatewayAttachment} MetricName=\"PacketsIn\"', 'Sum', 300)",
+          "id": "",
+          "label": "{{TransitGatewayAttachment}} In",
+          "metricEditorMode": 1,
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "expression": "SEARCH('{AWS/TransitGateway,TransitGateway,TransitGatewayAttachment} MetricName=\"PacketsOut\"', 'Sum', 300)",
+          "id": "",
+          "label": "{{TransitGatewayAttachment}} Out",
+          "metricEditorMode": 1,
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "TGW attachment 패킷 (In/Out · SEARCH)",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "TGW PacketDropCountNoRoute(라우트 전파 누락) · PacketDropCountBlackhole(명시 차단) · attachment 별 SEARCH. NoRoute>0 = 라우트 전파 실패.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 45
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
           "expression": "SEARCH('{AWS/TransitGateway,TransitGateway,TransitGatewayAttachment} MetricName=\"PacketDropCountNoRoute\"', 'Sum', 300)",
           "id": "",
           "label": "{{TransitGatewayAttachment}} NoRoute",
-          "metricEditorMode": 0,
+          "metricEditorMode": 1,
           "metricQueryType": 0,
           "namespace": "AWS/TransitGateway",
           "period": "300",
@@ -913,7 +2048,7 @@
           "expression": "SEARCH('{AWS/TransitGateway,TransitGateway,TransitGatewayAttachment} MetricName=\"PacketDropCountBlackhole\"', 'Sum', 300)",
           "id": "",
           "label": "{{TransitGatewayAttachment}} Blackhole",
-          "metricEditorMode": 0,
+          "metricEditorMode": 1,
           "metricQueryType": 0,
           "namespace": "AWS/TransitGateway",
           "period": "300",
@@ -950,7 +2085,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 23
+        "y": 45
       },
       "options": {
         "legend": {
@@ -974,7 +2109,7 @@
           "expression": "SEARCH('{AWS/TransitGateway,TransitGateway,TransitGatewayAttachment} MetricName=\"BytesDropCountNoRoute\"', 'Sum', 300)",
           "id": "",
           "label": "{{TransitGatewayAttachment}} NoRoute",
-          "metricEditorMode": 0,
+          "metricEditorMode": 1,
           "metricQueryType": 0,
           "namespace": "AWS/TransitGateway",
           "period": "300",
@@ -991,7 +2126,7 @@
           "expression": "SEARCH('{AWS/TransitGateway,TransitGateway,TransitGatewayAttachment} MetricName=\"BytesDropCountBlackhole\"', 'Sum', 300)",
           "id": "",
           "label": "{{TransitGatewayAttachment}} Blackhole",
-          "metricEditorMode": 0,
+          "metricEditorMode": 1,
           "metricQueryType": 0,
           "namespace": "AWS/TransitGateway",
           "period": "300",
@@ -1028,7 +2163,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 31
+        "y": 53
       },
       "options": {
         "legend": {
@@ -1052,7 +2187,7 @@
           "expression": "SEARCH('{AWS/TransitGateway,TransitGateway,TransitGatewayAttachment} MetricName=\"PacketDropCountTTLExpired\"', 'Sum', 300)",
           "id": "",
           "label": "{{TransitGatewayAttachment}} TTL",
-          "metricEditorMode": 0,
+          "metricEditorMode": 1,
           "metricQueryType": 0,
           "namespace": "AWS/TransitGateway",
           "period": "300",
