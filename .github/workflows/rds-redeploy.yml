@@ -82,10 +82,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: OIDC → bookflow-gha-rds-role
+      - name: OIDC → bookflow-gha-rds-redeploy
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/bookflow-gha-rds-role
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/bookflow-gha-rds-redeploy
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Ansible CN 인스턴스 ID 조회
