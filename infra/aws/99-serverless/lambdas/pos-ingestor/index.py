@@ -16,6 +16,12 @@ import psycopg2
 import redis
 
 REGION = os.environ.get("AWS_REGION", "ap-northeast-1")
+# Redis 엔드포인트는 env var 로 주입 (SAM template 의 PosIngestorFn.Environment.Variables
+# 에서 redis 스택 CFN Export `${ProjectName}-redis-endpoint` / `${ProjectName}-redis-port`
+# 를 ImportValue 로 resolve). spike-detect Lambda 와 동일 정합 패턴.
+# ElastiCache 는 무인증이라 Secrets Manager 시크릿이 본질적으로 불필요.
+REDIS_HOST = os.environ["REDIS_HOST"]
+REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))
 
 
 def _get_secret(sm, name: str) -> dict:
@@ -33,10 +39,10 @@ def _db_connect(secret: dict):
     )
 
 
-def _redis_client(secret: dict):
+def _redis_client():
     return redis.Redis(
-        host=secret["host"],
-        port=int(secret.get("port", 6379)),
+        host=REDIS_HOST,
+        port=REDIS_PORT,
         decode_responses=True,
         socket_timeout=3,
     )
@@ -148,10 +154,9 @@ def _process(cur, rc, rec: dict) -> None:
 def lambda_handler(event, context):
     sm = boto3.client("secretsmanager", region_name=REGION)
     rds_sec   = _get_secret(sm, "bookflow/rds/master-password")
-    redis_sec = _get_secret(sm, "bookflow/redis")
 
     conn     = _db_connect(rds_sec)
-    rc       = _redis_client(redis_sec)
+    rc       = _redis_client()
     records  = event.get("Records", [])
     failures = []
 
