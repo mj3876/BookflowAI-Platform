@@ -453,28 +453,61 @@ def _alb_targets():
 
 # ── CodePipeline ────────────────────────────────────────────────────────
 def _codepipeline_status():
-    """CodePipeline 3종 24h 실행 횟수 (PipelineDuration SampleCount).
+    """CodePipeline 3종 실행 추세 (24h · PipelineDuration timeseries).
 
-    AWS/CodePipeline 은 Succeeded 메트릭 미발행 — `PipelineDuration` 의
-    SampleCount (datapoint 개수) 가 곧 실행 횟수. `FailedPipelineExecutions` 은
-    별도 메트릭으로 추적 가능. 커스텀 namespace 필요 없음.
+    각 데이터포인트 = 한 번의 실행. Y축 = duration(초). 실행 없는 pipeline 은
+    series 자체가 비어 그래프에 안 보인다 — "빨간 빈 박스" 대신 시각적으로
+    어느 pipeline 이 언제 돌았는지가 보임. 누적 실행 수는 별도 패널.
     """
-    p = pb.stat_panel(
-        "CodePipeline · 24h 실행 횟수",
-        unit="short",
-        mappings=[],
-        thresholds=pb.health_thresholds(),
+    p = pb.timeseries_panel(
+        "CodePipeline · 실행 추세 (24h · Duration)",
+        unit="s",
         description=(
-            "AWS/CodePipeline PipelineDuration SampleCount = 24h 실행 횟수. "
-            "cp-eks · cp-ecs · publisher-bg. 0 = 실행 없음, ≥1 = 활동."
+            "AWS/CodePipeline PipelineDuration — 데이터포인트 = 1회 실행 · "
+            "Y=초. cp-eks · cp-ecs · publisher-bg 3종."
         ),
     )
     p = p.datasource(ds.ref(ds.CLOUDWATCH))
     for i, pl in enumerate(CODEPIPELINES):
         p = p.with_target(_metric(
             f"P{i}", "AWS/CodePipeline", "PipelineDuration",
-            {"Pipeline": pl}, stat="SampleCount", label=pl))
+            {"Pipeline": pl}, stat="Average", label=pl))
     return p
+
+
+def _codepipeline_failures():
+    """CodePipeline 실패 횟수 (24h · FailedPipelineExecutions Sum)."""
+    p = pb.stat_panel(
+        "CodePipeline · 24h 실패 횟수",
+        unit="short",
+        mappings=[],
+        thresholds=_thresholds_inverse_health(),
+        description=(
+            "AWS/CodePipeline FailedPipelineExecutions Sum 24h. "
+            "0 = 정상(green) · ≥1 = 실패(red)."
+        ),
+    )
+    p = p.datasource(ds.ref(ds.CLOUDWATCH))
+    for i, pl in enumerate(CODEPIPELINES):
+        p = p.with_target(_metric(
+            f"F{i}", "AWS/CodePipeline", "FailedPipelineExecutions",
+            {"Pipeline": pl}, stat="Sum", label=pl))
+    return p
+
+
+def _thresholds_inverse_health():
+    """0 = green / ≥1 = red. health_thresholds 와 반대 — 실패 메트릭용."""
+    from grafana_foundation_sdk.models.common import (
+        Threshold, ThresholdsConfig, ThresholdsMode,
+    )
+    return (
+        ThresholdsConfig()
+        .mode(ThresholdsMode.ABSOLUTE)
+        .steps([
+            Threshold(value=None, color=pb.GREEN),
+            Threshold(value=1, color=pb.RED),
+        ])
+    )
 
 
 # ── CloudTrail (CloudWatch Logs) ────────────────────────────────────────
@@ -574,6 +607,7 @@ def dashboard() -> Dashboard:
         .with_panel(_alb_5xx())
         .with_panel(_alb_targets())
         .with_panel(_codepipeline_status())
+        .with_panel(_codepipeline_failures())
         # ── CloudTrail ─────────────────────────────────────────────────
         .with_row(Row("Row 1 · AWS — CloudTrail (감사)"))
         .with_panel(_cloudtrail_activity())
