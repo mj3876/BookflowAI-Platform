@@ -51,6 +51,37 @@
         autocommit: true
       no_log: true
 
+    # ── Migrations (alphabetical order — 001 → 009 → ...) ───────────────
+    # 멱등 패턴 (ADD COLUMN IF NOT EXISTS · pg_constraint 검사 · schema_versions ON CONFLICT)
+    # 새 .sql 파일을 cicd/ansible/sql/migrations/ 에 추가하면 자동 픽업.
+    - name: List migration files
+      ansible.builtin.find:
+        paths: "{{ sql_dir }}/migrations"
+        patterns: "*.sql"
+      register: migration_files
+
+    - name: Read each migration
+      ansible.builtin.slurp:
+        src: "{{ item.path }}"
+      register: migration_contents
+      loop: "{{ migration_files.files | sort(attribute='path') }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+
+    - name: Apply migrations in order
+      community.postgresql.postgresql_query:
+        login_host: "{{ db_host }}"
+        login_port: "{{ db_port }}"
+        login_user: "{{ db_master_user }}"
+        login_password: "{{ db_master_password }}"
+        db: "{{ db_name }}"
+        query: "{{ item.content | b64decode }}"
+        autocommit: true
+      loop: "{{ migration_contents.results }}"
+      loop_control:
+        label: "{{ item.source | basename }}"
+      no_log: true
+
     - name: Verify table count (expect 19)
       community.postgresql.postgresql_query:
         login_host: "{{ db_host }}"
