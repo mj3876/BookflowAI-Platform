@@ -1384,329 +1384,390 @@ def _scn08_bq_queries():
 
 
 # ════════════════════════════════════════════════════════════════════════
-# SCN-09 — GCS 스테이징 버킷을 통한 BigQuery 데이터 오염 (보안)
-#   공격자가 GCS staging bucket 에 악의적 파일 업로드 → `bookflow-bq-load`
-#   Cloud Function 이 그것을 BigQuery 에 적재 → BQ 테이블 오염. filter/검증
-#   로직 부재 시 무방비 흡수. 본 row 는 비정상 신호 가시화.
+# SCN-09 — Entra OIDC 비정상 로그인 폭증 (보안 · brute force / cred stuffing)
+#   Entra ID SigninLogs 의 반복 실패 시도·외부 IP 분포·시간대별 분포·MFA 통과
+#   비율 등으로 brute force / credential stuffing 공격을 가시화. 본 패널은
+#   law-bookflowmj 에 SigninLogs 가 라우팅된 후 즉시 동작 (현재 미라우팅).
 # ════════════════════════════════════════════════════════════════════════
 def _scn09_intro():
     return _scn_intro(
-        "SCN-09 · GCS 스테이징 → BigQuery 데이터 오염 (보안)",
-        "공격자 시나리오: **GCS staging 버킷** 에 악의적 파일 업로드 → "
-        f"**`{GCP_CF_BQLOAD}` Cloud Function** 이 그것을 **BigQuery** 에 무조건 "
-        "적재 → BQ 테이블 오염. 검증 신호: GCS 객체 수 비정상 급증 · bq-load "
-        "함수 실행 빈도 급증 · BQ 적재 row 갑작스런 spike · GCS 객체 크기 "
-        "분포 이상.\n\n"
-        "방어: bq-load 코드에 schema/source path/file size 검증 + signed URL "
-        "기반 업로드만 허용 + dead-letter 분리 필요. 본 패널은 비정상 신호를 "
-        "직관적으로 가시화 — 보안 알람 트리거 검증용.",
+        "SCN-09 · Entra OIDC 비정상 로그인 폭증 (보안 · brute force)",
+        "공격 시나리오: 동일/유사 사용자에 대한 **반복 로그인 실패** "
+        "(brute force / credential stuffing). 검증 신호: SigninLogs `ResultType "
+        "!= 0` 실패 카운트 · 동일 UPN 반복 실패 top-N · 외부 IP 분포(비정상 "
+        "지역) · 시간대별(업무 외 시간 spike) · MFA 챌린지 통과/실패 비율 · "
+        "5분 윈도우 실패율 임계(> 10건/5min 알람).\n\n"
+        "데이터 소스: Azure Log Analytics `law-bookflowmj` · **SigninLogs** "
+        "테이블. ⚠️ 현재 Entra Diagnostic Settings 가 워크스페이스로 라우팅되어 "
+        "있지 않다 (#86 agent 확인) → 라우팅 설정 후 즉시 동작. 라우팅 전까지 "
+        "패널은 'No data' 로 표시.\n\n"
+        "방어: Conditional Access 정책으로 risky sign-in 차단 · MFA 강제 · IP "
+        "기반 named locations 제한 · sign-in risk policy 활성화.",
     )
 
 
-def _scn09_gcs_object_count():
-    """GCS staging 버킷 객체 수 — 비정상 급증 감지."""
+def _scn09_signin_attempts_timeseries():
+    """SigninLogs 24h 시도 vs 실패 — 5분 윈도우 timeseries."""
+    # NOTE: KQL parser ASCII-only — 한글 alias 사용 시 SYN0002 발생.
+    kql = (
+        "SigninLogs "
+        "| summarize total=count(), failed=countif(ResultType!=0), "
+        "succeeded=countif(ResultType==0) "
+        "by bin(TimeGenerated, 5m) "
+        "| order by TimeGenerated asc"
+    )
     p = pb.timeseries_panel(
-        "GCS staging 버킷 · 객체 수 (급증 감지)",
+        "Entra Signin · 시도 vs 실패 (5m 윈도우)",
         unit="short",
         span=pb.SPAN_HALF,
         fill_opacity=20,
         description=(
-            "storage storage/object_count · 버킷별. 평시 대비 갑작스런 증가 = "
-            "공격자 업로드 의심. bq-load 가 그것을 BQ 로 흡수 전에 detect 해야."
+            "SigninLogs 5m bin · total / failed (ResultType!=0) / succeeded. "
+            "failed 곡선이 평시 baseline 위로 솟으면 brute force 의심. "
+            "⚠️ Entra Diagnostic Settings → law-bookflowmj 라우팅 필요 (현재 미수집)."
         ),
     )
-    return p.datasource(_gcp()).with_target(
-        _gcp_ts(
-            "storage.googleapis.com/storage/object_count",
-            aligner="ALIGN_MEAN", reducer="REDUCE_SUM",
-            group_bys=["resource.label.bucket_name"],
-            alias="{{resource.label.bucket_name}}",
-            alignment_period="+3600s",
-        )
+    return p.datasource(_azure()).with_target(
+        _azure_logs(kql, ResultFormat.TIME_SERIES)
     )
 
 
-def _scn09_gcs_total_bytes():
-    """GCS staging 버킷 객체 총 크기 — 큰 파일 업로드 감지."""
-    p = pb.timeseries_panel(
-        "GCS staging 버킷 · 총 바이트 (큰 파일 감지)",
-        unit="bytes",
+def _scn09_signin_failed_topn():
+    """동일 UPN 반복 실패 top-N — 사용자별 brute force 타겟."""
+    kql = (
+        "SigninLogs "
+        "| where ResultType != 0 "
+        "| summarize failed=count(), "
+        "distinct_ips=dcount(IPAddress), "
+        "last_seen=max(TimeGenerated) "
+        "by UserPrincipalName "
+        "| top 10 by failed "
+        "| order by failed desc"
+    )
+    p = pb.table_panel(
+        "동일 사용자 반복 실패 Top 10 (brute force 타겟)",
         span=pb.SPAN_HALF,
         description=(
-            "storage storage/total_bytes · 버킷별. 객체 수는 그대로인데 bytes "
-            "가 급증하면 큰 파일(악성 dump 등) 업로드 신호."
+            "SigninLogs ResultType!=0 · UPN 별 실패 카운트 / 사용 IP 수 / 최근 "
+            "시도 시각. 한 UPN 의 failed 가 급증하면서 distinct_ips 도 다수 → "
+            "credential stuffing 패턴."
         ),
     )
-    return p.datasource(_gcp()).with_target(
-        _gcp_ts(
-            "storage.googleapis.com/storage/total_bytes",
-            aligner="ALIGN_MEAN", reducer="REDUCE_SUM",
-            group_bys=["resource.label.bucket_name"],
-            alias="{{resource.label.bucket_name}}",
-            alignment_period="+3600s",
-        )
+    return p.datasource(_azure()).with_target(
+        _azure_logs(kql, ResultFormat.TABLE)
     )
 
 
-def _scn09_bqload_invocation_rate():
-    """bookflow-bq-load 실행 빈도 — 평시 baseline 대비 급증 감지."""
+def _scn09_signin_ip_distribution():
+    """외부 IP 분포 — 비정상 지역 / 다수 IP brute force."""
+    kql = (
+        "SigninLogs "
+        "| where ResultType != 0 "
+        "| summarize failed=count(), "
+        "users=dcount(UserPrincipalName) "
+        "by IPAddress, Location=tostring(LocationDetails.countryOrRegion) "
+        "| top 20 by failed "
+        "| order by failed desc"
+    )
+    p = pb.table_panel(
+        "Signin 실패 IP 분포 Top 20 (외부 IP · 지역)",
+        span=pb.SPAN_HALF,
+        description=(
+            "SigninLogs 실패 IP / 지역 분포. 비정상 지역(예: 평소 KR/JP 외 "
+            "IP 다수) · 단일 IP 가 여러 사용자 시도 = credential stuffing."
+        ),
+    )
+    return p.datasource(_azure()).with_target(
+        _azure_logs(kql, ResultFormat.TABLE)
+    )
+
+
+def _scn09_signin_mfa_ratio():
+    """MFA 챌린지 통과/실패 비율 — AuthenticationDetails 분석."""
+    # AuthenticationDetails 는 dynamic — has_cs / contains 로 안전 필터.
+    kql = (
+        "SigninLogs "
+        "| where tostring(AuthenticationDetails) contains 'MFA' "
+        "or tostring(AuthenticationRequirement) == 'multiFactorAuthentication' "
+        "| summarize mfa_total=count(), "
+        "mfa_passed=countif(ResultType==0), "
+        "mfa_failed=countif(ResultType!=0) "
+        "by bin(TimeGenerated, 15m) "
+        "| order by TimeGenerated asc"
+    )
     p = pb.timeseries_panel(
-        f"`{GCP_CF_BQLOAD}` 실행 빈도 (baseline vs spike)",
+        "MFA 챌린지 통과 vs 실패 (15m)",
         unit="short",
         span=pb.SPAN_HALF,
         description=(
-            "cloudfunctions execution_count · function_name="
-            f"{GCP_CF_BQLOAD}. 평시 baseline 대비 spike = 대량 staging 객체 "
-            "흡수 의심."
+            "SigninLogs 중 MFA 챌린지 발생 건 · 통과(ResultType==0) / 실패. "
+            "실패 비율 급증 시 MFA bypass 시도 의심. "
+            "⚠️ Diagnostic Settings 라우팅 필요."
         ),
     )
-    return p.datasource(_gcp()).with_target(
-        _gcp_ts(
-            "cloudfunctions.googleapis.com/function/execution_count",
-            aligner="ALIGN_SUM", reducer="REDUCE_SUM",
-            extra_filters=[f'resource.label.function_name="{GCP_CF_BQLOAD}"'],
-            alias="executions",
-        )
+    return p.datasource(_azure()).with_target(
+        _azure_logs(kql, ResultFormat.TIME_SERIES)
     )
 
 
-def _scn09_bq_uploaded_rows_spike():
-    """BQ 적재 row 추세 — bq-load 가 오염된 데이터를 흡수하면 spike."""
-    p = pb.timeseries_panel(
-        "BigQuery 적재 row 수 (오염 흡수 spike)",
-        unit="short",
-        span=pb.SPAN_HALF,
-        fill_opacity=20,
-        description=(
-            "bigquery storage/uploaded_row_count · ALIGN_SUM. bq-load 가 정상 "
-            "범위 외 row 수 흡수 시 평시 대비 spike — 오염 흡수 신호."
-        ),
+def _scn09_signin_threshold_stat():
+    """5분 윈도우 실패 임계 stat — > 10건/5min 알람."""
+    kql = (
+        "SigninLogs "
+        "| where TimeGenerated > ago(5m) "
+        "| where ResultType != 0 "
+        "| summarize failed_5min=count() "
+        "| project failed_5min"
     )
-    return p.datasource(_gcp()).with_target(
-        _gcp_ts(
-            "bigquery.googleapis.com/storage/uploaded_row_count",
-            aligner="ALIGN_SUM", reducer="REDUCE_SUM",
-            alias="uploaded rows",
-        )
-    )
-
-
-def _scn09_bqload_status_breakdown():
-    """bq-load status 분포 — error/timeout 비율 + ok 무조건 흡수 비율."""
-    p = pb.timeseries_panel(
-        f"`{GCP_CF_BQLOAD}` · status 분포 (검증 실패 비율)",
-        unit="short",
-        span=pb.SPAN_HALF,
-        fill_opacity=20,
-        description=(
-            "cloudfunctions execution_count · status 별 ALIGN_SUM. 정상 운영 "
-            "환경에서 status=error 가 0 이면 schema 검증 부재 = 무조건 흡수 "
-            "신호. 방어 로직 도입 시 error 율 ↑ (filter 작동)."
-        ),
-    )
-    return p.datasource(_gcp()).with_target(
-        _gcp_ts(
-            "cloudfunctions.googleapis.com/function/execution_count",
-            aligner="ALIGN_SUM", reducer="REDUCE_SUM",
-            group_bys=["metric.label.status"],
-            extra_filters=[f'resource.label.function_name="{GCP_CF_BQLOAD}"'],
-            alias="{{metric.label.status}}",
-        )
-    )
-
-
-def _scn09_validation_placeholder():
-    """SCN-09 placeholder — schema 검증 메트릭 (현재 없음).
-
-    bq-load 코드에 schema/path 검증 로직 추가 시 custom metric
-    `bookflow_bqload_validation_rejected` 를 발행해 여기서 추적. 현재는
-    placeholder + "환경상 비활성" annotation.
-    """
     p = pb.stat_panel(
-        "Schema 검증 거부 수 (방어 로직 카운터)",
+        "최근 5분 Signin 실패 카운트 (임계 > 10)",
         unit="short",
+        color_mode=pb.BigValueColorMode.VALUE,
+        # inverse threshold — 낮을수록 안전
+        thresholds=pb._thresholds(
+            [(None, pb.GREEN), (10, pb.YELLOW), (30, pb.RED)]
+        ),
         mappings=[_NODATA_MAP],
-        thresholds=pb._thresholds([(None, pb.YELLOW), (0, pb.GREEN), (1, pb.RED)]),
         graph_mode=BigValueGraphMode.NONE,
         span=pb.SPAN_QUARTER,
         description=(
-            "placeholder — bq-load schema 검증 거부 카운터. "
-            "현재 bq-load 코드에 검증 로직 없음 → custom metric 부재 → N/A. "
-            "방어 로직 도입 시 `bookflow_bqload_validation_rejected` push → 즉시 동작."
+            "SigninLogs ResultType!=0 · 최근 5분 합. > 10 = 경고 · > 30 = 위험. "
+            "brute force 의심 시 즉시 Conditional Access risk policy 적용 + "
+            "임시 잠금. ⚠️ Diagnostic Settings 라우팅 필요."
         ),
     )
-    # placeholder Prometheus query — 항상 vector(()) 일 가능성. 메트릭 없으면 N/A.
-    return p.datasource(_prom()).with_target(
-        _prom_q(
-            "sum(bookflow_bqload_validation_rejected) or vector(0)",
-            instant=True,
-            legend="rejected",
-        )
+    return p.datasource(_azure()).with_target(
+        _azure_logs(kql, ResultFormat.TABLE)
+    )
+
+
+def _scn09_signin_hourly_distribution():
+    """시간대별 sign-in 분포 — 업무 외 시간 spike 감지."""
+    kql = (
+        "SigninLogs "
+        "| extend Hour=hourofday(TimeGenerated) "
+        "| summarize total=count(), failed=countif(ResultType!=0) "
+        "by Hour "
+        "| order by Hour asc"
+    )
+    p = pb.timeseries_panel(
+        "시간대별 Signin 분포 (업무 외 시간 spike)",
+        unit="short",
+        span=pb.SPAN_HALF,
+        fill_opacity=20,
+        description=(
+            "SigninLogs hourofday 별 total/failed. 업무 시간(09-18 KST) 외 "
+            "시도가 평시 대비 많으면 자동화 봇 brute force 의심. "
+            "⚠️ Diagnostic Settings 라우팅 필요."
+        ),
+    )
+    return p.datasource(_azure()).with_target(
+        _azure_logs(kql, ResultFormat.TIME_SERIES)
     )
 
 
 # ════════════════════════════════════════════════════════════════════════
-# SCN-10 — EKS 파드 탈취 → GCP SA 키 유출 → VPN 우회 BQ 접근 (보안)
-#   EKS Pod 탈취 → Pod 의 GCP SA 키 유출 → 공격자가 VPN 우회하여 외부 IP 에서
-#   BigQuery 접근. 정상 트래픽은 VPN 내부 (10.x.x.x) 만 — 외부 IP 호출 = 즉시
-#   알람.
+# SCN-10 — Entra 권한 escalation 및 Conditional Access bypass 감사 (보안)
+#   AuditLogs RoleManagement / Conditional Access / ServicePrincipal 변경
+#   이벤트 + 의심 sign-in 후 success 패턴을 가시화. law-bookflowmj 에
+#   AuditLogs 라우팅 후 즉시 동작.
 # ════════════════════════════════════════════════════════════════════════
 def _scn10_intro():
     return _scn_intro(
-        "SCN-10 · EKS Pod 탈취 → SA 키 유출 → VPN 우회 BQ 접근 (보안)",
-        "공격자 시나리오: **EKS Pod 탈취** → Pod 가 보유한 **GCP SA 키** 유출 "
-        "→ 공격자가 **VPN 우회 외부 IP** 에서 BigQuery 호출. 정상 호출은 모두 "
-        "AWS↔GCP VPN 내부 (10.x.x.x 대역) 만 — 외부 IP 호출 = 알람.\n\n"
-        "검증 신호: Pod 비정상 outbound 트래픽 spike · BQ API 호출량 평시 대비 "
-        "spike · VPN 터널 DataOut 추세와 BQ 호출량 trend 의 detached(VPN 가만 "
-        "있는데 BQ 호출 급증 = VPN 우회 의심) · Pod Egress 트래픽 spike.\n\n"
-        "방어: VPC SC (Service Control) 로 BQ API 호출을 특정 IP 대역으로 제한 "
-        "+ SA 키 회전 자동화 + Pod Workload Identity 사용. 본 패널은 운영 가시화.",
+        "SCN-10 · Entra 권한 escalation · Conditional Access bypass 감사 (보안)",
+        "공격 시나리오: 탈취된 계정으로 **role/admin 권한 escalation** · "
+        "**Conditional Access 정책 변경** (bypass) · **ServicePrincipal** "
+        "생성/수정으로 backdoor 구축 · failed sign-in 후 success 패턴.\n\n"
+        "검증 신호: AuditLogs `Category == 'RoleManagement'` 24h 추세 · "
+        "신규 admin role 할당 (Add member to role · TargetResources contains "
+        "'admin') · Conditional Access 정책 변경 · ServicePrincipal "
+        "생성/credential 추가 · UPN 별 failed→success 패턴.\n\n"
+        "데이터 소스: Azure Log Analytics `law-bookflowmj` · **AuditLogs** · "
+        "**SigninLogs**. ⚠️ Entra Diagnostic Settings 가 워크스페이스로 "
+        "라우팅되어 있지 않다 → 라우팅 후 즉시 동작 (#86 agent 확인).\n\n"
+        "방어: Privileged Identity Management (PIM) · admin role JIT 활성화 · "
+        "Conditional Access 정책 변경 알람 · ServicePrincipal credential "
+        "rotation 강제.",
     )
 
 
-def _scn10_bq_query_volume():
-    """BQ 쿼리 호출량 추세 — 평시 대비 spike 감지."""
+def _scn10_audit_rolemanagement_timeseries():
+    """AuditLogs RoleManagement 24h timeseries — 권한 변경 이벤트 추세."""
+    kql = (
+        "AuditLogs "
+        "| where Category == 'RoleManagement' "
+        "| summarize total=count(), "
+        "added=countif(OperationName has 'Add'), "
+        "removed=countif(OperationName has 'Remove') "
+        "by bin(TimeGenerated, 15m) "
+        "| order by TimeGenerated asc"
+    )
     p = pb.timeseries_panel(
-        "BigQuery 쿼리 호출량 (평시 vs spike)",
+        "AuditLogs RoleManagement (15m · 추가/삭제)",
         unit="short",
         span=pb.SPAN_HALF,
         fill_opacity=20,
         description=(
-            "bigquery query/count · ALIGN_SUM. 정상 호출은 forecast pipeline · "
-            "Vertex 배치 등 정해진 패턴. 갑작스런 spike = 비정상 호출 의심."
+            "AuditLogs Category='RoleManagement' · Add* / Remove* 카운트. "
+            "비정상 시간대(업무 외) 또는 다수 발생 시 escalation 의심. "
+            "⚠️ Entra Diagnostic Settings 라우팅 필요 (현재 미수집)."
         ),
     )
-    return p.datasource(_gcp()).with_target(
-        _gcp_ts(
-            "bigquery.googleapis.com/query/count",
-            aligner="ALIGN_SUM", reducer="REDUCE_SUM",
-            alias="queries",
-        )
+    return p.datasource(_azure()).with_target(
+        _azure_logs(kql, ResultFormat.TIME_SERIES)
     )
 
 
-def _scn10_vpn_dataout():
-    """AWS↔GCP VPN DataOut — VPN 사용량 baseline.
-
-    VPN DataOut 이 평시 그대로인데 BQ 쿼리 호출량은 급증 = VPN 우회 신호.
-    """
-    p = pb.timeseries_panel(
-        "AWS↔GCP VPN · DataOut (VPN 우회 detection 기준선)",
-        unit="bytes",
+def _scn10_audit_admin_role_assignment():
+    """신규 admin role 할당 이벤트 table — TargetResources contains 'admin'."""
+    kql = (
+        "AuditLogs "
+        "| where Category == 'RoleManagement' "
+        "| where OperationName has 'Add member to role' "
+        "| where tostring(TargetResources) contains 'admin' "
+        "| project TimeGenerated, "
+        "Initiator=tostring(InitiatedBy.user.userPrincipalName), "
+        "Operation=OperationName, "
+        "Target=tostring(TargetResources), "
+        "Result "
+        "| order by TimeGenerated desc "
+        "| take 50"
+    )
+    p = pb.table_panel(
+        "신규 admin role 할당 이벤트 (최근 50)",
         span=pb.SPAN_HALF,
         description=(
-            "AWS/VPN TunnelDataOut · VpnId=" + VPN_AWS_GCP + ". 정상 BQ 호출은 "
-            "이 VPN 으로 흐른다 — VPN DataOut 평시인데 BQ 쿼리 spike = 외부 "
-            "직접 호출(VPN 우회) 신호."
+            "AuditLogs 'Add member to role' · TargetResources contains 'admin'. "
+            "Initiator / Operation / Target / Result 표시. 정상 운영 외 발생 = "
+            "긴급 검토. ⚠️ Diagnostic Settings 라우팅 필요."
         ),
     )
-    return p.datasource(_cw()).with_target(
-        _cw_metric("A", "AWS/VPN", "TunnelDataOut",
-                   {"VpnId": VPN_AWS_GCP}, stat="Sum", label="AWS↔GCP DataOut")
+    return p.datasource(_azure()).with_target(
+        _azure_logs(kql, ResultFormat.TABLE)
     )
 
 
-def _scn10_pod_egress():
-    """EKS Pod 비정상 outbound 트래픽 — cAdvisor network_transmit_bytes."""
-    p = pb.timeseries_panel(
-        "EKS Pod · Egress 트래픽 (Pod 탈취·외부 전송 감지)",
-        unit="Bps",
+def _scn10_audit_conditional_access_changes():
+    """Conditional Access 정책 변경 이벤트."""
+    kql = (
+        "AuditLogs "
+        "| where Category == 'Policy' "
+        "or OperationName has 'conditional access' "
+        "or OperationName has 'Conditional Access' "
+        "| project TimeGenerated, "
+        "Initiator=tostring(InitiatedBy.user.userPrincipalName), "
+        "Operation=OperationName, "
+        "Target=tostring(TargetResources), "
+        "Result "
+        "| order by TimeGenerated desc "
+        "| take 50"
+    )
+    p = pb.table_panel(
+        "Conditional Access 정책 변경 이벤트 (최근 50)",
         span=pb.SPAN_HALF,
         description=(
-            "sum by(pod) rate(container_network_transmit_bytes_total[5m]) — "
-            "cAdvisor. Pod 평시 패턴 대비 outbound 급증 = 데이터 유출/SA 키 "
-            "사용 의심. 특히 forecast/decision-svc 외 Pod 가 외부 전송하면 알람."
+            "AuditLogs Category='Policy' or OperationName contains 'conditional "
+            "access'. CA 정책 약화/삭제 = bypass 시도 의심. "
+            "⚠️ Diagnostic Settings 라우팅 필요."
         ),
     )
-    return p.datasource(_prom()).with_target(
-        _prom_q(
-            'sum by (pod) (rate(container_network_transmit_bytes_total{'
-            f'{BOOKFLOW_NS},pod!="",interface=~"eth.*"}}[5m]))',
-            legend="{{pod}}",
-        )
+    return p.datasource(_azure()).with_target(
+        _azure_logs(kql, ResultFormat.TABLE)
     )
 
 
-def _scn10_bq_vs_vpn_ratio():
-    """BQ 쿼리 / VPN DataOut 비율 — VPN 우회 신호.
-
-    VPN DataOut 은 그대로인데 BQ 쿼리 spike = 비율 급증 = 외부 직접 호출.
-    GCP / CloudWatch 데이터소스 mix 라 표시는 별도 timeseries 2개로.
-    """
+def _scn10_audit_serviceprincipal_events():
+    """ServicePrincipal 생성/수정 이벤트 — backdoor SP 생성 감지."""
+    kql = (
+        "AuditLogs "
+        "| where Category == 'ApplicationManagement' "
+        "or OperationName has 'service principal' "
+        "or OperationName has 'Service Principal' "
+        "| summarize created=countif(OperationName has 'Add service principal'), "
+        "updated=countif(OperationName has 'Update service principal'), "
+        "credential_added=countif(OperationName has 'credential') "
+        "by bin(TimeGenerated, 1h) "
+        "| order by TimeGenerated asc"
+    )
     p = pb.timeseries_panel(
-        "BQ 쿼리 vs VPN DataOut (detached = VPN 우회)",
+        "ServicePrincipal 생성·수정·credential 이벤트 (1h)",
         unit="short",
         span=pb.SPAN_HALF,
         fill_opacity=20,
         description=(
-            "왼쪽: BQ 쿼리 호출수 (GCP) — 오른쪽: VPN DataOut (CloudWatch). "
-            "두 곡선이 정상 시 동조 — 한쪽만 spike 면 VPN 우회 신호. "
-            "Grafana 라이브에선 패널 2개 같은 timerange 로 동기 비교."
+            "AuditLogs ApplicationManagement · SP 생성 / 수정 / credential 추가 "
+            "1h 집계. 정상 운영 외 SP 생성 = backdoor 의심. "
+            "⚠️ Diagnostic Settings 라우팅 필요."
         ),
     )
-    return p.datasource(_gcp()).with_target(
-        _gcp_ts(
-            "bigquery.googleapis.com/query/count",
-            aligner="ALIGN_SUM", reducer="REDUCE_SUM",
-            alias="BQ queries",
-        )
+    return p.datasource(_azure()).with_target(
+        _azure_logs(kql, ResultFormat.TIME_SERIES)
     )
 
 
-def _scn10_sa_audit_placeholder():
-    """SA 키 사용 audit — GCP Cloud Audit Logs (placeholder).
+def _scn10_failed_then_success_pattern():
+    """failed sign-in 후 sign-in success 패턴 — 동일 UPN 매칭."""
+    # SigninLogs join 으로 UPN 별 직전 N분 내 failed → success 추적.
+    # 단일 KQL summarize 로 UPN 별 failed/succeeded 카운트와 시간차 비교.
+    kql = (
+        "SigninLogs "
+        "| where TimeGenerated > ago(24h) "
+        "| summarize failed=countif(ResultType!=0), "
+        "succeeded=countif(ResultType==0), "
+        "first_failed=minif(TimeGenerated, ResultType!=0), "
+        "last_succeeded=maxif(TimeGenerated, ResultType==0) "
+        "by UserPrincipalName "
+        "| where failed > 5 and succeeded > 0 "
+        "| where last_succeeded > first_failed "
+        "| extend gap_min=datetime_diff('minute', last_succeeded, first_failed) "
+        "| project UserPrincipalName, failed, succeeded, gap_min, "
+        "first_failed, last_succeeded "
+        "| order by failed desc "
+        "| take 30"
+    )
+    p = pb.table_panel(
+        "failed → success 패턴 (24h · 의심 UPN)",
+        span=pb.SPAN_FULL,
+        description=(
+            "SigninLogs 24h · UPN 별 failed > 5 후 success 발생 사례. "
+            "gap_min = first failed → last success 시간(분). "
+            "brute force 끝에 성공한 의심 사례. "
+            "⚠️ Diagnostic Settings 라우팅 필요."
+        ),
+    )
+    return p.datasource(_azure()).with_target(
+        _azure_logs(kql, ResultFormat.TABLE)
+    )
 
-    GCP IAM 의 SA key 사용 audit 메트릭(`iam.googleapis.com/key/...`) 은
-    Cloud Monitoring 표준 메트릭으로 노출되지 않는다 (Cloud Audit Logs 의
-    `principalEmail` + `callerIp` 로 추적). Log-based metric 으로 변환 시
-    여기서 추적 가능 — 현재는 placeholder.
-    """
+
+def _scn10_audit_volume_stat():
+    """최근 1h AuditLogs 권한·정책 이벤트 합계 stat."""
+    kql = (
+        "AuditLogs "
+        "| where TimeGenerated > ago(1h) "
+        "| where Category in ('RoleManagement', 'Policy', 'ApplicationManagement') "
+        "| summarize events_1h=count() "
+        "| project events_1h"
+    )
     p = pb.stat_panel(
-        "SA 키 외부 IP 사용 카운트 (audit)",
+        "최근 1h 권한·정책·SP 이벤트 (>5 경고)",
         unit="short",
+        color_mode=pb.BigValueColorMode.VALUE,
+        # inverse threshold
+        thresholds=pb._thresholds(
+            [(None, pb.GREEN), (5, pb.YELLOW), (20, pb.RED)]
+        ),
         mappings=[_NODATA_MAP],
-        thresholds=pb._thresholds([(None, pb.YELLOW), (0, pb.GREEN), (1, pb.RED)]),
         graph_mode=BigValueGraphMode.NONE,
         span=pb.SPAN_QUARTER,
         description=(
-            "placeholder — GCP Cloud Audit Logs 의 SA 키 사용 audit 을 "
-            "log-based metric (e.g. `bookflow_sa_key_external_ip`) 으로 변환 "
-            "필요. callerIp 가 AWS VPC 10.x.x.x 대역 외인 경우 카운트. "
-            "현재 환경상 비활성 — log-based metric 도입 시 즉시 동작."
+            "AuditLogs RoleManagement + Policy + ApplicationManagement 1h 합계. "
+            "정상 운영 시 거의 0 — 갑작스런 다수 발생 = escalation/backdoor 의심. "
+            "⚠️ Diagnostic Settings 라우팅 필요."
         ),
     )
-    return p.datasource(_prom()).with_target(
-        _prom_q(
-            "sum(bookflow_sa_key_external_ip_count) or vector(0)",
-            instant=True,
-            legend="외부 IP 호출",
-        )
-    )
-
-
-def _scn10_pod_restart_anomaly():
-    """Pod 재시작 이상 — 탈취된 Pod 가 재시작 / crash loop / unusual exit code.
-
-    `changes(container_start_time_seconds[1h])` 평시 대비 급증 = 비정상 재시작
-    가능성. SCN-03 의 _scn03_pod_restarts() 와 다르게 SCN-10 은 보안 시그널로 본다.
-    """
-    p = pb.timeseries_panel(
-        "Pod 재시작 이상 (탈취·crash loop 신호)",
-        unit="short",
-        span=pb.SPAN_HALF,
-        fill_opacity=20,
-        description=(
-            "changes(container_start_time_seconds[1h]) by pod — 평시 대비 "
-            "급증 = 비정상 재시작. SCN-03 은 스케일링 시그널, SCN-10 은 보안 "
-            "시그널로 동일 메트릭을 다른 관점에서."
-        ),
-    )
-    return p.datasource(_prom()).with_target(
-        _prom_q(
-            f'changes(container_start_time_seconds{{{BOOKFLOW_NS},pod!=""}}[1h])',
-            legend="{{pod}}",
-        )
+    return p.datasource(_azure()).with_target(
+        _azure_logs(kql, ResultFormat.TABLE)
     )
 
 
@@ -1804,27 +1865,28 @@ def dashboard() -> Dashboard:
         .with_panel(_scn08_gcs_object_count())
         .with_panel(_scn08_bq_uploaded_rows())
         .with_panel(_scn08_bq_queries())
-        # ── SCN-09 GCS staging → BigQuery 데이터 오염 (보안) ──────────
+        # ── SCN-09 Entra OIDC 비정상 로그인 폭증 (보안) ───────────────
         .with_row(Row(
-            "Row 9 · SCN-09 — GCS staging → BigQuery 데이터 오염 (보안 시나리오)"
+            "Row 9 · SCN-09 — Entra OIDC 비정상 로그인 폭증 "
+            "(보안 · brute force / credential stuffing)"
         ))
         .with_panel(_scn09_intro())
-        .with_panel(_scn09_validation_placeholder())
-        .with_panel(_scn09_gcs_object_count())
-        .with_panel(_scn09_gcs_total_bytes())
-        .with_panel(_scn09_bqload_invocation_rate())
-        .with_panel(_scn09_bq_uploaded_rows_spike())
-        .with_panel(_scn09_bqload_status_breakdown())
-        # ── SCN-10 EKS Pod 탈취 → SA 키 유출 → VPN 우회 BQ 접근 (보안) ─
+        .with_panel(_scn09_signin_threshold_stat())
+        .with_panel(_scn09_signin_attempts_timeseries())
+        .with_panel(_scn09_signin_mfa_ratio())
+        .with_panel(_scn09_signin_hourly_distribution())
+        .with_panel(_scn09_signin_failed_topn())
+        .with_panel(_scn09_signin_ip_distribution())
+        # ── SCN-10 Entra 권한 escalation / CA bypass (보안) ───────────
         .with_row(Row(
-            "Row 9 · SCN-10 — EKS Pod 탈취 → GCP SA 키 유출 → VPN 우회 "
-            "BigQuery 접근 (보안 시나리오)"
+            "Row 9 · SCN-10 — Entra 권한 escalation · "
+            "Conditional Access bypass 감사 (보안 시나리오)"
         ))
         .with_panel(_scn10_intro())
-        .with_panel(_scn10_sa_audit_placeholder())
-        .with_panel(_scn10_bq_query_volume())
-        .with_panel(_scn10_vpn_dataout())
-        .with_panel(_scn10_pod_egress())
-        .with_panel(_scn10_bq_vs_vpn_ratio())
-        .with_panel(_scn10_pod_restart_anomaly())
+        .with_panel(_scn10_audit_volume_stat())
+        .with_panel(_scn10_audit_rolemanagement_timeseries())
+        .with_panel(_scn10_audit_serviceprincipal_events())
+        .with_panel(_scn10_audit_admin_role_assignment())
+        .with_panel(_scn10_audit_conditional_access_changes())
+        .with_panel(_scn10_failed_then_success_pattern())
     )
