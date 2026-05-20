@@ -197,20 +197,21 @@ def _ecs_running_tasks():
 
 
 def _ecs_cpu_mem():
-    """ECS CPU/메모리 사용률 — task 리소스 헬스."""
+    """ECS CPU/메모리 사용률 — task 리소스 헬스 (실 % 메트릭)."""
     p = pb.timeseries_panel(
         "ECS · CPU / 메모리 사용률",
         unit="percent",
-        description="ECS/ContainerInsights CpuUtilized·MemoryUtilized — 3 서비스.",
+        description="AWS/ECS CPUUtilization·MemoryUtilization (%) — 3 서비스. "
+                    "ContainerInsights 의 raw MiB/CPU units 아닌 표준 % 메트릭 사용.",
     )
     p = p.datasource(ds.ref(ds.CLOUDWATCH))
     for i, svc in enumerate(ECS_SERVICES):
         p = p.with_target(_metric(
-            f"C{i}", "ECS/ContainerInsights", "CpuUtilized",
+            f"C{i}", "AWS/ECS", "CPUUtilization",
             {"ClusterName": ECS_CLUSTER, "ServiceName": svc},
             stat="Average", label=f"{svc} CPU"))
         p = p.with_target(_metric(
-            f"M{i}", "ECS/ContainerInsights", "MemoryUtilized",
+            f"M{i}", "AWS/ECS", "MemoryUtilization",
             {"ClusterName": ECS_CLUSTER, "ServiceName": svc},
             stat="Average", label=f"{svc} Mem"))
     return p

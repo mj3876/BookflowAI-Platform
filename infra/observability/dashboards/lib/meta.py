@@ -15,7 +15,7 @@ TIMEZONE = "browser"
 
 # 운영 대시보드 기본 새로고침/시간창
 REFRESH = "30s"
-TIME_FROM = "now-6h"
+TIME_FROM = "now-24h"  # GCP/Azure 메트릭은 sparse 라 6h 윈도우엔 빈 패널 많음 — 24h 기본
 TIME_TO = "now"
 
 
