@@ -70,10 +70,11 @@ from lib import panels as pb
 from lib.meta import base_dashboard
 
 UID = "bookflow-ops-row9-resilience"
-TITLE = "BookFlow 운영 — 시연 시나리오 (SCN-01~08)"
+TITLE = "BookFlow 운영 — 시연 시나리오 (SCN-01~10)"
 DESCRIPTION = (
-    "시연 시나리오 8개 직관 검증. 각 시나리오마다 row 헤더 + 시나리오 설명 + "
-    "3~6 검증 패널. SCN-01/02 정상플로우 · SCN-03~08 장애 시나리오. 보안(09/10)은 별도."
+    "시연 시나리오 10개 직관 검증. 각 시나리오마다 row 헤더 + 시나리오 설명 + "
+    "3~7 검증 패널. SCN-01/02 정상플로우 · SCN-03~08 장애 시나리오 · "
+    "SCN-09/10 보안 시나리오."
 )
 
 # ── 라이브 좌표 ─────────────────────────────────────────────────────────
@@ -1383,8 +1384,335 @@ def _scn08_bq_queries():
 
 
 # ════════════════════════════════════════════════════════════════════════
+# SCN-09 — GCS 스테이징 버킷을 통한 BigQuery 데이터 오염 (보안)
+#   공격자가 GCS staging bucket 에 악의적 파일 업로드 → `bookflow-bq-load`
+#   Cloud Function 이 그것을 BigQuery 에 적재 → BQ 테이블 오염. filter/검증
+#   로직 부재 시 무방비 흡수. 본 row 는 비정상 신호 가시화.
+# ════════════════════════════════════════════════════════════════════════
+def _scn09_intro():
+    return _scn_intro(
+        "SCN-09 · GCS 스테이징 → BigQuery 데이터 오염 (보안)",
+        "공격자 시나리오: **GCS staging 버킷** 에 악의적 파일 업로드 → "
+        f"**`{GCP_CF_BQLOAD}` Cloud Function** 이 그것을 **BigQuery** 에 무조건 "
+        "적재 → BQ 테이블 오염. 검증 신호: GCS 객체 수 비정상 급증 · bq-load "
+        "함수 실행 빈도 급증 · BQ 적재 row 갑작스런 spike · GCS 객체 크기 "
+        "분포 이상.\n\n"
+        "방어: bq-load 코드에 schema/source path/file size 검증 + signed URL "
+        "기반 업로드만 허용 + dead-letter 분리 필요. 본 패널은 비정상 신호를 "
+        "직관적으로 가시화 — 보안 알람 트리거 검증용.",
+    )
+
+
+def _scn09_gcs_object_count():
+    """GCS staging 버킷 객체 수 — 비정상 급증 감지."""
+    p = pb.timeseries_panel(
+        "GCS staging 버킷 · 객체 수 (급증 감지)",
+        unit="short",
+        span=pb.SPAN_HALF,
+        fill_opacity=20,
+        description=(
+            "storage storage/object_count · 버킷별. 평시 대비 갑작스런 증가 = "
+            "공격자 업로드 의심. bq-load 가 그것을 BQ 로 흡수 전에 detect 해야."
+        ),
+    )
+    return p.datasource(_gcp()).with_target(
+        _gcp_ts(
+            "storage.googleapis.com/storage/object_count",
+            aligner="ALIGN_MEAN", reducer="REDUCE_SUM",
+            group_bys=["resource.label.bucket_name"],
+            alias="{{resource.label.bucket_name}}",
+            alignment_period="+3600s",
+        )
+    )
+
+
+def _scn09_gcs_total_bytes():
+    """GCS staging 버킷 객체 총 크기 — 큰 파일 업로드 감지."""
+    p = pb.timeseries_panel(
+        "GCS staging 버킷 · 총 바이트 (큰 파일 감지)",
+        unit="bytes",
+        span=pb.SPAN_HALF,
+        description=(
+            "storage storage/total_bytes · 버킷별. 객체 수는 그대로인데 bytes "
+            "가 급증하면 큰 파일(악성 dump 등) 업로드 신호."
+        ),
+    )
+    return p.datasource(_gcp()).with_target(
+        _gcp_ts(
+            "storage.googleapis.com/storage/total_bytes",
+            aligner="ALIGN_MEAN", reducer="REDUCE_SUM",
+            group_bys=["resource.label.bucket_name"],
+            alias="{{resource.label.bucket_name}}",
+            alignment_period="+3600s",
+        )
+    )
+
+
+def _scn09_bqload_invocation_rate():
+    """bookflow-bq-load 실행 빈도 — 평시 baseline 대비 급증 감지."""
+    p = pb.timeseries_panel(
+        f"`{GCP_CF_BQLOAD}` 실행 빈도 (baseline vs spike)",
+        unit="short",
+        span=pb.SPAN_HALF,
+        description=(
+            "cloudfunctions execution_count · function_name="
+            f"{GCP_CF_BQLOAD}. 평시 baseline 대비 spike = 대량 staging 객체 "
+            "흡수 의심."
+        ),
+    )
+    return p.datasource(_gcp()).with_target(
+        _gcp_ts(
+            "cloudfunctions.googleapis.com/function/execution_count",
+            aligner="ALIGN_SUM", reducer="REDUCE_SUM",
+            extra_filters=[f'resource.label.function_name="{GCP_CF_BQLOAD}"'],
+            alias="executions",
+        )
+    )
+
+
+def _scn09_bq_uploaded_rows_spike():
+    """BQ 적재 row 추세 — bq-load 가 오염된 데이터를 흡수하면 spike."""
+    p = pb.timeseries_panel(
+        "BigQuery 적재 row 수 (오염 흡수 spike)",
+        unit="short",
+        span=pb.SPAN_HALF,
+        fill_opacity=20,
+        description=(
+            "bigquery storage/uploaded_row_count · ALIGN_SUM. bq-load 가 정상 "
+            "범위 외 row 수 흡수 시 평시 대비 spike — 오염 흡수 신호."
+        ),
+    )
+    return p.datasource(_gcp()).with_target(
+        _gcp_ts(
+            "bigquery.googleapis.com/storage/uploaded_row_count",
+            aligner="ALIGN_SUM", reducer="REDUCE_SUM",
+            alias="uploaded rows",
+        )
+    )
+
+
+def _scn09_bqload_status_breakdown():
+    """bq-load status 분포 — error/timeout 비율 + ok 무조건 흡수 비율."""
+    p = pb.timeseries_panel(
+        f"`{GCP_CF_BQLOAD}` · status 분포 (검증 실패 비율)",
+        unit="short",
+        span=pb.SPAN_HALF,
+        fill_opacity=20,
+        description=(
+            "cloudfunctions execution_count · status 별 ALIGN_SUM. 정상 운영 "
+            "환경에서 status=error 가 0 이면 schema 검증 부재 = 무조건 흡수 "
+            "신호. 방어 로직 도입 시 error 율 ↑ (filter 작동)."
+        ),
+    )
+    return p.datasource(_gcp()).with_target(
+        _gcp_ts(
+            "cloudfunctions.googleapis.com/function/execution_count",
+            aligner="ALIGN_SUM", reducer="REDUCE_SUM",
+            group_bys=["metric.label.status"],
+            extra_filters=[f'resource.label.function_name="{GCP_CF_BQLOAD}"'],
+            alias="{{metric.label.status}}",
+        )
+    )
+
+
+def _scn09_validation_placeholder():
+    """SCN-09 placeholder — schema 검증 메트릭 (현재 없음).
+
+    bq-load 코드에 schema/path 검증 로직 추가 시 custom metric
+    `bookflow_bqload_validation_rejected` 를 발행해 여기서 추적. 현재는
+    placeholder + "환경상 비활성" annotation.
+    """
+    p = pb.stat_panel(
+        "Schema 검증 거부 수 (방어 로직 카운터)",
+        unit="short",
+        mappings=[_NODATA_MAP],
+        thresholds=pb._thresholds([(None, pb.YELLOW), (0, pb.GREEN), (1, pb.RED)]),
+        graph_mode=BigValueGraphMode.NONE,
+        span=pb.SPAN_QUARTER,
+        description=(
+            "placeholder — bq-load schema 검증 거부 카운터. "
+            "현재 bq-load 코드에 검증 로직 없음 → custom metric 부재 → N/A. "
+            "방어 로직 도입 시 `bookflow_bqload_validation_rejected` push → 즉시 동작."
+        ),
+    )
+    # placeholder Prometheus query — 항상 vector(()) 일 가능성. 메트릭 없으면 N/A.
+    return p.datasource(_prom()).with_target(
+        _prom_q(
+            "sum(bookflow_bqload_validation_rejected) or vector(0)",
+            instant=True,
+            legend="rejected",
+        )
+    )
+
+
+# ════════════════════════════════════════════════════════════════════════
+# SCN-10 — EKS 파드 탈취 → GCP SA 키 유출 → VPN 우회 BQ 접근 (보안)
+#   EKS Pod 탈취 → Pod 의 GCP SA 키 유출 → 공격자가 VPN 우회하여 외부 IP 에서
+#   BigQuery 접근. 정상 트래픽은 VPN 내부 (10.x.x.x) 만 — 외부 IP 호출 = 즉시
+#   알람.
+# ════════════════════════════════════════════════════════════════════════
+def _scn10_intro():
+    return _scn_intro(
+        "SCN-10 · EKS Pod 탈취 → SA 키 유출 → VPN 우회 BQ 접근 (보안)",
+        "공격자 시나리오: **EKS Pod 탈취** → Pod 가 보유한 **GCP SA 키** 유출 "
+        "→ 공격자가 **VPN 우회 외부 IP** 에서 BigQuery 호출. 정상 호출은 모두 "
+        "AWS↔GCP VPN 내부 (10.x.x.x 대역) 만 — 외부 IP 호출 = 알람.\n\n"
+        "검증 신호: Pod 비정상 outbound 트래픽 spike · BQ API 호출량 평시 대비 "
+        "spike · VPN 터널 DataOut 추세와 BQ 호출량 trend 의 detached(VPN 가만 "
+        "있는데 BQ 호출 급증 = VPN 우회 의심) · Pod Egress 트래픽 spike.\n\n"
+        "방어: VPC SC (Service Control) 로 BQ API 호출을 특정 IP 대역으로 제한 "
+        "+ SA 키 회전 자동화 + Pod Workload Identity 사용. 본 패널은 운영 가시화.",
+    )
+
+
+def _scn10_bq_query_volume():
+    """BQ 쿼리 호출량 추세 — 평시 대비 spike 감지."""
+    p = pb.timeseries_panel(
+        "BigQuery 쿼리 호출량 (평시 vs spike)",
+        unit="short",
+        span=pb.SPAN_HALF,
+        fill_opacity=20,
+        description=(
+            "bigquery query/count · ALIGN_SUM. 정상 호출은 forecast pipeline · "
+            "Vertex 배치 등 정해진 패턴. 갑작스런 spike = 비정상 호출 의심."
+        ),
+    )
+    return p.datasource(_gcp()).with_target(
+        _gcp_ts(
+            "bigquery.googleapis.com/query/count",
+            aligner="ALIGN_SUM", reducer="REDUCE_SUM",
+            alias="queries",
+        )
+    )
+
+
+def _scn10_vpn_dataout():
+    """AWS↔GCP VPN DataOut — VPN 사용량 baseline.
+
+    VPN DataOut 이 평시 그대로인데 BQ 쿼리 호출량은 급증 = VPN 우회 신호.
+    """
+    p = pb.timeseries_panel(
+        "AWS↔GCP VPN · DataOut (VPN 우회 detection 기준선)",
+        unit="bytes",
+        span=pb.SPAN_HALF,
+        description=(
+            "AWS/VPN TunnelDataOut · VpnId=" + VPN_AWS_GCP + ". 정상 BQ 호출은 "
+            "이 VPN 으로 흐른다 — VPN DataOut 평시인데 BQ 쿼리 spike = 외부 "
+            "직접 호출(VPN 우회) 신호."
+        ),
+    )
+    return p.datasource(_cw()).with_target(
+        _cw_metric("A", "AWS/VPN", "TunnelDataOut",
+                   {"VpnId": VPN_AWS_GCP}, stat="Sum", label="AWS↔GCP DataOut")
+    )
+
+
+def _scn10_pod_egress():
+    """EKS Pod 비정상 outbound 트래픽 — cAdvisor network_transmit_bytes."""
+    p = pb.timeseries_panel(
+        "EKS Pod · Egress 트래픽 (Pod 탈취·외부 전송 감지)",
+        unit="Bps",
+        span=pb.SPAN_HALF,
+        description=(
+            "sum by(pod) rate(container_network_transmit_bytes_total[5m]) — "
+            "cAdvisor. Pod 평시 패턴 대비 outbound 급증 = 데이터 유출/SA 키 "
+            "사용 의심. 특히 forecast/decision-svc 외 Pod 가 외부 전송하면 알람."
+        ),
+    )
+    return p.datasource(_prom()).with_target(
+        _prom_q(
+            'sum by (pod) (rate(container_network_transmit_bytes_total{'
+            f'{BOOKFLOW_NS},pod!="",interface=~"eth.*"}}[5m]))',
+            legend="{{pod}}",
+        )
+    )
+
+
+def _scn10_bq_vs_vpn_ratio():
+    """BQ 쿼리 / VPN DataOut 비율 — VPN 우회 신호.
+
+    VPN DataOut 은 그대로인데 BQ 쿼리 spike = 비율 급증 = 외부 직접 호출.
+    GCP / CloudWatch 데이터소스 mix 라 표시는 별도 timeseries 2개로.
+    """
+    p = pb.timeseries_panel(
+        "BQ 쿼리 vs VPN DataOut (detached = VPN 우회)",
+        unit="short",
+        span=pb.SPAN_HALF,
+        fill_opacity=20,
+        description=(
+            "왼쪽: BQ 쿼리 호출수 (GCP) — 오른쪽: VPN DataOut (CloudWatch). "
+            "두 곡선이 정상 시 동조 — 한쪽만 spike 면 VPN 우회 신호. "
+            "Grafana 라이브에선 패널 2개 같은 timerange 로 동기 비교."
+        ),
+    )
+    return p.datasource(_gcp()).with_target(
+        _gcp_ts(
+            "bigquery.googleapis.com/query/count",
+            aligner="ALIGN_SUM", reducer="REDUCE_SUM",
+            alias="BQ queries",
+        )
+    )
+
+
+def _scn10_sa_audit_placeholder():
+    """SA 키 사용 audit — GCP Cloud Audit Logs (placeholder).
+
+    GCP IAM 의 SA key 사용 audit 메트릭(`iam.googleapis.com/key/...`) 은
+    Cloud Monitoring 표준 메트릭으로 노출되지 않는다 (Cloud Audit Logs 의
+    `principalEmail` + `callerIp` 로 추적). Log-based metric 으로 변환 시
+    여기서 추적 가능 — 현재는 placeholder.
+    """
+    p = pb.stat_panel(
+        "SA 키 외부 IP 사용 카운트 (audit)",
+        unit="short",
+        mappings=[_NODATA_MAP],
+        thresholds=pb._thresholds([(None, pb.YELLOW), (0, pb.GREEN), (1, pb.RED)]),
+        graph_mode=BigValueGraphMode.NONE,
+        span=pb.SPAN_QUARTER,
+        description=(
+            "placeholder — GCP Cloud Audit Logs 의 SA 키 사용 audit 을 "
+            "log-based metric (e.g. `bookflow_sa_key_external_ip`) 으로 변환 "
+            "필요. callerIp 가 AWS VPC 10.x.x.x 대역 외인 경우 카운트. "
+            "현재 환경상 비활성 — log-based metric 도입 시 즉시 동작."
+        ),
+    )
+    return p.datasource(_prom()).with_target(
+        _prom_q(
+            "sum(bookflow_sa_key_external_ip_count) or vector(0)",
+            instant=True,
+            legend="외부 IP 호출",
+        )
+    )
+
+
+def _scn10_pod_restart_anomaly():
+    """Pod 재시작 이상 — 탈취된 Pod 가 재시작 / crash loop / unusual exit code.
+
+    `changes(container_start_time_seconds[1h])` 평시 대비 급증 = 비정상 재시작
+    가능성. SCN-03 의 _scn03_pod_restarts() 와 다르게 SCN-10 은 보안 시그널로 본다.
+    """
+    p = pb.timeseries_panel(
+        "Pod 재시작 이상 (탈취·crash loop 신호)",
+        unit="short",
+        span=pb.SPAN_HALF,
+        fill_opacity=20,
+        description=(
+            "changes(container_start_time_seconds[1h]) by pod — 평시 대비 "
+            "급증 = 비정상 재시작. SCN-03 은 스케일링 시그널, SCN-10 은 보안 "
+            "시그널로 동일 메트릭을 다른 관점에서."
+        ),
+    )
+    return p.datasource(_prom()).with_target(
+        _prom_q(
+            f'changes(container_start_time_seconds{{{BOOKFLOW_NS},pod!=""}}[1h])',
+            legend="{{pod}}",
+        )
+    )
+
+
+# ════════════════════════════════════════════════════════════════════════
 def dashboard() -> Dashboard:
-    """Row 9 (시연 시나리오 SCN-01~08) 대시보드 빌더를 반환."""
+    """Row 9 (시연 시나리오 SCN-01~10) 대시보드 빌더를 반환."""
     return (
         base_dashboard(TITLE, UID, DESCRIPTION)
         # ── SCN-01 기존도서 정상플로우 ────────────────────────────────
@@ -1476,4 +1804,27 @@ def dashboard() -> Dashboard:
         .with_panel(_scn08_gcs_object_count())
         .with_panel(_scn08_bq_uploaded_rows())
         .with_panel(_scn08_bq_queries())
+        # ── SCN-09 GCS staging → BigQuery 데이터 오염 (보안) ──────────
+        .with_row(Row(
+            "Row 9 · SCN-09 — GCS staging → BigQuery 데이터 오염 (보안 시나리오)"
+        ))
+        .with_panel(_scn09_intro())
+        .with_panel(_scn09_validation_placeholder())
+        .with_panel(_scn09_gcs_object_count())
+        .with_panel(_scn09_gcs_total_bytes())
+        .with_panel(_scn09_bqload_invocation_rate())
+        .with_panel(_scn09_bq_uploaded_rows_spike())
+        .with_panel(_scn09_bqload_status_breakdown())
+        # ── SCN-10 EKS Pod 탈취 → SA 키 유출 → VPN 우회 BQ 접근 (보안) ─
+        .with_row(Row(
+            "Row 9 · SCN-10 — EKS Pod 탈취 → GCP SA 키 유출 → VPN 우회 "
+            "BigQuery 접근 (보안 시나리오)"
+        ))
+        .with_panel(_scn10_intro())
+        .with_panel(_scn10_sa_audit_placeholder())
+        .with_panel(_scn10_bq_query_volume())
+        .with_panel(_scn10_vpn_dataout())
+        .with_panel(_scn10_pod_egress())
+        .with_panel(_scn10_bq_vs_vpn_ratio())
+        .with_panel(_scn10_pod_restart_anomaly())
     )

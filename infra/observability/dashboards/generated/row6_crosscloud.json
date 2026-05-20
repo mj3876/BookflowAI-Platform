@@ -541,7 +541,78 @@
         "type": "cloudwatch",
         "uid": "cloudwatch"
       },
-      "description": "TGW attachment 별 BytesIn/Out (AWS/TransitGateway · Sum). attachment 활성·라우팅 정상 여부 대리 신호 — 라이브 7 attachment.",
+      "description": "트래픽이 관측된 TGW attachment 수 (SEARCH). 라이브 7개 — VPC 5 (bookflow-ai/ansible/sales-data/data/egress) + VPN 2 · Phase 3+ 활성.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 12,
+        "y": 7
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "expression": "SEARCH('{AWS/TransitGateway,TransitGateway,TransitGatewayAttachment} MetricName=\"BytesIn\"', 'Sum', 300)",
+          "id": "",
+          "label": "attachments",
+          "metricEditorMode": 0,
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "TGW attachment 수 (관측)",
+      "transparent": false,
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/TransitGateway BytesIn/Out · dimension={TransitGateway} 단일. 허브 전체 통과 트래픽 합계.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -558,7 +629,7 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
+        "x": 18,
         "y": 7
       },
       "options": {
@@ -580,8 +651,12 @@
             "type": "cloudwatch",
             "uid": "cloudwatch"
           },
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770"
+          },
           "id": "",
-          "label": "{{TransitGatewayAttachment}} In",
+          "label": "hub In",
+          "matchExact": true,
           "metricEditorMode": 0,
           "metricName": "BytesIn",
           "metricQueryType": 0,
@@ -597,8 +672,12 @@
             "type": "cloudwatch",
             "uid": "cloudwatch"
           },
+          "dimensions": {
+            "TransitGateway": "tgw-0098d5980c95a9770"
+          },
           "id": "",
-          "label": "{{TransitGatewayAttachment}} Out",
+          "label": "hub Out",
+          "matchExact": true,
           "metricEditorMode": 0,
           "metricName": "BytesOut",
           "metricQueryType": 0,
@@ -610,7 +689,7 @@
           "statistic": "Sum"
         }
       ],
-      "title": "TGW attachment 트래픽",
+      "title": "TGW 전체 트래픽 (허브 단위 · cross-AZ)",
       "transparent": false,
       "type": "timeseries"
     },
@@ -619,7 +698,7 @@
         "type": "cloudwatch",
         "uid": "cloudwatch"
       },
-      "description": "TGW PacketDropCountNoRoute(라우트 전파 누락) · PacketDropCountBlackhole(명시 차단). NoRoute>0 = 라우트 전파 실패.",
+      "description": "TGW attachment 별 BytesIn/Out (AWS/TransitGateway · Sum · SEARCH). attachment 활성·라우팅 정상 여부 대리 신호 — 라이브 7 attachment (VPC 5 + VPN 2).",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -629,7 +708,7 @@
             "lineWidth": 2,
             "showPoints": "never"
           },
-          "unit": "short"
+          "unit": "bytes"
         },
         "overrides": []
       },
@@ -658,10 +737,10 @@
             "type": "cloudwatch",
             "uid": "cloudwatch"
           },
+          "expression": "SEARCH('{AWS/TransitGateway,TransitGateway,TransitGatewayAttachment} MetricName=\"BytesIn\"', 'Sum', 300)",
           "id": "",
-          "label": "NoRoute",
+          "label": "{{TransitGatewayAttachment}} In",
           "metricEditorMode": 0,
-          "metricName": "PacketDropCountNoRoute",
           "metricQueryType": 0,
           "namespace": "AWS/TransitGateway",
           "period": "300",
@@ -675,10 +754,10 @@
             "type": "cloudwatch",
             "uid": "cloudwatch"
           },
+          "expression": "SEARCH('{AWS/TransitGateway,TransitGateway,TransitGatewayAttachment} MetricName=\"BytesOut\"', 'Sum', 300)",
           "id": "",
-          "label": "Blackhole",
+          "label": "{{TransitGatewayAttachment}} Out",
           "metricEditorMode": 0,
-          "metricName": "PacketDropCountBlackhole",
           "metricQueryType": 0,
           "namespace": "AWS/TransitGateway",
           "period": "300",
@@ -688,7 +767,7 @@
           "statistic": "Sum"
         }
       ],
-      "title": "TGW 라우트 드랍 (NoRoute / Blackhole)",
+      "title": "TGW attachment 트래픽 (Bytes In/Out)",
       "transparent": false,
       "type": "timeseries"
     },
@@ -697,47 +776,37 @@
         "type": "cloudwatch",
         "uid": "cloudwatch"
       },
-      "description": "트래픽이 관측된 TGW attachment 수 (SEARCH). 설계 6개 — VPC 4 + VPN 2 · Phase 3+ 활성.",
+      "description": "TGW attachment 별 PacketsIn/Out (AWS/TransitGateway · Sum · SEARCH). bytes 가 낮을 때도 packet rate 로 흐름 확인.",
       "fieldConfig": {
         "defaults": {
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
           },
           "unit": "short"
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 6,
-        "w": 6,
+        "h": 8,
+        "w": 12,
         "x": 12,
         "y": 15
       },
       "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "values": false
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
         },
-        "showPercentChange": false,
-        "textMode": "value",
-        "wideLayout": true
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
       },
       "repeatDirection": "h",
       "targets": [
@@ -746,9 +815,26 @@
             "type": "cloudwatch",
             "uid": "cloudwatch"
           },
-          "expression": "SEARCH('{AWS/TransitGateway,TransitGatewayAttachment} MetricName=\"BytesIn\"', 'Sum', 300)",
+          "expression": "SEARCH('{AWS/TransitGateway,TransitGateway,TransitGatewayAttachment} MetricName=\"PacketsIn\"', 'Sum', 300)",
           "id": "",
-          "label": "attachments",
+          "label": "{{TransitGatewayAttachment}} In",
+          "metricEditorMode": 0,
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "expression": "SEARCH('{AWS/TransitGateway,TransitGateway,TransitGatewayAttachment} MetricName=\"PacketsOut\"', 'Sum', 300)",
+          "id": "",
+          "label": "{{TransitGatewayAttachment}} Out",
           "metricEditorMode": 0,
           "metricQueryType": 0,
           "namespace": "AWS/TransitGateway",
@@ -759,9 +845,226 @@
           "statistic": "Sum"
         }
       ],
-      "title": "TGW attachment 수 (관측)",
+      "title": "TGW attachment 패킷 (In/Out)",
       "transparent": false,
-      "type": "stat"
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "TGW PacketDropCountNoRoute(라우트 전파 누락) · PacketDropCountBlackhole(명시 차단) · attachment 별 SEARCH. NoRoute>0 = 라우트 전파 실패.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 23
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "expression": "SEARCH('{AWS/TransitGateway,TransitGateway,TransitGatewayAttachment} MetricName=\"PacketDropCountNoRoute\"', 'Sum', 300)",
+          "id": "",
+          "label": "{{TransitGatewayAttachment}} NoRoute",
+          "metricEditorMode": 0,
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "expression": "SEARCH('{AWS/TransitGateway,TransitGateway,TransitGatewayAttachment} MetricName=\"PacketDropCountBlackhole\"', 'Sum', 300)",
+          "id": "",
+          "label": "{{TransitGatewayAttachment}} Blackhole",
+          "metricEditorMode": 0,
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "TGW 라우트 드랍 (NoRoute / Blackhole · attachment 별)",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "TGW BytesDropCountNoRoute · BytesDropCountBlackhole · attachment 별 SEARCH. 드랍 트래픽 규모(bytes) 가시화.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 23
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "expression": "SEARCH('{AWS/TransitGateway,TransitGateway,TransitGatewayAttachment} MetricName=\"BytesDropCountNoRoute\"', 'Sum', 300)",
+          "id": "",
+          "label": "{{TransitGatewayAttachment}} NoRoute",
+          "metricEditorMode": 0,
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "expression": "SEARCH('{AWS/TransitGateway,TransitGateway,TransitGatewayAttachment} MetricName=\"BytesDropCountBlackhole\"', 'Sum', 300)",
+          "id": "",
+          "label": "{{TransitGatewayAttachment}} Blackhole",
+          "metricEditorMode": 0,
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "TGW 바이트 드랍 (NoRoute / Blackhole · attachment 별)",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "AWS/TransitGateway PacketDropCountTTLExpired · attachment 별 SEARCH. > 0 지속 시 라우팅 루프 의심.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 31
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "expression": "SEARCH('{AWS/TransitGateway,TransitGateway,TransitGatewayAttachment} MetricName=\"PacketDropCountTTLExpired\"', 'Sum', 300)",
+          "id": "",
+          "label": "{{TransitGatewayAttachment}} TTL",
+          "metricEditorMode": 0,
+          "metricQueryType": 0,
+          "namespace": "AWS/TransitGateway",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "TGW TTL 만료 드랍 (라우팅 루프 신호)",
+      "transparent": false,
+      "type": "timeseries"
     }
   ],
   "refresh": "30s",
