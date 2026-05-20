@@ -158,27 +158,28 @@ def _bq_table_rows() -> object:
 
 
 def _bq_uploaded_rows() -> object:
-    """BigQuery 적재 row 수 추세 — 최신 적재 확인용.
+    """BigQuery 7d 적재 row 수 합계 (sparse 메트릭 → stat + time_from 7d 오버라이드).
 
     메트릭: bigquery.googleapis.com/storage/uploaded_row_count (DELTA).
-    라이브 확인: OK · 데이터 반환 (3 pts / 7d · streaming/load insert 시점만).
-    추세상 마지막 데이터 포인트 시각 = 최신 적재 시각.
+    데이터 sparse (7d 동안 ~3 datapoints) — 대시보드 기본 24h 윈도우엔 거의
+    안 보임. 패널-레벨 time_from = "now-7d" 로 7d 윈도우 지정 + stat 합산.
     """
-    panel = pb.timeseries_panel(
-        "BigQuery 적재 row 수 (최신 적재)",
+    panel = pb.stat_panel(
+        "BigQuery 7d 적재 row 합계",
         unit="short",
+        thresholds=pb._thresholds([(None, pb.BLUE), (1, pb.GREEN)]),
         span=pb.SPAN_QUARTER,
-        fill_opacity=20,
         description=(
-            "bigquery storage/uploaded_row_count · ALIGN_SUM. "
-            "마지막 포인트 시각이 최신 적재 시각."
+            "bigquery storage/uploaded_row_count · 7d 합계. "
+            "DELTA 메트릭 — 적재 이벤트 발생 시점만 publish. 0=적재 없음(blue)."
         ),
-    )
+    ).time_from("now-7d")
     return panel.datasource(ds.ref(ds.GCP_MONITORING)).with_target(
         _ts_query(
             "bigquery.googleapis.com/storage/uploaded_row_count",
             aligner="ALIGN_SUM", reducer="REDUCE_SUM",
-            alias="적재 row",
+            alias="7d 적재 row",
+            alignment_period="+3600s",
         )
     )
 
@@ -244,19 +245,15 @@ def _cf_executions() -> object:
 
 
 def _cf_errors() -> object:
-    """Cloud Functions 에러 호출 수 — status 라벨이 'ok' 아닌 호출.
-
-    메트릭: cloudfunctions.googleapis.com/function/execution_count.
-    동일 메트릭을 status!=ok 필터로 좁혀 에러만 집계.
-    """
-    panel = pb.timeseries_panel(
-        "Cloud Functions 에러 호출 (3개)",
+    """Cloud Functions 에러 호출 수 (24h · stat · 0=green=정상)."""
+    panel = pb.stat_panel(
+        "Cloud Functions 에러 (24h)",
         unit="short",
+        thresholds=pb._thresholds([(None, pb.GREEN), (1, pb.RED)]),
         span=pb.SPAN_HALF,
-        fill_opacity=20,
         description=(
-            "cloudfunctions function/execution_count · status!=ok 필터. "
-            "함수별 실패 호출 수."
+            "cloudfunctions function/execution_count · status!=ok · 함수별. "
+            "0 = 정상(green) · ≥1 = 실패(red)."
         ),
     )
     return panel.datasource(ds.ref(ds.GCP_MONITORING)).with_target(

@@ -222,42 +222,52 @@
         "type": "stackdriver",
         "uid": "gcp-monitoring"
       },
-      "description": "bigquery storage/uploaded_row_count · ALIGN_SUM. 마지막 포인트 시각이 최신 적재 시각.",
+      "description": "bigquery storage/uploaded_row_count · 7d 합계. DELTA 메트릭 — 적재 이벤트 발생 시점만 publish. 0=적재 없음(blue).",
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 20,
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "showPoints": "never"
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
           },
           "unit": "short"
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 6,
         "w": 6,
         "x": 6,
         "y": 9
       },
       "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
         },
-        "tooltip": {
-          "mode": "single",
-          "sort": "asc"
-        }
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
       },
       "repeatDirection": "h",
       "targets": [
         {
-          "aliasBy": "적재 row",
+          "aliasBy": "7d 적재 row",
           "datasource": {
             "type": "stackdriver",
             "uid": "gcp-monitoring"
@@ -265,7 +275,7 @@
           "queryType": "timeSeriesList",
           "refId": "",
           "timeSeriesList": {
-            "alignmentPeriod": "+300s",
+            "alignmentPeriod": "+3600s",
             "crossSeriesReducer": "REDUCE_SUM",
             "filters": [
               "metric.type=\"bigquery.googleapis.com/storage/uploaded_row_count\""
@@ -275,9 +285,10 @@
           }
         }
       ],
-      "title": "BigQuery 적재 row 수 (최신 적재)",
+      "timeFrom": "now-7d",
+      "title": "BigQuery 7d 적재 row 합계",
       "transparent": false,
-      "type": "timeseries"
+      "type": "stat"
     },
     {
       "datasource": {
@@ -411,37 +422,47 @@
         "type": "stackdriver",
         "uid": "gcp-monitoring"
       },
-      "description": "cloudfunctions function/execution_count · status!=ok 필터. 함수별 실패 호출 수.",
+      "description": "cloudfunctions function/execution_count · status!=ok · 함수별. 0 = 정상(green) · ≥1 = 실패(red).",
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 20,
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "showPoints": "never"
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
           },
           "unit": "short"
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 6,
         "w": 12,
         "x": 12,
         "y": 17
       },
       "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
         },
-        "tooltip": {
-          "mode": "single",
-          "sort": "asc"
-        }
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
       },
       "repeatDirection": "h",
       "targets": [
@@ -467,9 +488,9 @@
           }
         }
       ],
-      "title": "Cloud Functions 에러 호출 (3개)",
+      "title": "Cloud Functions 에러 (24h)",
       "transparent": false,
-      "type": "timeseries"
+      "type": "stat"
     },
     {
       "datasource": {
