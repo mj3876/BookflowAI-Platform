@@ -453,25 +453,43 @@ def _alb_targets():
 
 # ── CodePipeline ────────────────────────────────────────────────────────
 def _codepipeline_status():
-    """CodePipeline 3종 실행 추세 (24h · PipelineDuration timeseries).
+    """CodePipeline 3종 24h 실행 횟수 (SampleCount of PipelineDuration).
 
-    각 데이터포인트 = 한 번의 실행. Y축 = duration(초). 실행 없는 pipeline 은
-    series 자체가 비어 그래프에 안 보인다 — "빨간 빈 박스" 대신 시각적으로
-    어느 pipeline 이 언제 돌았는지가 보임. 누적 실행 수는 별도 패널.
+    sparse 데이터(하루 1-6회)는 timeseries 로는 안 보여 stat 으로 표시.
+    threshold: 0 = 대기(blue) · ≥1 = 활동(green). 실패는 별도 panel.
     """
-    p = pb.timeseries_panel(
-        "CodePipeline · 실행 추세 (24h · Duration)",
-        unit="s",
+    p = pb.stat_panel(
+        "CodePipeline · 24h 실행 횟수",
+        unit="short",
+        mappings=[],
+        thresholds=pb._thresholds([(None, pb.BLUE), (1, pb.GREEN)]),
         description=(
-            "AWS/CodePipeline PipelineDuration — 데이터포인트 = 1회 실행 · "
-            "Y=초. cp-eks · cp-ecs · publisher-bg 3종."
+            "AWS/CodePipeline PipelineDuration SampleCount = 24h 실행 횟수. "
+            "cp-eks · cp-ecs · publisher-bg. 0 = 대기(blue), ≥1 = 활동(green)."
         ),
     )
     p = p.datasource(ds.ref(ds.CLOUDWATCH))
     for i, pl in enumerate(CODEPIPELINES):
         p = p.with_target(_metric(
             f"P{i}", "AWS/CodePipeline", "PipelineDuration",
-            {"Pipeline": pl}, stat="Average", label=pl))
+            {"Pipeline": pl}, stat="SampleCount", label=pl))
+    return p
+
+
+def _codepipeline_last_duration():
+    """CodePipeline 마지막 실행 duration (Maximum 24h · 초)."""
+    p = pb.stat_panel(
+        "CodePipeline · 마지막 Duration (24h · max sec)",
+        unit="s",
+        mappings=[],
+        thresholds=pb._thresholds([(None, pb.GREEN), (300, pb.YELLOW), (600, pb.RED)]),
+        description="AWS/CodePipeline PipelineDuration 최댓값(24h). 5분<green<10분<yellow<red",
+    )
+    p = p.datasource(ds.ref(ds.CLOUDWATCH))
+    for i, pl in enumerate(CODEPIPELINES):
+        p = p.with_target(_metric(
+            f"D{i}", "AWS/CodePipeline", "PipelineDuration",
+            {"Pipeline": pl}, stat="Maximum", label=pl))
     return p
 
 
@@ -592,6 +610,7 @@ def dashboard() -> Dashboard:
         .with_panel(_alb_5xx())
         .with_panel(_alb_targets())
         .with_panel(_codepipeline_status())
+        .with_panel(_codepipeline_last_duration())
         .with_panel(_codepipeline_failures())
         # ── CloudTrail ─────────────────────────────────────────────────
         .with_row(Row("Row 1 · AWS — CloudTrail (감사)"))
