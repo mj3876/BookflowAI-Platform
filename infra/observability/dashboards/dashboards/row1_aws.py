@@ -481,7 +481,7 @@ def _codepipeline_failures():
         "CodePipeline · 24h 실패 횟수",
         unit="short",
         mappings=[],
-        thresholds=_thresholds_inverse_health(),
+        thresholds=pb._thresholds([(None, pb.GREEN), (1, pb.RED)]),
         description=(
             "AWS/CodePipeline FailedPipelineExecutions Sum 24h. "
             "0 = 정상(green) · ≥1 = 실패(red)."
@@ -493,21 +493,6 @@ def _codepipeline_failures():
             f"F{i}", "AWS/CodePipeline", "FailedPipelineExecutions",
             {"Pipeline": pl}, stat="Sum", label=pl))
     return p
-
-
-def _thresholds_inverse_health():
-    """0 = green / ≥1 = red. health_thresholds 와 반대 — 실패 메트릭용."""
-    from grafana_foundation_sdk.models.common import (
-        Threshold, ThresholdsConfig, ThresholdsMode,
-    )
-    return (
-        ThresholdsConfig()
-        .mode(ThresholdsMode.ABSOLUTE)
-        .steps([
-            Threshold(value=None, color=pb.GREEN),
-            Threshold(value=1, color=pb.RED),
-        ])
-    )
 
 
 # ── CloudTrail (CloudWatch Logs) ────────────────────────────────────────
