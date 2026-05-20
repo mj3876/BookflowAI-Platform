@@ -123,10 +123,11 @@ def _entra_signins() -> object:
     AAD 진단설정에서 SignInLogs 를 이 워크스페이스로 보내면 본 패널이 즉시
     동작한다. 그 전까지 KQL 은 SigninLogs 부재 시 빈 시리즈를 반환한다.
     """
+    # NOTE: KQL parser는 ASCII 컬럼명만 허용 — 한글 alias 사용 시
+    # SYN0002 "Query could not be parsed at '성'" 으로 400. ASCII 로 작성.
     kql = (
         "SigninLogs "
-        "| where TimeGenerated > ago(6h) "
-        "| summarize 성공=countif(ResultType==0), 실패=countif(ResultType!=0) "
+        "| summarize succeeded=countif(ResultType==0), failed=countif(ResultType!=0) "
         "by bin(TimeGenerated, 15m) "
         "| order by TimeGenerated asc"
     )
@@ -152,17 +153,18 @@ def _logic_apps_table() -> object:
     개별 Logic App 메트릭(RunsCompleted 등)은 리소스당 1개씩이라 6개를 한
     표로 못 보므로, 진단 로그 KQL pivot 으로 전 워크플로를 한눈에 본다.
     """
+    # NOTE: KQL parser ASCII-only — 컬럼명을 ASCII 로 두고 Grafana 표시에서만
+    # 한글로 매핑. ago() 도 dashboardTime=true 가 Grafana 시간창을 주입하므로 제거.
     kql = (
         "AzureDiagnostics "
         "| where ResourceProvider == 'MICROSOFT.LOGIC' "
-        "| where TimeGenerated > ago(6h) "
-        "| summarize 실행=count(), "
-        "성공=countif(status_s=='Succeeded'), "
-        "실패=countif(status_s=='Failed'), "
-        "실행중=countif(status_s=='Running'), "
-        "스킵=countif(status_s=='Skipped') "
-        "by 워크플로=resource_workflowName_s "
-        "| order by 실패 desc, 실행 desc"
+        "| summarize runs=count(), "
+        "succeeded=countif(status_s=='Succeeded'), "
+        "failed=countif(status_s=='Failed'), "
+        "running=countif(status_s=='Running'), "
+        "skipped=countif(status_s=='Skipped') "
+        "by workflow=resource_workflowName_s "
+        "| order by failed desc, runs desc"
     )
     panel = pb.table_panel(
         "Logic Apps 워크플로 실행 현황 (6개)",
@@ -186,12 +188,12 @@ def _logic_runs_timeseries() -> object:
     개별 워크플로 메트릭을 6번 합치는 대신, 진단 로그에서 status 별
     시계열로 집계해 전체 실행 흐름을 본다.
     """
+    # ASCII column names (KQL parser limitation).
     kql = (
         "AzureDiagnostics "
         "| where ResourceProvider == 'MICROSOFT.LOGIC' "
-        "| where TimeGenerated > ago(6h) "
-        "| summarize 완료=countif(status_s=='Succeeded'), "
-        "실패=countif(status_s=='Failed') "
+        "| summarize succeeded=countif(status_s=='Succeeded'), "
+        "failed=countif(status_s=='Failed') "
         "by bin(TimeGenerated, 15m) "
         "| order by TimeGenerated asc"
     )
@@ -207,24 +209,24 @@ def _logic_runs_timeseries() -> object:
 
 
 def _mail_success_rate() -> object:
-    """notification Logic App 메일 발송 성공률 (%).
+    """Logic Apps 전체 워크플로 성공률 (%).
 
-    la-bookflowmj-notification 의 RunsSucceeded / RunsCompleted 비율.
-    Azure Monitor 메트릭만으로는 비율 산정이 안 되므로 진단 로그에서
-    이 워크플로의 성공/완료를 세어 발송률을 계산한다.
+    원래 la-bookflowmj-notification 단일 워크플로 발송률만 봤으나, 데모 시점에
+    notification 은 0 runs(휴면) 이라 항상 N/A 였다. 6 개 워크플로 전체의
+    Succeeded/(Succeeded+Failed) 로 일반화해 항상 데이터가 보이게 한다.
+    notification 단독 메트릭은 Logic Apps 표 패널에서 행별로 이미 확인 가능.
     """
+    # ASCII column names (KQL parser limitation).
     kql = (
         "AzureDiagnostics "
         "| where ResourceProvider == 'MICROSOFT.LOGIC' "
-        f"| where resource_workflowName_s == '{NOTIFICATION_WORKFLOW}' "
-        "| where TimeGenerated > ago(6h) "
         "| where status_s in ('Succeeded','Failed') "
-        "| summarize 성공=countif(status_s=='Succeeded'), 총건=count() "
-        "| extend 발송률 = iff(총건==0, real(null), round(100.0*성공/총건, 1)) "
-        "| project 발송률"
+        "| summarize succeeded=countif(status_s=='Succeeded'), total=count() "
+        "| extend rate = iff(total==0, real(null), round(100.0*succeeded/total, 1)) "
+        "| project rate"
     )
     panel = pb.gauge_panel(
-        "메일 발송 성공률 (notification)",
+        "Logic Apps 성공률 (6개 합계)",
         unit="percent",
         thresholds=pb.availability_thresholds(),
         minimum=0,
@@ -232,8 +234,9 @@ def _mail_success_rate() -> object:
         span=pb.SPAN_QUARTER,
         decimals=1,
         description=(
-            "la-bookflowmj-notification 발송 성공률. "
-            "AzureDiagnostics 성공/(성공+실패) · 6h."
+            "Logic Apps 6개 워크플로 전체 성공률. "
+            "AzureDiagnostics Succeeded/(Succeeded+Failed). "
+            "notification 단독 발송률은 위 표에서 행별 확인."
         ),
     )
     return panel.datasource(ds.ref(ds.AZURE_MONITOR)).with_target(
