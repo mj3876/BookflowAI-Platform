@@ -77,6 +77,7 @@ def _ts_query(
         .query_type("timeSeriesList")
         .time_series_list(tsl)
         .datasource(ds.ref(ds.GCP_MONITORING))
+        .ref_id("A")  # Grafana 가 빈 refId 패널 렌더 못 함 — 명시
     )
     if alias:
         q = q.alias_by(alias)

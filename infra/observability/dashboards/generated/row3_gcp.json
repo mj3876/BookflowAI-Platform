@@ -64,7 +64,7 @@
             "uid": "gcp-monitoring"
           },
           "queryType": "timeSeriesList",
-          "refId": "",
+          "refId": "A",
           "timeSeriesList": {
             "alignmentPeriod": "+300s",
             "crossSeriesReducer": "REDUCE_SUM",
@@ -129,7 +129,7 @@
             "uid": "gcp-monitoring"
           },
           "queryType": "timeSeriesList",
-          "refId": "",
+          "refId": "A",
           "timeSeriesList": {
             "alignmentPeriod": "+300s",
             "crossSeriesReducer": "REDUCE_MEAN",
@@ -201,7 +201,7 @@
             "uid": "gcp-monitoring"
           },
           "queryType": "timeSeriesList",
-          "refId": "",
+          "refId": "A",
           "timeSeriesList": {
             "alignmentPeriod": "+300s",
             "crossSeriesReducer": "REDUCE_SUM",
@@ -273,7 +273,7 @@
             "uid": "gcp-monitoring"
           },
           "queryType": "timeSeriesList",
-          "refId": "",
+          "refId": "A",
           "timeSeriesList": {
             "alignmentPeriod": "+3600s",
             "crossSeriesReducer": "REDUCE_SUM",
@@ -336,7 +336,7 @@
             "uid": "gcp-monitoring"
           },
           "queryType": "timeSeriesList",
-          "refId": "",
+          "refId": "A",
           "timeSeriesList": {
             "alignmentPeriod": "+300s",
             "crossSeriesReducer": "REDUCE_SUM",
@@ -398,7 +398,7 @@
             "uid": "gcp-monitoring"
           },
           "queryType": "timeSeriesList",
-          "refId": "",
+          "refId": "A",
           "timeSeriesList": {
             "alignmentPeriod": "+300s",
             "crossSeriesReducer": "REDUCE_SUM",
@@ -473,7 +473,7 @@
             "uid": "gcp-monitoring"
           },
           "queryType": "timeSeriesList",
-          "refId": "",
+          "refId": "A",
           "timeSeriesList": {
             "alignmentPeriod": "+300s",
             "crossSeriesReducer": "REDUCE_SUM",
@@ -538,7 +538,7 @@
             "uid": "gcp-monitoring"
           },
           "queryType": "timeSeriesList",
-          "refId": "",
+          "refId": "A",
           "timeSeriesList": {
             "alignmentPeriod": "+300s",
             "crossSeriesReducer": "REDUCE_SUM",
@@ -603,7 +603,7 @@
             "uid": "gcp-monitoring"
           },
           "queryType": "timeSeriesList",
-          "refId": "",
+          "refId": "A",
           "timeSeriesList": {
             "alignmentPeriod": "+3600s",
             "crossSeriesReducer": "REDUCE_SUM",
@@ -678,7 +678,7 @@
             "uid": "gcp-monitoring"
           },
           "queryType": "timeSeriesList",
-          "refId": "",
+          "refId": "A",
           "timeSeriesList": {
             "alignmentPeriod": "+3600s",
             "crossSeriesReducer": "REDUCE_SUM",
