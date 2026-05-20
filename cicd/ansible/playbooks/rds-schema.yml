@@ -82,7 +82,10 @@
         label: "{{ item.source | basename }}"
       no_log: true
 
-    - name: Verify table count (expect 19)
+    # base 19 (001_tables.sql) + schema_versions (migrations/001_init.sql 메타테이블)
+    # = 최소 20. 향후 migration 이 신규 테이블 추가해도 통과 (drift 잡는 의미는 ">= base"
+    # 로 유지). 빠진 base 테이블이 있으면 sub-20 으로 떨어져 fail.
+    - name: Verify table count (>= 20 · base 19 + schema_versions)
       community.postgresql.postgresql_query:
         login_host: "{{ db_host }}"
         login_port: "{{ db_port }}"
@@ -98,9 +101,9 @@
 
     - name: Show table count
       ansible.builtin.debug:
-        msg: "Tables in public schema: {{ table_count.query_result[0].n }}"
+        msg: "Tables in public schema: {{ table_count.query_result[0].n }} (expected >= 20)"
 
-    - name: Fail if table count != 19
+    - name: Fail if table count < 20
       ansible.builtin.fail:
-        msg: "Expected 19 tables, got {{ table_count.query_result[0].n }}"
-      when: table_count.query_result[0].n | int != 19
+        msg: "Expected >= 20 tables (19 base + schema_versions), got {{ table_count.query_result[0].n }}"
+      when: table_count.query_result[0].n | int < 20
