@@ -41,21 +41,79 @@ FEATURE_COLUMNS = [
 ]
 
 
-def predict_policy(model, frame: pd.DataFrame) -> tuple[np.ndarray, int]:
+def model_predict(model, frame: pd.DataFrame) -> np.ndarray:
+    if isinstance(model, dict) and model.get("type") == "weighted_ensemble":
+        predictions = []
+        for name, member in model["models"].items():
+            predictions.append(float(model["weights"][name]) * np.asarray(member.predict(frame), dtype=float))
+        return np.sum(predictions, axis=0)
+    return np.asarray(model.predict(frame), dtype=float)
+
+
+def predict_policy(model, metadata: dict, frame: pd.DataFrame) -> tuple[np.ndarray, int]:
     segment = frame["demand_segment"].fillna("low")
-    high_mask = segment.eq("high").to_numpy()
-    medium_mask = segment.eq("medium").to_numpy()
+    policy = metadata.get("policy") or {}
+    model_segments = set(policy.get("model_segments") or metadata.get("model_segments") or ["high"])
+    medium_policy = policy.get("medium") or metadata.get("medium_policy") or "ma7"
+    low_policy = policy.get("low") or metadata.get("low_policy") or "ma28"
+    multipliers = policy.get("segment_multipliers") or metadata.get("segment_multipliers") or {}
+    group_multipliers = policy.get("group_multipliers") or metadata.get("group_multipliers") or []
+    model_mask = segment.isin(model_segments).to_numpy()
     pred = np.zeros(len(frame), dtype=float)
     start = time.perf_counter()
-    if high_mask.any():
-        pred[high_mask] = np.clip(model.predict(frame.loc[high_mask, FEATURE_COLUMNS]), 0, None)
+    if model_mask.any():
+        pred[model_mask] = np.clip(model_predict(model, frame.loc[model_mask, FEATURE_COLUMNS]), 0, None)
     inference_ms = int((time.perf_counter() - start) * 1000)
+
+    medium_mask = segment.eq("medium").to_numpy() & ~model_mask
     if medium_mask.any():
-        pred[medium_mask] = frame.loc[medium_mask, "qty_rolling_7d"].fillna(0).to_numpy(dtype=float)
-    low_mask = ~(high_mask | medium_mask)
+        source = "qty_rolling_7d" if medium_policy == "ma7" else "qty_rolling_28d"
+        pred[medium_mask] = frame.loc[medium_mask, source].fillna(0).to_numpy(dtype=float)
+
+    low_mask = segment.eq("low").to_numpy() & ~model_mask
     if low_mask.any():
-        pred[low_mask] = frame.loc[low_mask, "qty_rolling_28d"].fillna(0).to_numpy(dtype=float)
+        source = "qty_rolling_7d" if low_policy == "ma7" else "qty_rolling_28d"
+        pred[low_mask] = frame.loc[low_mask, source].fillna(0).to_numpy(dtype=float)
+
+    other_mask = ~(model_mask | medium_mask | low_mask)
+    if other_mask.any():
+        pred[other_mask] = frame.loc[other_mask, "qty_rolling_28d"].fillna(0).to_numpy(dtype=float)
+
+    for demand_segment, multiplier in multipliers.items():
+        mask = segment.eq(demand_segment).to_numpy()
+        if mask.any():
+            pred[mask] *= float(multiplier)
+    for rule in group_multipliers:
+        column = rule.get("column")
+        if not column or column not in frame.columns:
+            continue
+        mask = segment.eq(str(rule.get("segment"))).to_numpy()
+        mask &= frame[column].astype(str).eq(str(rule.get("value"))).to_numpy()
+        if mask.any():
+            pred[mask] *= float(rule.get("multiplier", 1.0))
     return np.clip(pred, 0, None), inference_ms
+
+
+def confidence_bounds(pred: np.ndarray, metadata: dict, frame: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+    policy = metadata.get("policy") or {}
+    multipliers = policy.get("segment_multipliers") or metadata.get("segment_multipliers") or {}
+    segment = frame["demand_segment"].fillna("low")
+    low = np.asarray(pred, dtype=float) * 0.75
+    high = np.asarray(pred, dtype=float) * 1.25
+    if metadata.get("calibrate_for_order") and multipliers:
+        low = np.asarray(pred, dtype=float).copy()
+        high = np.asarray(pred, dtype=float).copy()
+        for demand_segment, multiplier in multipliers.items():
+            mask = segment.eq(demand_segment).to_numpy()
+            if mask.any():
+                safe_multiplier = max(float(multiplier), 1.0)
+                low[mask] = pred[mask] / safe_multiplier
+                high[mask] = pred[mask] * min(1.18, 1.0 + ((safe_multiplier - 1.0) / 3.0))
+        other_mask = ~segment.isin(multipliers.keys()).to_numpy()
+        if other_mask.any():
+            low[other_mask] = pred[other_mask] * 0.75
+            high[other_mask] = pred[other_mask] * 1.25
+    return np.maximum(low, 0), np.maximum(high, 0)
 
 
 def main() -> None:
@@ -77,7 +135,8 @@ def main() -> None:
     if missing:
         raise ValueError(f"Input CSV missing required columns: {missing}")
 
-    pred, inference_ms = predict_policy(model, frame)
+    pred, inference_ms = predict_policy(model, metadata, frame)
+    confidence_low, confidence_high = confidence_bounds(pred, metadata, frame)
     out = pd.DataFrame(
         {
             "prediction_date": frame["prediction_date"],
@@ -85,8 +144,8 @@ def main() -> None:
             "isbn13": frame["isbn13"].astype(str),
             "store_id": frame["store_id"].astype(int),
             "predicted_demand": np.round(pred, 6),
-            "confidence_low": np.round(np.maximum(pred * 0.75, 0), 6),
-            "confidence_high": np.round(pred * 1.25, 6),
+            "confidence_low": np.round(confidence_low, 6),
+            "confidence_high": np.round(confidence_high, 6),
             "model_version": model_version,
             "inference_ms": inference_ms,
         }
