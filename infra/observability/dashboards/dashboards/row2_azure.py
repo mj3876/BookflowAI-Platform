@@ -2,7 +2,7 @@
 
 Notion 설계 (365b4343-5916-81e3-82e1-f49ed2951cbb · §4 Row 2) 기준:
   - Entra ID: auth-pod OIDC 로그인 성공/실패
-  - Logic Apps ×12: 실행·성공/실패 (notification 메일 발송률)
+  - Logic Apps ×6: 실행·성공/실패 (notification 메일 발송률)
   - Function App: 호출·에러
   - Event Grid: 이벤트 처리 수
   - Key Vault: 접근·시크릿 만료 임박
@@ -15,7 +15,12 @@ Notion 설계 (365b4343-5916-81e3-82e1-f49ed2951cbb · §4 Row 2) 기준:
 메트릭은 라이브 Azure Monitor 의 metricDefinitions 로 실재 확인했다.
 Logic Apps 전체 현황은 단일 메트릭으로 표현 불가하므로 Log Analytics
 워크스페이스(law-bookflowmj)의 AzureDiagnostics(WorkflowRuntime) 를
-KQL 로 집계해 12개 워크플로를 한 표로 보여준다.
+KQL 로 집계해 6개 워크플로를 한 표로 보여준다.
+
+NOTE: 표에 표시되려면 각 워크플로에 diagnosticSettings(WorkflowRuntime →
+law-bookflowmj)이 설정되어 있어야 한다. Consumption 3개
+(approval-request·stock-depart·stock-arrival) 의 진단 설정은
+infra/azure/modules/logicapp-consumption-diag.bicep 으로 IaC 화 되어 있다.
 
 새 Row 모듈 패턴(README §"새 Row 추가 패턴")을 따른다:
   1. lib.meta.base_dashboard() 로 시작
@@ -40,7 +45,7 @@ from lib.meta import base_dashboard
 UID = "bookflow-ops-row2-azure"
 TITLE = "BookFlow 운영 — Azure"
 DESCRIPTION = (
-    "Azure Monitor 기반 Azure 리소스 운영 현황. Logic Apps 12개 실행/메일 발송률 · "
+    "Azure Monitor 기반 Azure 리소스 운영 현황. Logic Apps 6개 실행/메일 발송률 · "
     "Function App 호출·에러 · Event Grid 이벤트 · Key Vault 접근/가용성. "
     "rg-bookflow (subscription e98a94bb-…). Entra OIDC 로그인은 §하단 노트 참조."
 )
@@ -139,12 +144,12 @@ def _entra_signins() -> object:
     )
 
 
-# ── Logic Apps ×12 ─────────────────────────────────────────────────────
+# ── Logic Apps ×6 ──────────────────────────────────────────────────────
 def _logic_apps_table() -> object:
-    """Logic Apps 12개 워크플로 실행 현황 — 성공/실패/실행중/스킵 카운트.
+    """Logic Apps 6개 워크플로 실행 현황 — 성공/실패/실행중/스킵 카운트.
 
     AzureDiagnostics(MICROSOFT.LOGIC · WorkflowRuntime) 를 워크플로별로 집계.
-    개별 Logic App 메트릭(RunsCompleted 등)은 리소스당 1개씩이라 12개를 한
+    개별 Logic App 메트릭(RunsCompleted 등)은 리소스당 1개씩이라 6개를 한
     표로 못 보므로, 진단 로그 KQL pivot 으로 전 워크플로를 한눈에 본다.
     """
     kql = (
@@ -160,11 +165,14 @@ def _logic_apps_table() -> object:
         "| order by 실패 desc, 실행 desc"
     )
     panel = pb.table_panel(
-        "Logic Apps 워크플로 실행 현황 (12개)",
+        "Logic Apps 워크플로 실행 현황 (6개)",
         span=pb.SPAN_HALF,
         description=(
             "AzureDiagnostics WorkflowRuntime 6h 집계. 워크플로별 실행/성공/"
-            "실패/실행중/스킵. 실패 많은 순 정렬."
+            "실패/실행중/스킵. 실패 많은 순 정렬. "
+            "주의: diagnosticSettings(WorkflowRuntime → law-bookflowmj) 미설정 "
+            "워크플로는 본 표에 표시되지 않는다. Consumption 3개는 "
+            "logicapp-consumption-diag.bicep 으로 IaC 화."
         ),
     )
     return panel.datasource(ds.ref(ds.AZURE_MONITOR)).with_target(
@@ -175,7 +183,7 @@ def _logic_apps_table() -> object:
 def _logic_runs_timeseries() -> object:
     """Logic Apps 전체 실행 추세 — 완료 vs 실패 (전 워크플로 합계).
 
-    개별 워크플로 메트릭을 12번 합치는 대신, 진단 로그에서 status 별
+    개별 워크플로 메트릭을 6번 합치는 대신, 진단 로그에서 status 별
     시계열로 집계해 전체 실행 흐름을 본다.
     """
     kql = (
@@ -188,7 +196,7 @@ def _logic_runs_timeseries() -> object:
         "| order by TimeGenerated asc"
     )
     panel = pb.timeseries_panel(
-        "Logic Apps 실행 추세 (완료/실패 · 12개 합계)",
+        "Logic Apps 실행 추세 (완료/실패 · 6개 합계)",
         unit="short",
         span=pb.SPAN_HALF,
         description="AzureDiagnostics WorkflowRuntime — 전 워크플로 status 별 15m 집계.",
@@ -363,7 +371,7 @@ def dashboard() -> Dashboard:
         .with_row(Row("Row 2 · Azure (Azure Monitor)"))
         # Entra OIDC 로그인
         .with_panel(_entra_signins())
-        # Logic Apps ×12
+        # Logic Apps ×6
         .with_panel(_logic_runs_timeseries())
         .with_panel(_logic_apps_table())
         .with_panel(_mail_success_rate())
