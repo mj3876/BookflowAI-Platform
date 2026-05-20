@@ -65,7 +65,6 @@ def _predict_policy(frame: pd.DataFrame) -> tuple[np.ndarray, int]:
     medium_policy = POLICY.get("medium") or METADATA.get("medium_policy") or "ma7"
     low_policy = POLICY.get("low") or METADATA.get("low_policy") or "ma28"
     multipliers = POLICY.get("segment_multipliers") or METADATA.get("segment_multipliers") or {}
-    group_multipliers = POLICY.get("group_multipliers") or METADATA.get("group_multipliers") or []
     model_mask = segment.isin(model_segments).to_numpy()
     pred = np.zeros(len(frame), dtype=float)
     start = time.perf_counter()
@@ -91,14 +90,6 @@ def _predict_policy(frame: pd.DataFrame) -> tuple[np.ndarray, int]:
         mask = segment.eq(demand_segment).to_numpy()
         if mask.any():
             pred[mask] *= float(multiplier)
-    for rule in group_multipliers:
-        column = rule.get("column")
-        if not column or column not in frame.columns:
-            continue
-        mask = segment.eq(str(rule.get("segment"))).to_numpy()
-        mask &= frame[column].astype(str).eq(str(rule.get("value"))).to_numpy()
-        if mask.any():
-            pred[mask] *= float(rule.get("multiplier", 1.0))
     return np.clip(pred, 0, None), elapsed_ms
 
 
