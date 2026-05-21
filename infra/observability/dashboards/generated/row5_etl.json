@@ -1273,7 +1273,7 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "BucketName": "bookflow-mart-994878981869",
+            "BucketName": "bookflow-mart-__AWS_ACCOUNT__",
             "StorageType": "AllStorageTypes"
           },
           "id": "",
@@ -1339,7 +1339,7 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "BucketName": "bookflow-mart-994878981869",
+            "BucketName": "bookflow-mart-__AWS_ACCOUNT__",
             "StorageType": "StandardStorage"
           },
           "id": "",
@@ -1405,7 +1405,7 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "BucketName": "bookflow-raw-994878981869",
+            "BucketName": "bookflow-raw-__AWS_ACCOUNT__",
             "StorageType": "AllStorageTypes"
           },
           "id": "",

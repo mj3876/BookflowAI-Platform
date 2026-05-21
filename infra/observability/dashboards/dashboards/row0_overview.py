@@ -15,8 +15,16 @@ Notion 설계 (365b4343-5916-81e3-82e1-f49ed2951cbb · §4 Row 0) 기준:
   4. dashboard(...) 함수 하나를 export (build.py 가 호출)
 """
 
+from grafana_foundation_sdk.builders.cloudwatch import (
+    CloudWatchMetricsQuery as CWQuery,
+)
 from grafana_foundation_sdk.builders.dashboard import Dashboard, Row
 from grafana_foundation_sdk.builders.prometheus import Dataquery as PromQuery
+from grafana_foundation_sdk.models.cloudwatch import (
+    CloudWatchQueryMode,
+    MetricEditorMode,
+    MetricQueryType,
+)
 from grafana_foundation_sdk.models.common import (
     BigValueColorMode,
     BigValueGraphMode,
@@ -123,29 +131,37 @@ def _gcp_health() -> object:
     )
 
 
-# ── 비용 게이지 (3사 합계 vs $203) ──────────────────────────────────────
+# ── 비용 게이지 (AWS Cost Explorer · 실측) ─────────────────────────────
 def _cost_gauge() -> object:
-    """3사 비용 합계 — 이번 달 누적 vs $203 예산.
+    """AWS 비용 — 이번 달 누적 vs $203 예산.
 
-    비용 메트릭(Cost Explorer/Cost Management/Billing)이 Prometheus 로
-    노출되기 전 단계: 패널 골격만 확정. 메트릭명 `bookflow_cloud_cost_usd`
-    (3사 합계 push)이 들어오면 그대로 동작한다.
+    Bookflow/Cost EstimatedMonthlyCost (bookflow-cost-publisher Lambda 가
+    Cost Explorer GetCostAndUsage → CloudWatch PutMetricData publish · 1h cron).
+    Azure/GCP exporter 추가 시 통합 합계로 확장.
     """
     panel = pb.gauge_panel(
-        "3사 비용 (이번 달 누적)",
+        "AWS 비용 (이번 달 누적)",
         unit="currencyUSD",
         thresholds=pb.budget_thresholds(MONTHLY_BUDGET),
         minimum=0,
         maximum=MONTHLY_BUDGET,
         span=pb.SPAN_QUARTER,
         decimals=0,
-        description=f"AWS+Azure+GCP 월 누적 비용 vs ${MONTHLY_BUDGET:.0f} 예산",
+        description=f"AWS Cost Explorer 월 누적 vs ${MONTHLY_BUDGET:.0f} 예산 (Azure/GCP exporter 추가 예정)",
     )
-    return panel.datasource(ds.ref(ds.PROMETHEUS)).with_target(
-        PromQuery().datasource(ds.ref(ds.PROMETHEUS))
-        .expr("sum(bookflow_cloud_cost_usd) or vector(0)")
-        .instant()
-        .legend_format("3사 합계")
+    return panel.datasource(ds.ref(ds.CLOUDWATCH)).with_target(
+        CWQuery()
+        .datasource(ds.ref(ds.CLOUDWATCH))
+        .query_mode(CloudWatchQueryMode.METRICS)
+        .metric_query_type(MetricQueryType.SEARCH)
+        .metric_editor_mode(MetricEditorMode.BUILDER)
+        .region("ap-northeast-1")
+        .namespace("Bookflow/Cost")
+        .metric_name("EstimatedMonthlyCost")
+        .dimensions({"Cloud": "AWS"})
+        .statistic("Maximum")
+        .period("3600")
+        .label("AWS 누적")
     )
 
 

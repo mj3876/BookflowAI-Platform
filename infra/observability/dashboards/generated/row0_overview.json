@@ -384,10 +384,10 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
       },
-      "description": "AWS+Azure+GCP 월 누적 비용 vs $203 예산",
+      "description": "AWS Cost Explorer 월 누적 vs $203 예산 (Azure/GCP exporter 추가 예정)",
       "fieldConfig": {
         "defaults": {
           "decimals": 0,
@@ -438,17 +438,26 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
           },
-          "expr": "sum(bookflow_cloud_cost_usd) or vector(0)",
-          "instant": true,
-          "legendFormat": "3사 합계",
-          "range": false,
-          "refId": ""
+          "dimensions": {
+            "Cloud": "AWS"
+          },
+          "id": "",
+          "label": "AWS 누적",
+          "metricEditorMode": 0,
+          "metricName": "EstimatedMonthlyCost",
+          "metricQueryType": 0,
+          "namespace": "Bookflow/Cost",
+          "period": "3600",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Maximum"
         }
       ],
-      "title": "3사 비용 (이번 달 누적)",
+      "title": "AWS 비용 (이번 달 누적)",
       "transparent": false,
       "type": "gauge"
     },

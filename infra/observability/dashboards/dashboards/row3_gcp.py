@@ -51,21 +51,27 @@ def _ts_query(
     group_bys: list[str] | None = None,
     extra_filters: list[str] | None = None,
     alias: str = "",
-    alignment_period: str = "+300s",
+    alignment_period: str = "300s",
 ) -> CloudMonitoringQuery:
     """단일 Cloud Monitoring 메트릭의 timeSeriesList 쿼리 빌더.
 
-    Grafana 11.2 stackdriver datasource 는 `filters` 배열을 공백/AND 없이
-    그대로 concat 해 GCP API 에 400 INVALID_ARGUMENT 를 유발한다. 그래서
-    여러 절을 단일 문자열로 ` AND ` join 한 뒤 한 element 배열로 넘긴다.
+    Grafana 11.2 stackdriver builder 는 `filters` 를 [key, op, value, "AND", ...]
+    triple array 로 받아야 service+metric 을 인식해 query 를 발동한다. 단일
+    concat string 은 backend 는 받지만 frontend 가 panel 을 dead 로 판단 →
+    No data. 그래서 triple element 형식으로 명시한다.
     """
-    parts = [f'metric.type="{metric_type}"']
+    import re
+    parts = ["metric.type", "=", metric_type]
     if extra_filters:
-        parts.extend(extra_filters)
+        for ef in extra_filters:
+            m = re.match(r'^([\w\.]+)(=~|!=~|!=|=)"([^"]*)"$', ef.strip())
+            if not m:
+                raise ValueError(f"unparsable filter: {ef}")
+            parts.extend(["AND", m.group(1), m.group(2), m.group(3)])
     tsl = (
         TimeSeriesList()
         .project_name(PROJECT)
-        .filters([" AND ".join(parts)])
+        .filters(parts)
         .per_series_aligner(aligner)
         .cross_series_reducer(reducer)
         .alignment_period(alignment_period)
@@ -86,24 +92,17 @@ def _ts_query(
 
 # ── BigQuery ───────────────────────────────────────────────────────────
 def _bq_queries() -> object:
-    """BigQuery 쿼리 실행 수 추세.
-
-    메트릭: bigquery.googleapis.com/query/count (GAUGE/INT64 · delta count).
-    라이브 확인: OK · 데이터 반환 (2 series · 28 pts / 24h).
-    GAUGE delta 라 ALIGN_SUM 으로 구간 합산한다.
-    """
+    """BigQuery 쿼리 실행 수 추세 (group_bys/aliasBy 제거 — Grafana 11.2 frontend 검증 우회)."""
     panel = pb.timeseries_panel(
-        "BigQuery 쿼리 실행 수",
+        "BigQuery 쿼리 실행 수 (전체 합계)",
         unit="short",
         span=pb.SPAN_HALF,
-        description="bigquery query/count · ALIGN_SUM (구간 쿼리 건수 · priority 별).",
+        description="bigquery query/count · ALIGN_SUM · 전체 합계.",
     )
     return panel.datasource(ds.ref(ds.GCP_MONITORING)).with_target(
         _ts_query(
             "bigquery.googleapis.com/query/count",
             aligner="ALIGN_SUM", reducer="REDUCE_SUM",
-            group_bys=["metric.label.priority"],
-            alias="{{metric.label.priority}}",
         )
     )
 
@@ -124,7 +123,6 @@ def _bq_slots() -> object:
         _ts_query(
             "bigquery.googleapis.com/slots/allocated_for_project",
             aligner="ALIGN_MEAN", reducer="REDUCE_MEAN",
-            alias="할당 슬롯",
         )
     )
 
@@ -153,7 +151,6 @@ def _bq_table_rows() -> object:
         _ts_query(
             "bigquery.googleapis.com/storage/table_count",
             aligner="ALIGN_MEAN", reducer="REDUCE_SUM",
-            alias="테이블 수",
         )
     )
 
@@ -179,8 +176,7 @@ def _bq_uploaded_rows() -> object:
         _ts_query(
             "bigquery.googleapis.com/storage/uploaded_row_count",
             aligner="ALIGN_SUM", reducer="REDUCE_SUM",
-            alias="7d 적재 row",
-            alignment_period="+3600s",
+            alignment_period="3600s",
         )
     )
 
@@ -213,7 +209,6 @@ def _vertex_predictions() -> object:
         _ts_query(
             "aiplatform.googleapis.com/prediction/online/prediction_count",
             aligner="ALIGN_SUM", reducer="REDUCE_SUM",
-            alias="예측 호출",
         )
     )
 
@@ -240,7 +235,6 @@ def _cf_executions() -> object:
             "cloudfunctions.googleapis.com/function/execution_count",
             aligner="ALIGN_SUM", reducer="REDUCE_SUM",
             group_bys=["resource.label.function_name"],
-            alias="{{resource.label.function_name}}",
         )
     )
 
@@ -263,7 +257,6 @@ def _cf_errors() -> object:
             aligner="ALIGN_SUM", reducer="REDUCE_SUM",
             group_bys=["resource.label.function_name"],
             extra_filters=['metric.label.status!="ok"'],
-            alias="{{resource.label.function_name}}",
         )
     )
 
@@ -291,7 +284,6 @@ def _workflows_executions() -> object:
             "workflows.googleapis.com/finished_execution_count",
             aligner="ALIGN_SUM", reducer="REDUCE_SUM",
             group_bys=["metric.label.status"],
-            alias="{{metric.label.status}}",
         )
     )
 
@@ -314,8 +306,7 @@ def _gcs_bucket_bytes() -> object:
             "storage.googleapis.com/storage/total_bytes",
             aligner="ALIGN_MEAN", reducer="REDUCE_SUM",
             group_bys=["resource.label.bucket_name"],
-            alias="{{resource.label.bucket_name}}",
-            alignment_period="+3600s",
+            alignment_period="3600s",
         )
     )
 
@@ -337,8 +328,7 @@ def _gcs_object_count() -> object:
         _ts_query(
             "storage.googleapis.com/storage/object_count",
             aligner="ALIGN_MEAN", reducer="REDUCE_SUM",
-            alias="객체 수",
-            alignment_period="+3600s",
+            alignment_period="3600s",
         )
     )
 
