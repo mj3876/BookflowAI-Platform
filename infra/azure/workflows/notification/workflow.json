@@ -148,15 +148,40 @@
         },
         "default": { "actions": {} }
       },
-      "Response": {
-        "description": "Switch 결과(성공/실패/스킵/타임아웃 무관)로 200 {result:ok} 반환.",
+      "Response_Success": {
         "type": "Response",
         "runAfter": {
-          "Switch_EventType": ["Succeeded", "Failed", "Skipped", "TimedOut"]
+          "Switch_EventType": ["Succeeded", "Skipped"]
         },
         "inputs": {
           "statusCode": 200,
           "body": { "result": "ok" }
+        }
+      },
+      "Response_Failed": {
+        "type": "Response",
+        "runAfter": {
+          "Switch_EventType": ["Failed"]
+        },
+        "inputs": {
+          "statusCode": 502,
+          "body": {
+            "result": "error",
+            "message": "ACS email delivery failed"
+          }
+        }
+      },
+      "Response_TimedOut": {
+        "type": "Response",
+        "runAfter": {
+          "Switch_EventType": ["TimedOut"]
+        },
+        "inputs": {
+          "statusCode": 504,
+          "body": {
+            "result": "timeout",
+            "message": "ACS email request timed out after retries"
+          }
         }
       }
     }

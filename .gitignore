@@ -136,5 +136,6 @@ etl/**/output/
 sa-key.json
 *-sa-key.json
 *.sa-key.json
+_token.env
 GoogleBigQueryJDBC42.jar
 *.jar
