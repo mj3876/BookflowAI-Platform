@@ -33,9 +33,9 @@ IID=$(aws ec2 describe-instances --region "$REGION" \
 echo "  instance: $IID · branch: $BRANCH · mode: $MODE ($SEQ)"
 
 # 노드에서 실행할 스크립트: 브랜치 동기화 후 playbook 순차 실행.
-# 특수문자(&& · ; · 따옴표)가 SSM 파라미터 파싱을 깨뜨리지 않도록 base64 로 전달.
+# SSM 은 root(HOME 없음)로 돌지만 repo/ansible 환경은 ubuntu 유저 소유 →
+# 아래 base64 스크립트를 `sudo -u ubuntu -H bash` 로 실행해 HOME·소유권·ansible.cfg 정합.
 NODE_SCRIPT="set -e
-git config --global --add safe.directory /opt/bookflow
 cd /opt/bookflow
 git fetch origin
 git checkout $BRANCH
@@ -53,7 +53,7 @@ B64=$(printf '%s' "$NODE_SCRIPT" | base64 | tr -d '\n')
 echo "== SSM send-command =="
 CID=$(aws ssm send-command --region "$REGION" --instance-ids "$IID" \
   --document-name "AWS-RunShellScript" \
-  --parameters commands="echo $B64 | base64 -d | bash" \
+  --parameters commands="echo $B64 | base64 -d | sudo -u ubuntu -H bash" \
   --timeout-seconds 1800 \
   --query "Command.CommandId" --output text)
 # fail-fast: 빈 CommandId 면 즉시 중단
