@@ -246,16 +246,22 @@ def _azure_logs(kql: str, result_format: ResultFormat) -> AzureMonitorQuery:
 
 def _gcp_ts(metric_type: str, *, aligner="ALIGN_SUM", reducer="REDUCE_SUM",
             group_bys=None, extra_filters=None, alias="",
-            alignment_period="+300s") -> CloudMonitoringQuery:
-    # Grafana 11.2 stackdriver datasource 는 `filters` 배열을 공백/AND 없이
-    # concat 해 400 INVALID_ARGUMENT 를 유발 → 단일 문자열 ` AND ` join 로 회피.
-    parts = [f'metric.type="{metric_type}"']
+            alignment_period="300s") -> CloudMonitoringQuery:
+    # Grafana 11.2 stackdriver builder 는 `filters` 를 [key, op, value, "AND", ...]
+    # triple array 형식으로 받아야 service+metric 을 인식 → query 발동.
+    # 단일 concat string 은 backend 받지만 frontend No data.
+    import re
+    parts = ["metric.type", "=", metric_type]
     if extra_filters:
-        parts.extend(extra_filters)
+        for ef in extra_filters:
+            m = re.match(r'^([\w\.]+)(=~|!=~|!=|=)"([^"]*)"$', ef.strip())
+            if not m:
+                raise ValueError(f"unparsable filter: {ef}")
+            parts.extend(["AND", m.group(1), m.group(2), m.group(3)])
     tsl = (
         TimeSeriesList()
         .project_name(GCP_PROJECT)
-        .filters([" AND ".join(parts)])
+        .filters(parts)
         .per_series_aligner(aligner)
         .cross_series_reducer(reducer)
         .alignment_period(alignment_period)
@@ -1267,7 +1273,6 @@ def _scn08_bqload_executions():
             aligner="ALIGN_SUM", reducer="REDUCE_SUM",
             group_bys=["metric.label.status"],
             extra_filters=[f'resource.label.function_name="{GCP_CF_BQLOAD}"'],
-            alias="{{metric.label.status}}",
         )
     )
 
@@ -1293,7 +1298,6 @@ def _scn08_bqload_errors_stat():
                 f'resource.label.function_name="{GCP_CF_BQLOAD}"',
                 'metric.label.status!="ok"',
             ],
-            alias="에러 호출",
         )
     )
 
@@ -1314,7 +1318,6 @@ def _scn08_bqload_execution_times():
             "cloudfunctions.googleapis.com/function/execution_times",
             aligner="ALIGN_PERCENTILE_95", reducer="REDUCE_MEAN",
             extra_filters=[f'resource.label.function_name="{GCP_CF_BQLOAD}"'],
-            alias="p95 실행시간",
         )
     )
 
@@ -1335,8 +1338,7 @@ def _scn08_gcs_object_count():
             "storage.googleapis.com/storage/object_count",
             aligner="ALIGN_MEAN", reducer="REDUCE_SUM",
             group_bys=["resource.label.bucket_name"],
-            alias="{{resource.label.bucket_name}}",
-            alignment_period="+3600s",
+            alignment_period="3600s",
         )
     )
 
@@ -1357,7 +1359,6 @@ def _scn08_bq_uploaded_rows():
         _gcp_ts(
             "bigquery.googleapis.com/storage/uploaded_row_count",
             aligner="ALIGN_SUM", reducer="REDUCE_SUM",
-            alias="적재 row",
         )
     )
 
@@ -1378,7 +1379,6 @@ def _scn08_bq_queries():
             "bigquery.googleapis.com/query/count",
             aligner="ALIGN_SUM", reducer="REDUCE_SUM",
             group_bys=["metric.label.priority"],
-            alias="{{metric.label.priority}}",
         )
     )
 

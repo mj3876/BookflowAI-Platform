@@ -489,6 +489,13 @@ def _apply_grafana_dashboards() -> None:
         log.warn(f"운영 대시보드 JSON 없음 ({gen_dir}) · configmap skip")
         return
 
+    # 계정 의존 placeholder 치환 — row5 의 S3 버킷 (bookflow-mart-__AWS_ACCOUNT__) 등이
+    # 배포 계정(admin 994.. / deploy 354..) 의 실재 버킷을 가리키도록 현재 STS 계정으로 치환.
+    account = boto3.client("sts").get_caller_identity()["Account"]
+
+    def _render(path):
+        return path.read_text(encoding="utf-8").replace("__AWS_ACCOUNT__", account)
+
     cm = {
         "apiVersion": "v1",
         "kind": "ConfigMap",
@@ -500,7 +507,7 @@ def _apply_grafana_dashboards() -> None:
             # 사용 → 9개 운영 대시보드가 "BookFlow 운영" 폴더 하나로 묶인다.
             "annotations": {"grafana_folder": "BookFlow 운영"},
         },
-        "data": {f.name: f.read_text(encoding="utf-8") for f in json_files},
+        "data": {f.name: _render(f) for f in json_files},
     }
     log.info(f"운영 대시보드 configmap bookflow-ops-dashboards · {len(json_files)}개 대시보드")
 

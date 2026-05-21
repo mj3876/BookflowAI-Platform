@@ -194,6 +194,91 @@ Resources:
             Name: !Sub ${ProjectName}-forecast-trigger-cron
             Description: daily 11:43 KST (02:43 UTC)
 
+  # 5b. cost-publisher (Cost Explorer → CloudWatch custom metric, 1h cron)
+  CostPublisherFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${ProjectName}-cost-publisher
+      Handler: index.lambda_handler
+      Runtime: python3.13
+      Timeout: 60
+      InlineCode: |
+        """Cost Explorer 데이터 → CloudWatch custom metric (Bookflow/Cost).
+        Row 7 cost dashboard 가 이 metric 으로 실제 비용 표시 가능."""
+        import boto3, datetime as dt
+        ce = boto3.client('ce', region_name='us-east-1')
+        cw = boto3.client('cloudwatch')
+
+        def lambda_handler(event, context):
+            today = dt.date.today()
+            month_start = today.replace(day=1).isoformat()
+            yesterday = (today - dt.timedelta(days=1)).isoformat()
+            tomorrow = (today + dt.timedelta(days=1)).isoformat()
+
+            # 이번 달 누적 (MonthlyCost)
+            r = ce.get_cost_and_usage(
+                TimePeriod={'Start': month_start, 'End': tomorrow},
+                Granularity='MONTHLY', Metrics=['UnblendedCost'])
+            mtd = float(r['ResultsByTime'][0]['Total']['UnblendedCost']['Amount'])
+
+            # 어제 daily (DailyCost)
+            r = ce.get_cost_and_usage(
+                TimePeriod={'Start': yesterday, 'End': today.isoformat()},
+                Granularity='DAILY', Metrics=['UnblendedCost'])
+            daily = float(r['ResultsByTime'][0]['Total']['UnblendedCost']['Amount']) if r['ResultsByTime'] else 0
+
+            # service 별 (이번 달)
+            r_svc = ce.get_cost_and_usage(
+                TimePeriod={'Start': month_start, 'End': tomorrow},
+                Granularity='MONTHLY', Metrics=['UnblendedCost'],
+                GroupBy=[{'Type': 'DIMENSION', 'Key': 'SERVICE'}])
+            svc_metrics = []
+            for g in r_svc['ResultsByTime'][0].get('Groups', []):
+                svc = g['Keys'][0]
+                amt = float(g['Metrics']['UnblendedCost']['Amount'])
+                if amt > 0.01:  # 무시할 만한 cost 제외
+                    svc_metrics.append({
+                        'MetricName': 'EstimatedMonthlyCost',
+                        'Dimensions': [{'Name': 'Cloud', 'Value': 'AWS'}, {'Name': 'Service', 'Value': svc[:255]}],
+                        'Value': amt, 'Unit': 'None'
+                    })
+
+            # publish CloudWatch metrics
+            base = [
+                {'MetricName': 'EstimatedMonthlyCost', 'Dimensions':[{'Name':'Cloud','Value':'AWS'}], 'Value': mtd, 'Unit':'None'},
+                {'MetricName': 'EstimatedDailyCost', 'Dimensions':[{'Name':'Cloud','Value':'AWS'}], 'Value': daily, 'Unit':'None'},
+            ]
+            cw.put_metric_data(Namespace='Bookflow/Cost', MetricData=base)
+            # service 별은 batch (한 번에 최대 20)
+            for i in range(0, len(svc_metrics), 20):
+                cw.put_metric_data(Namespace='Bookflow/Cost', MetricData=svc_metrics[i:i+20])
+
+            return {'mtd': mtd, 'daily': daily, 'service_count': len(svc_metrics)}
+      Environment:
+        Variables:
+          PROJECT_NAME: !Ref ProjectName
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ce:GetCostAndUsage
+                - ce:GetCostForecast
+              Resource: '*'
+            - Effect: Allow
+              Action: cloudwatch:PutMetricData
+              Resource: '*'
+              Condition:
+                StringEquals:
+                  cloudwatch:namespace: Bookflow/Cost
+      Events:
+        Cron:
+          Type: Schedule
+          Properties:
+            Schedule: 'rate(1 hour)'
+            Enabled: true
+            Name: !Sub ${ProjectName}-cost-publisher-cron
+            Description: Cost Explorer → CW custom metric (Bookflow/Cost) 1h 주기
+
   # 6. secret-forwarder (API Gateway)
   SecretForwarderFn:
     Type: AWS::Serverless::Function

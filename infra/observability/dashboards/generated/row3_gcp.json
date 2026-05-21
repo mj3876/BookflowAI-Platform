@@ -23,7 +23,7 @@
         "type": "stackdriver",
         "uid": "gcp-monitoring"
       },
-      "description": "bigquery query/count · ALIGN_SUM (구간 쿼리 건수 · priority 별).",
+      "description": "bigquery query/count · ALIGN_SUM · 전체 합계.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -58,7 +58,6 @@
       "repeatDirection": "h",
       "targets": [
         {
-          "aliasBy": "{{metric.label.priority}}",
           "datasource": {
             "type": "stackdriver",
             "uid": "gcp-monitoring"
@@ -66,20 +65,19 @@
           "queryType": "timeSeriesList",
           "refId": "A",
           "timeSeriesList": {
-            "alignmentPeriod": "+300s",
+            "alignmentPeriod": "300s",
             "crossSeriesReducer": "REDUCE_SUM",
             "filters": [
-              "metric.type=\"bigquery.googleapis.com/query/count\""
-            ],
-            "groupBys": [
-              "metric.label.priority"
+              "metric.type",
+              "=",
+              "bigquery.googleapis.com/query/count"
             ],
             "perSeriesAligner": "ALIGN_SUM",
             "projectName": "project-8ab6bf05-54d2-4f5d-b8d"
           }
         }
       ],
-      "title": "BigQuery 쿼리 실행 수",
+      "title": "BigQuery 쿼리 실행 수 (전체 합계)",
       "transparent": false,
       "type": "timeseries"
     },
@@ -123,7 +121,6 @@
       "repeatDirection": "h",
       "targets": [
         {
-          "aliasBy": "할당 슬롯",
           "datasource": {
             "type": "stackdriver",
             "uid": "gcp-monitoring"
@@ -131,10 +128,12 @@
           "queryType": "timeSeriesList",
           "refId": "A",
           "timeSeriesList": {
-            "alignmentPeriod": "+300s",
+            "alignmentPeriod": "300s",
             "crossSeriesReducer": "REDUCE_MEAN",
             "filters": [
-              "metric.type=\"bigquery.googleapis.com/slots/allocated_for_project\""
+              "metric.type",
+              "=",
+              "bigquery.googleapis.com/slots/allocated_for_project"
             ],
             "perSeriesAligner": "ALIGN_MEAN",
             "projectName": "project-8ab6bf05-54d2-4f5d-b8d"
@@ -195,7 +194,6 @@
       "repeatDirection": "h",
       "targets": [
         {
-          "aliasBy": "테이블 수",
           "datasource": {
             "type": "stackdriver",
             "uid": "gcp-monitoring"
@@ -203,10 +201,12 @@
           "queryType": "timeSeriesList",
           "refId": "A",
           "timeSeriesList": {
-            "alignmentPeriod": "+300s",
+            "alignmentPeriod": "300s",
             "crossSeriesReducer": "REDUCE_SUM",
             "filters": [
-              "metric.type=\"bigquery.googleapis.com/storage/table_count\""
+              "metric.type",
+              "=",
+              "bigquery.googleapis.com/storage/table_count"
             ],
             "perSeriesAligner": "ALIGN_MEAN",
             "projectName": "project-8ab6bf05-54d2-4f5d-b8d"
@@ -267,7 +267,6 @@
       "repeatDirection": "h",
       "targets": [
         {
-          "aliasBy": "7d 적재 row",
           "datasource": {
             "type": "stackdriver",
             "uid": "gcp-monitoring"
@@ -275,10 +274,12 @@
           "queryType": "timeSeriesList",
           "refId": "A",
           "timeSeriesList": {
-            "alignmentPeriod": "+3600s",
+            "alignmentPeriod": "3600s",
             "crossSeriesReducer": "REDUCE_SUM",
             "filters": [
-              "metric.type=\"bigquery.googleapis.com/storage/uploaded_row_count\""
+              "metric.type",
+              "=",
+              "bigquery.googleapis.com/storage/uploaded_row_count"
             ],
             "perSeriesAligner": "ALIGN_SUM",
             "projectName": "project-8ab6bf05-54d2-4f5d-b8d"
@@ -330,7 +331,6 @@
       "repeatDirection": "h",
       "targets": [
         {
-          "aliasBy": "예측 호출",
           "datasource": {
             "type": "stackdriver",
             "uid": "gcp-monitoring"
@@ -338,10 +338,12 @@
           "queryType": "timeSeriesList",
           "refId": "A",
           "timeSeriesList": {
-            "alignmentPeriod": "+300s",
+            "alignmentPeriod": "300s",
             "crossSeriesReducer": "REDUCE_SUM",
             "filters": [
-              "metric.type=\"aiplatform.googleapis.com/prediction/online/prediction_count\""
+              "metric.type",
+              "=",
+              "aiplatform.googleapis.com/prediction/online/prediction_count"
             ],
             "perSeriesAligner": "ALIGN_SUM",
             "projectName": "project-8ab6bf05-54d2-4f5d-b8d"
@@ -392,7 +394,6 @@
       "repeatDirection": "h",
       "targets": [
         {
-          "aliasBy": "{{resource.label.function_name}}",
           "datasource": {
             "type": "stackdriver",
             "uid": "gcp-monitoring"
@@ -400,10 +401,12 @@
           "queryType": "timeSeriesList",
           "refId": "A",
           "timeSeriesList": {
-            "alignmentPeriod": "+300s",
+            "alignmentPeriod": "300s",
             "crossSeriesReducer": "REDUCE_SUM",
             "filters": [
-              "metric.type=\"cloudfunctions.googleapis.com/function/execution_count\""
+              "metric.type",
+              "=",
+              "cloudfunctions.googleapis.com/function/execution_count"
             ],
             "groupBys": [
               "resource.label.function_name"
@@ -467,7 +470,6 @@
       "repeatDirection": "h",
       "targets": [
         {
-          "aliasBy": "{{resource.label.function_name}}",
           "datasource": {
             "type": "stackdriver",
             "uid": "gcp-monitoring"
@@ -475,10 +477,16 @@
           "queryType": "timeSeriesList",
           "refId": "A",
           "timeSeriesList": {
-            "alignmentPeriod": "+300s",
+            "alignmentPeriod": "300s",
             "crossSeriesReducer": "REDUCE_SUM",
             "filters": [
-              "metric.type=\"cloudfunctions.googleapis.com/function/execution_count\" AND metric.label.status!=\"ok\""
+              "metric.type",
+              "=",
+              "cloudfunctions.googleapis.com/function/execution_count",
+              "AND",
+              "metric.label.status",
+              "!=",
+              "ok"
             ],
             "groupBys": [
               "resource.label.function_name"
@@ -532,7 +540,6 @@
       "repeatDirection": "h",
       "targets": [
         {
-          "aliasBy": "{{metric.label.status}}",
           "datasource": {
             "type": "stackdriver",
             "uid": "gcp-monitoring"
@@ -540,10 +547,12 @@
           "queryType": "timeSeriesList",
           "refId": "A",
           "timeSeriesList": {
-            "alignmentPeriod": "+300s",
+            "alignmentPeriod": "300s",
             "crossSeriesReducer": "REDUCE_SUM",
             "filters": [
-              "metric.type=\"workflows.googleapis.com/finished_execution_count\""
+              "metric.type",
+              "=",
+              "workflows.googleapis.com/finished_execution_count"
             ],
             "groupBys": [
               "metric.label.status"
@@ -597,7 +606,6 @@
       "repeatDirection": "h",
       "targets": [
         {
-          "aliasBy": "{{resource.label.bucket_name}}",
           "datasource": {
             "type": "stackdriver",
             "uid": "gcp-monitoring"
@@ -605,10 +613,12 @@
           "queryType": "timeSeriesList",
           "refId": "A",
           "timeSeriesList": {
-            "alignmentPeriod": "+3600s",
+            "alignmentPeriod": "3600s",
             "crossSeriesReducer": "REDUCE_SUM",
             "filters": [
-              "metric.type=\"storage.googleapis.com/storage/total_bytes\""
+              "metric.type",
+              "=",
+              "storage.googleapis.com/storage/total_bytes"
             ],
             "groupBys": [
               "resource.label.bucket_name"
@@ -672,7 +682,6 @@
       "repeatDirection": "h",
       "targets": [
         {
-          "aliasBy": "객체 수",
           "datasource": {
             "type": "stackdriver",
             "uid": "gcp-monitoring"
@@ -680,10 +689,12 @@
           "queryType": "timeSeriesList",
           "refId": "A",
           "timeSeriesList": {
-            "alignmentPeriod": "+3600s",
+            "alignmentPeriod": "3600s",
             "crossSeriesReducer": "REDUCE_SUM",
             "filters": [
-              "metric.type=\"storage.googleapis.com/storage/object_count\""
+              "metric.type",
+              "=",
+              "storage.googleapis.com/storage/object_count"
             ],
             "perSeriesAligner": "ALIGN_MEAN",
             "projectName": "project-8ab6bf05-54d2-4f5d-b8d"

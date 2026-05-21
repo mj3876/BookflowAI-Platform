@@ -58,10 +58,11 @@ DESCRIPTION = (
 
 REGION = "ap-northeast-1"
 KINESIS_STREAM = "bookflow-pos-events"
-# S3 버킷 — CloudWatch datasource 가 가리키는 계정(994878981869)의 실재 버킷.
-# 2026-05-19 실측(s3api list-buckets): mart/raw 버킷 계정 suffix 갱신.
-S3_MART = "bookflow-mart-994878981869"
-S3_RAW = "bookflow-raw-994878981869"
+# S3 버킷 — 계정 suffix 는 배포 계정마다 다름 (admin 994.. / deploy 354..).
+# placeholder __AWS_ACCOUNT__ 를 _apply_grafana_dashboards 가 configmap 배포 시
+# 현재 STS 계정 ID 로 치환 → admin/deploy 어느 계정이든 자동 정합.
+S3_MART = "bookflow-mart-__AWS_ACCOUNT__"
+S3_RAW = "bookflow-raw-__AWS_ACCOUNT__"
 GLUE_ERROR_LOG_GROUP = "/aws-glue/jobs/error"
 GLUE_OUTPUT_LOG_GROUP = "/aws-glue/jobs/output"
 

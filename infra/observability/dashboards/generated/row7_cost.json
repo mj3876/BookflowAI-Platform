@@ -23,7 +23,7 @@
         "type": "cloudwatch",
         "uid": "cloudwatch"
       },
-      "description": "AWS/Billing EstimatedCharges (us-east-1 · Currency=USD · Maximum). billing 메트릭 게시 시 동작 — 미게시 시 N/A.",
+      "description": "Cost Explorer GetCostAndUsage MONTHLY · cost-publisher Lambda 가 1h 주기 publish. AWS Billing EstimatedCharges 미게시 admin 계정 정합.",
       "fieldConfig": {
         "defaults": {
           "decimals": 2,
@@ -78,22 +78,101 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "Currency": "USD"
+            "Cloud": "AWS"
           },
           "id": "",
-          "label": "AWS",
+          "label": "AWS 누적",
           "metricEditorMode": 0,
-          "metricName": "EstimatedCharges",
+          "metricName": "EstimatedMonthlyCost",
           "metricQueryType": 0,
-          "namespace": "AWS/Billing",
-          "period": "21600",
+          "namespace": "Bookflow/Cost",
+          "period": "3600",
           "queryMode": "Metrics",
           "refId": "",
-          "region": "us-east-1",
+          "region": "ap-northeast-1",
           "statistic": "Maximum"
         }
       ],
-      "title": "AWS 비용 (이번 달 누적)",
+      "title": "AWS 비용 · 이번 달 누적",
+      "transparent": false,
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "어제 하루 AWS 비용 — daily budget $111 대비. destroy/redeploy 비용 추적 핵심 지표.",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 88.80000000000001
+              },
+              {
+                "color": "red",
+                "value": 111.0
+              }
+            ]
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "dimensions": {
+            "Cloud": "AWS"
+          },
+          "id": "",
+          "label": "AWS daily",
+          "metricEditorMode": 0,
+          "metricName": "EstimatedDailyCost",
+          "metricQueryType": 0,
+          "namespace": "Bookflow/Cost",
+          "period": "3600",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1",
+          "statistic": "Maximum"
+        }
+      ],
+      "title": "AWS 비용 · 어제 (daily)",
       "transparent": false,
       "type": "stat"
     },
@@ -130,7 +209,7 @@
       "gridPos": {
         "h": 6,
         "w": 6,
-        "x": 6,
+        "x": 12,
         "y": 1
       },
       "options": {
@@ -200,7 +279,7 @@
       "gridPos": {
         "h": 6,
         "w": 6,
-        "x": 12,
+        "x": 18,
         "y": 1
       },
       "options": {
@@ -272,8 +351,8 @@
       "gridPos": {
         "h": 8,
         "w": 6,
-        "x": 18,
-        "y": 1
+        "x": 0,
+        "y": 7
       },
       "options": {
         "minVizHeight": 75,
@@ -342,8 +421,8 @@
       "gridPos": {
         "h": 8,
         "w": 8,
-        "x": 0,
-        "y": 9
+        "x": 6,
+        "y": 7
       },
       "options": {
         "minVizHeight": 75,
@@ -412,8 +491,8 @@
       "gridPos": {
         "h": 8,
         "w": 8,
-        "x": 8,
-        "y": 9
+        "x": 14,
+        "y": 7
       },
       "options": {
         "minVizHeight": 75,
@@ -482,8 +561,8 @@
       "gridPos": {
         "h": 8,
         "w": 8,
-        "x": 16,
-        "y": 9
+        "x": 22,
+        "y": 7
       },
       "options": {
         "minVizHeight": 75,
@@ -522,7 +601,7 @@
         "type": "cloudwatch",
         "uid": "cloudwatch"
       },
-      "description": "AWS/Billing EstimatedCharges 추세 (us-east-1 · USD · Maximum). 월 누적 — 월초 리셋.",
+      "description": "Cost Explorer 데이터 · 월 누적 — 월초 리셋되는 톱니 형태.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -540,7 +619,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 17
+        "y": 15
       },
       "options": {
         "legend": {
@@ -562,22 +641,81 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "Currency": "USD"
+            "Cloud": "AWS"
           },
           "id": "",
           "label": "AWS 누적",
           "metricEditorMode": 0,
-          "metricName": "EstimatedCharges",
+          "metricName": "EstimatedMonthlyCost",
           "metricQueryType": 0,
-          "namespace": "AWS/Billing",
-          "period": "21600",
+          "namespace": "Bookflow/Cost",
+          "period": "3600",
           "queryMode": "Metrics",
           "refId": "",
-          "region": "us-east-1",
+          "region": "ap-northeast-1",
           "statistic": "Maximum"
         }
       ],
-      "title": "AWS 비용 추세 (월 누적)",
+      "title": "AWS 비용 추세 · 이번 달 누적",
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "description": "Cost Explorer SERVICE 그룹별 분해 (Top by amount). 어떤 서비스가 가장 큰 비용인지 한 눈에 — 비용 절감 영점.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 15
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "asc"
+        }
+      },
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "expression": "SEARCH('{\"Bookflow/Cost\",Cloud,Service} MetricName=\"EstimatedMonthlyCost\"', 'Maximum', 3600)",
+          "id": "",
+          "label": "${PROP('Dim.Service')}",
+          "metricEditorMode": 1,
+          "metricQueryType": 0,
+          "namespace": "",
+          "queryMode": "Metrics",
+          "refId": "",
+          "region": "ap-northeast-1"
+        }
+      ],
+      "title": "AWS 서비스별 비용 · 이번 달",
       "transparent": false,
       "type": "timeseries"
     },
@@ -603,8 +741,8 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
-        "y": 17
+        "x": 0,
+        "y": 23
       },
       "options": {
         "legend": {
@@ -653,8 +791,8 @@
       "gridPos": {
         "h": 9,
         "w": 24,
-        "x": 0,
-        "y": 25
+        "x": 12,
+        "y": 23
       },
       "repeatDirection": "h",
       "targets": [
