@@ -804,9 +804,13 @@ def gen_new_book_requests(publishers) -> list[dict]:
             "genre": random.choice(["fiction", "nonfiction", "self-help", "economics", "tech"]),
             "expected_pub_date": (TODAY + timedelta(days=random.randint(7, 60))).isoformat(),
             "estimated_initial_sales": random.randint(500, 5000),
+            # price_sales: 009 migration 이 NOT NULL — 신간 예상 정가 (출판사 신청 시 입력 필수)
+            "price_sales": random.randint(12000, 25000),
             "marketing_plan": "Standard launch + SNS push.",
             "similar_books": json.dumps([]),
             "target_segments": json.dumps(["20s-female", "metro"]),
+            # requester_email: 011 migration — 출판사 결과 통보 이메일 (승인 시 발주명세 수신처)
+            "requester_email": p.get("contact_email") or f"publisher{p['publisher_id']}@example.com",
             "status": s,
             "created_at": created.isoformat(),
             "fetched_at":  (created + timedelta(hours=1)).isoformat() if s != "NEW" else "",
