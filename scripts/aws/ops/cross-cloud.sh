@@ -67,7 +67,9 @@ up)
   [ -n "$AZ_PSK" ] && VPN_PARAMS+="|AzurePresharedKey=$AZ_PSK"
   [ -n "$GCP_IP" ] && VPN_PARAMS+="|EnableGcpVpn=true"
   [ -n "$GCP_PSK" ] && VPN_PARAMS+="|GcpPresharedKey=$GCP_PSK"
-  GCP_VPC_CIDR="${BOOKFLOW_GCP_VPC_CIDR:-10.50.0.0/24}"
+  # GCP VPC subnet CIDR (실측 192.168.10.0/24) · PSC CIDR(10.50.0.0/24)과 반드시 달라야 함
+  # — 같으면 같은 route table 에 동일 CIDR route 중복 → tgw-vpc-routes ROLLBACK.
+  GCP_VPC_CIDR="${BOOKFLOW_GCP_VPC_CIDR:-192.168.10.0/24}"
   cfn_parallel_deploy <<EOF
 bookflow-60-tgw-vpc-routes|$INFRA/60-network-cross-cloud/tgw-vpc-routes.yaml|GcpVpcCidr=$GCP_VPC_CIDR
 bookflow-60-vpn-site-to-site|$INFRA/60-network-cross-cloud/vpn-site-to-site.yaml${VPN_PARAMS}
