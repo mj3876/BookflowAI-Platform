@@ -82,9 +82,11 @@ AWS_REGION = "ap-northeast-1"
 RDS_ID = "bookflow-postgres"
 KINESIS_STREAM = "bookflow-pos-events"
 
-# cross-cloud S2S VPN — VpnId (AWS/VPN dimension)
-VPN_AWS_GCP = "vpn-0acce17f17cf493e7"
-VPN_AWS_AZURE = "vpn-0c5c1f736a382cd41"
+# cross-cloud S2S VPN — VpnId (AWS/VPN dimension).
+# VpnId 는 매일 destroy/recreate 로 회전 → apply 시점에
+# _apply_grafana_dashboards() 가 Name 태그로 조회한 현재 ID 로 치환 (placeholder).
+VPN_AWS_GCP = "__VPN_GCP_ID__"
+VPN_AWS_AZURE = "__VPN_AZURE_ID__"
 
 # Lambda 함수명 (실재 — row1 정의 동일)
 LAMBDA_POS_INGESTOR = "bookflow-pos-ingestor"
@@ -181,13 +183,17 @@ def _cw_metric(ref_id, namespace, metric, dims, *, stat="Average",
 
 def _cw_search(ref_id, namespace, expression, *, stat="Average",
                period="300", label=""):
-    """CloudWatch SEARCH 식 쿼리 — dimension 값이 회전해도 자동 매칭."""
+    """CloudWatch SEARCH 식 쿼리 — dimension 값이 회전해도 자동 매칭.
+
+    SEARCH 식은 metric_editor_mode=CODE 가 필수 — BUILDER 모드에서 expression 만
+    박으면 CloudWatch 가 metricName empty (InvalidParameter) 에러를 낸다
+    (row6 라이브 검증 2026-05-20 동일 패턴)."""
     return (
         CWMetrics()
         .datasource(_cw())
         .query_mode(CloudWatchQueryMode.METRICS)
         .metric_query_type(MetricQueryType.SEARCH)
-        .metric_editor_mode(MetricEditorMode.BUILDER)
+        .metric_editor_mode(MetricEditorMode.CODE)
         .region(AWS_REGION)
         .namespace(namespace)
         .expression(expression)
@@ -754,25 +760,25 @@ def _scn04_asg_capacity():
         .with_target(_cw_search(
             "A", "AWS/AutoScaling",
             "SEARCH('{AWS/AutoScaling,AutoScalingGroupName} "
-            "AutoScalingGroupName=\"CodeDeploy_bookflow-publisher\" "
+            "AutoScalingGroupName=CodeDeploy_bookflow-publisher "
             "MetricName=\"GroupDesiredCapacity\"', 'Average', 300)",
             stat="Average", label="Desired"))
         .with_target(_cw_search(
             "B", "AWS/AutoScaling",
             "SEARCH('{AWS/AutoScaling,AutoScalingGroupName} "
-            "AutoScalingGroupName=\"CodeDeploy_bookflow-publisher\" "
+            "AutoScalingGroupName=CodeDeploy_bookflow-publisher "
             "MetricName=\"GroupInServiceInstances\"', 'Average', 300)",
             stat="Average", label="InService"))
         .with_target(_cw_search(
             "C", "AWS/AutoScaling",
             "SEARCH('{AWS/AutoScaling,AutoScalingGroupName} "
-            "AutoScalingGroupName=\"CodeDeploy_bookflow-publisher\" "
+            "AutoScalingGroupName=CodeDeploy_bookflow-publisher "
             "MetricName=\"GroupMinSize\"', 'Average', 300)",
             stat="Average", label="Min"))
         .with_target(_cw_search(
             "D", "AWS/AutoScaling",
             "SEARCH('{AWS/AutoScaling,AutoScalingGroupName} "
-            "AutoScalingGroupName=\"CodeDeploy_bookflow-publisher\" "
+            "AutoScalingGroupName=CodeDeploy_bookflow-publisher "
             "MetricName=\"GroupMaxSize\"', 'Average', 300)",
             stat="Average", label="Max"))
     )
@@ -792,7 +798,7 @@ def _scn04_asg_inservice_stat():
         _cw_search(
             "A", "AWS/AutoScaling",
             "SEARCH('{AWS/AutoScaling,AutoScalingGroupName} "
-            "AutoScalingGroupName=\"CodeDeploy_bookflow-publisher\" "
+            "AutoScalingGroupName=CodeDeploy_bookflow-publisher "
             "MetricName=\"GroupInServiceInstances\"', 'Average', 300)",
             stat="Average", label="InService",
         )
@@ -814,7 +820,7 @@ def _scn04_ec2_cpu():
         _cw_search(
             "A", "AWS/EC2",
             "SEARCH('{AWS/EC2,AutoScalingGroupName} "
-            "AutoScalingGroupName=\"CodeDeploy_bookflow-publisher\" "
+            "AutoScalingGroupName=CodeDeploy_bookflow-publisher "
             "MetricName=\"CPUUtilization\"', 'Average', 300)",
             stat="Average", label="{{InstanceId}} CPU",
         )
@@ -838,19 +844,19 @@ def _scn04_ec2_statuscheck():
         .with_target(_cw_search(
             "A", "AWS/EC2",
             "SEARCH('{AWS/EC2,AutoScalingGroupName} "
-            "AutoScalingGroupName=\"CodeDeploy_bookflow-publisher\" "
+            "AutoScalingGroupName=CodeDeploy_bookflow-publisher "
             "MetricName=\"StatusCheckFailed\"', 'Maximum', 300)",
             stat="Maximum", label="StatusCheckFailed"))
         .with_target(_cw_search(
             "B", "AWS/EC2",
             "SEARCH('{AWS/EC2,AutoScalingGroupName} "
-            "AutoScalingGroupName=\"CodeDeploy_bookflow-publisher\" "
+            "AutoScalingGroupName=CodeDeploy_bookflow-publisher "
             "MetricName=\"StatusCheckFailed_Instance\"', 'Maximum', 300)",
             stat="Maximum", label="Instance"))
         .with_target(_cw_search(
             "C", "AWS/EC2",
             "SEARCH('{AWS/EC2,AutoScalingGroupName} "
-            "AutoScalingGroupName=\"CodeDeploy_bookflow-publisher\" "
+            "AutoScalingGroupName=CodeDeploy_bookflow-publisher "
             "MetricName=\"StatusCheckFailed_System\"', 'Maximum', 300)",
             stat="Maximum", label="System"))
     )
@@ -1040,11 +1046,13 @@ def _scn06_vpn_tunnels_all():
         ),
     )
     return p.datasource(_cw()).with_target(
+        # {VpnId,TunnelIpAddress} 3-dim 조합 메트릭은 미발행(0 series · 라이브 검증) —
+        # TunnelIpAddress 단일 dim 으로 터널별(4개) 시리즈 추출.
         _cw_search(
             "A", "AWS/VPN",
-            "SEARCH('{AWS/VPN,VpnId,TunnelIpAddress} "
+            "SEARCH('{AWS/VPN,TunnelIpAddress} "
             "MetricName=\"TunnelState\"', 'Maximum', 300)",
-            stat="Maximum", label="{{VpnId}} {{TunnelIpAddress}}",
+            stat="Maximum", label="{{TunnelIpAddress}}",
         )
     )
 
@@ -1119,9 +1127,10 @@ def _scn07_runs_started_completed():
         "AzureDiagnostics "
         "| where ResourceProvider == 'MICROSOFT.LOGIC' "
         "| where TimeGenerated > ago(6h) "
-        "| summarize 시작=count(), "
-        "성공=countif(status_s=='Succeeded'), "
-        "실패=countif(status_s=='Failed') "
+        # KQL parser는 ASCII 컬럼명만 허용 — 한글 alias 시 SYN0002 400 (라이브 검증).
+        "| summarize started=count(), "
+        "succeeded=countif(status_s=='Succeeded'), "
+        "failed=countif(status_s=='Failed') "
         "by bin(TimeGenerated, 5m) "
         "| order by TimeGenerated asc"
     )
@@ -1191,12 +1200,13 @@ def _scn07_timeout_ratio():
         "| where ResourceProvider == 'MICROSOFT.LOGIC' "
         "| where TimeGenerated > ago(6h) "
         "| where status_s in ('Succeeded','Failed') "
-        "| summarize 전체=count(), "
-        "timeout실패=countif(status_s=='Failed' and "
+        # KQL parser는 ASCII 컬럼명만 허용 — 한글 alias 시 SYN0002 400 (라이브 검증).
+        "| summarize total=count(), "
+        "timeout_failed=countif(status_s=='Failed' and "
         "(error_message_s contains 'timeout' or error_code_s contains 'Timeout')) "
-        "| extend timeout비율 = iff(전체==0, real(null), "
-        "round(100.0*timeout실패/전체, 2)) "
-        "| project timeout비율"
+        "| extend timeout_ratio = iff(total==0, real(null), "
+        "round(100.0*timeout_failed/total, 2)) "
+        "| project timeout_ratio"
     )
     p = pb.gauge_panel(
         "Logic App Timeout 비율 (%)",
@@ -1222,14 +1232,15 @@ def _scn07_workflow_table():
         "AzureDiagnostics "
         "| where ResourceProvider == 'MICROSOFT.LOGIC' "
         "| where TimeGenerated > ago(6h) "
-        "| summarize 실행=count(), "
-        "성공=countif(status_s=='Succeeded'), "
-        "실패=countif(status_s=='Failed'), "
+        # KQL parser는 ASCII 컬럼명만 허용 — 한글 alias 시 SYN0002 400 (라이브 검증).
+        "| summarize runs=count(), "
+        "succeeded=countif(status_s=='Succeeded'), "
+        "failed=countif(status_s=='Failed'), "
         "timeout=countif(status_s=='Failed' and "
         "(error_message_s contains 'timeout' or error_code_s contains 'Timeout')) "
-        "by 워크플로=resource_workflowName_s "
-        "| where 실행 > 0 "
-        "| order by timeout desc, 실패 desc"
+        "by workflow=resource_workflowName_s "
+        "| where runs > 0 "
+        "| order by timeout desc, failed desc"
     )
     p = pb.table_panel(
         "워크플로별 실행/성공/실패/timeout (6h)",

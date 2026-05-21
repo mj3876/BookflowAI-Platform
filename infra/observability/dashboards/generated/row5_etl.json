@@ -690,7 +690,7 @@
             "type": "cloudwatch",
             "uid": "cloudwatch"
           },
-          "expression": "fields @logStream | stats count_distinct(@logStream) as run수 by bin(1h)",
+          "expression": "fields @logStream | stats count_distinct(@logStream) as runs by bin(1h)",
           "id": "",
           "logGroupNames": [
             "/aws-glue/jobs/output"

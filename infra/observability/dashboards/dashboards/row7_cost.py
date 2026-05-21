@@ -290,10 +290,14 @@ def _aws_service_breakdown():
         .metric_query_type(MetricQueryType.SEARCH)
         .metric_editor_mode(MetricEditorMode.CODE)
         .region("ap-northeast-1")
+        # CODE-mode SEARCH 는 namespace + statistic 필수 — 누락 시 plugin 500.
+        # (deploy 는 Cost Explorer SCP 차단으로 Bookflow/Cost 미게시 → 정상 no-data)
+        .namespace(COST_NS)
         .expression(
             f'SEARCH(\'{{"{COST_NS}",Cloud,Service}} '
             f'MetricName="EstimatedMonthlyCost"\', \'Maximum\', 3600)'
         )
+        .statistic("Maximum")
         .label("${PROP('Dim.Service')}")
     )
 

@@ -51,10 +51,12 @@ DESCRIPTION = (
 # 리전 — VPN/TGW 는 도쿄 ap-northeast-1
 AWS_REGION = "ap-northeast-1"
 
-# 라이브 실측 VPN 연결 ID (2026-05-19 · AWS/VPN dimension VpnId)
-#   site-to-site VPN 2개 — cross-cloud 데이터 연결용. (Client VPN 은 Row 8 별개)
-VPN_AWS_GCP = "vpn-0acce17f17cf493e7"
-VPN_AWS_AZURE = "vpn-0c5c1f736a382cd41"
+# site-to-site VPN 2개 — cross-cloud 데이터 연결용. (Client VPN 은 Row 8 별개)
+# VpnId 는 매일 destroy/recreate 로 회전하므로 하드코딩 불가 — apply 시점에
+# _apply_grafana_dashboards() 가 Name 태그(bookflow-vpn-gcp/azure)로 현재 VpnId 를
+# 조회해 아래 placeholder 를 치환한다 (__AWS_ACCOUNT__ 와 동일 패턴).
+VPN_AWS_GCP = "__VPN_GCP_ID__"
+VPN_AWS_AZURE = "__VPN_AZURE_ID__"
 
 # ── value mappings ──────────────────────────────────────────────────────
 # VPN 터널 UP/DOWN — AWS/VPN TunnelState: 1=UP / 0=DOWN
@@ -215,16 +217,19 @@ def _vpn_traffic():
 
 
 # ── TGW attachment 상태 / 라우트 전파 ───────────────────────────────────
-# 라이브 7 attachment (admin 994878981869 · 2026-05-20 실측):
-TGW_ID = "tgw-0098d5980c95a9770"
+# TGW / attachment ID 는 매일 destroy/recreate 로 회전 + 계정별로 다르므로
+# 하드코딩 불가 — apply 시점에 _apply_grafana_dashboards() 가 Name 태그
+# (bookflow-tgw-attach-<vpc>)로 현재 ID 를 조회해 아래 placeholder 를 치환한다
+# (__AWS_ACCOUNT__ · __VPN_*_ID__ 와 동일 패턴). 미치환 시 패널 no-data(정상).
+TGW_ID = "__TGW_ID__"
 ATTACHMENT_TO_VPC = [
-    ("tgw-attach-00e48fdc9b237eca6", "bookflow-ai"),  # EKS Pod
-    ("tgw-attach-01ca13ae484a58789", "ansible"),
-    ("tgw-attach-070989bcce94a9a77", "sales-data"),
-    ("tgw-attach-0e50c4367602a85b7", "data"),          # RDS / Redis
-    ("tgw-attach-0fc3918eb6f66ba0d", "egress"),        # DMZ / NAT
-    ("tgw-attach-03a24f63e21f6ef81", "vpn-1"),         # cross-cloud VPN
-    ("tgw-attach-0442cc206fa2649cd", "vpn-2"),
+    ("__TGW_ATTACH_BOOKFLOW_AI__", "bookflow-ai"),  # EKS Pod
+    ("__TGW_ATTACH_ANSIBLE__", "ansible"),
+    ("__TGW_ATTACH_SALES_DATA__", "sales-data"),
+    ("__TGW_ATTACH_DATA__", "data"),                # RDS / Redis
+    ("__TGW_ATTACH_EGRESS__", "egress"),            # DMZ / NAT
+    ("__TGW_ATTACH_VPN_1__", "vpn-1"),              # cross-cloud VPN
+    ("__TGW_ATTACH_VPN_2__", "vpn-2"),
 ]
 
 
@@ -447,7 +452,7 @@ def _tgw_total_traffic():
             .region(AWS_REGION)
             .namespace("AWS/TransitGateway")
             .metric_name(metric)
-            .dimensions({"TransitGateway": "tgw-0098d5980c95a9770"})
+            .dimensions({"TransitGateway": TGW_ID})
             .match_exact(True)
             .statistic("Sum")
             .period("300")

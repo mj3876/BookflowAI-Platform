@@ -709,10 +709,11 @@
           "label": "${PROP('Dim.Service')}",
           "metricEditorMode": 1,
           "metricQueryType": 0,
-          "namespace": "",
+          "namespace": "Bookflow/Cost",
           "queryMode": "Metrics",
           "refId": "",
-          "region": "ap-northeast-1"
+          "region": "ap-northeast-1",
+          "statistic": "Maximum"
         }
       ],
       "title": "AWS 서비스별 비용 · 이번 달",
