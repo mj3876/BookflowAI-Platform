@@ -42,14 +42,17 @@ git config --global --add safe.directory /opt/bookflow
 cd /opt/bookflow
 git fetch origin
 git checkout $BRANCH
-git pull origin $BRANCH"
+git pull origin $BRANCH
+# ansible.cfg(상대경로 roles_path=./roles · inventory=./inventory/hosts.yml)가 로드되도록
+# cicd/ansible 에서 실행. --roles-path 플래그는 ansible-playbook 옵션이 아님(사용 금지).
+cd /opt/bookflow/cicd/ansible"
 for p in $SEQ; do
   NODE_SCRIPT="$NODE_SCRIPT
-ansible-playbook cicd/ansible/playbooks/${p}.yml --roles-path cicd/ansible/roles"
+ansible-playbook playbooks/${p}.yml"
 done
 # 작업 후 노드를 main 으로 복귀 (다음 GHA main 실행이 깨끗하도록 · best-effort)
 [ "$BRANCH" != "main" ] && NODE_SCRIPT="$NODE_SCRIPT
-git checkout main || true"
+cd /opt/bookflow && git checkout main || true"
 
 B64=$(printf '%s' "$NODE_SCRIPT" | base64 | tr -d '\n')
 
