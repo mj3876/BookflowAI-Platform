@@ -35,6 +35,7 @@ echo "  instance: $IID · branch: $BRANCH · mode: $MODE ($SEQ)"
 # 노드에서 실행할 스크립트: 브랜치 동기화 후 playbook 순차 실행.
 # 특수문자(&& · ; · 따옴표)가 SSM 파라미터 파싱을 깨뜨리지 않도록 base64 로 전달.
 NODE_SCRIPT="set -e
+git config --global --add safe.directory /opt/bookflow
 cd /opt/bookflow
 git fetch origin
 git checkout $BRANCH
