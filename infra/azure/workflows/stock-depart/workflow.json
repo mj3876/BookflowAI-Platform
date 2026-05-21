@@ -69,14 +69,41 @@
           }
         }
       },
-      "Response": {
+      "Response_Success": {
         "type": "Response",
         "runAfter": {
-          "Send_StockDepart": ["Succeeded", "Failed", "Skipped", "TimedOut"]
+          "Send_StockDepart": ["Succeeded"]
         },
         "inputs": {
           "statusCode": 200,
           "body": { "result": "ok" }
+        }
+      },
+      "Response_Failed": {
+        "type": "Response",
+        "runAfter": {
+          "Send_StockDepart": ["Failed", "Skipped"]
+        },
+        "inputs": {
+          "statusCode": "@if(equals(outputs('Send_StockDepart')?['statusCode'], 429), 429, 502)",
+          "body": {
+            "result": "error",
+            "acs_status": "@{outputs('Send_StockDepart')?['statusCode']}",
+            "message": "ACS email delivery failed"
+          }
+        }
+      },
+      "Response_TimedOut": {
+        "type": "Response",
+        "runAfter": {
+          "Send_StockDepart": ["TimedOut"]
+        },
+        "inputs": {
+          "statusCode": 504,
+          "body": {
+            "result": "timeout",
+            "message": "ACS email request timed out after retries"
+          }
         }
       }
     }

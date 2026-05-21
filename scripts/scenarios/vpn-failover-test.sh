@@ -32,21 +32,26 @@ AZURE_RG="${AZURE_RG:-rg-bookflow}"
 FAILOVER_TIMEOUT="${FAILOVER_TIMEOUT:-180}"
 
 # AWS 리소스
-VPN_CONN_ID="vpn-0c5c1f736a382cd41"          # Azure VPN connection
-TGW_RT_ID="tgw-rtb-0212f95932a5468b2"        # TGW 라우트 테이블
+VPN_CONN_ID="vpn-0f858a66ecc91926d"          # Azure VPN connection
+TGW_RT_ID="tgw-rtb-0916f11136978f558"        # TGW 라우트 테이블
 AZURE_VNET_CIDR="172.16.0.0/16"              # Azure VNet 대역
 
-# Tunnel1 (Active) — 정상 상태에서 BGP ROUTES 보유
-TUNNEL1_IP="54.168.155.173"
+# Tunnel1
+TUNNEL1_IP="52.193.102.120"
 AZURE_CONN_ACTIVE="conn-bookflowmj-aws-active"
 
-# Tunnel2 (Standby)
-TUNNEL2_IP="57.181.166.71"
+# Tunnel2
+TUNNEL2_IP="54.64.16.42"
 AZURE_CONN_STANDBY="conn-bookflowmj-aws-standby"
 
 # PSK
 PSK_ORIGINAL="bookflow"
 PSK_INVALID="bookflow-failover-test-$(date +%s)"
+
+# Azure BGP IP 바인딩 (Active/Passive 모드에서 각 터널 BGP next-hop 명시)
+GW_IPCONFIG_ID="/subscriptions/${AZURE_SUB}/resourceGroups/${AZURE_RG}/providers/Microsoft.Network/virtualNetworkGateways/vpngw-bookflowmj/ipConfigurations/ipconfig-active"
+BGP_IP_TUNNEL1="169.254.21.6"
+BGP_IP_TUNNEL2="169.254.21.10"
 
 # ── 색상 출력 ──────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -61,6 +66,62 @@ section() {
     echo -e "${BLUE}══════════════════════════════════════════════════${NC}"
     echo -e "${BLUE}  $*${NC}"
     echo -e "${BLUE}══════════════════════════════════════════════════${NC}"
+}
+
+# ── Azure BGP IP 바인딩 확인 및 설정 (Active 터널만) ──────────────
+ensure_bgp_ips() {
+    local active_bgp
+    active_bgp=$(az network vpn-connection show -g "$AZURE_RG" -n "$AZURE_CONN_ACTIVE" \
+        --query 'gatewayCustomBgpIpAddresses[0].customBgpIpAddress' --output tsv 2>/dev/null || echo "")
+
+    if [[ "$active_bgp" != "$BGP_IP_TUNNEL1" ]]; then
+        info "Active 연결 BGP IP 설정 중: ${BGP_IP_TUNNEL1}"
+        az network vpn-connection update -g "$AZURE_RG" -n "$AZURE_CONN_ACTIVE" \
+            --set "gatewayCustomBgpIpAddresses=[{\"ipConfigurationId\":\"${GW_IPCONFIG_ID}\",\"customBgpIpAddress\":\"${BGP_IP_TUNNEL1}\"}]" \
+            --output none
+        info "BGP 재수립 대기 (60초)..."
+        sleep 60
+    fi
+    ok "Active BGP IP 바인딩: ${AZURE_CONN_ACTIVE}→${BGP_IP_TUNNEL1}"
+}
+
+# ── Standby 연결 BGP IP 활성화 (failover 시 사용) ─────────────────
+enable_standby_bgp() {
+    info "Standby 연결 BGP IP 설정 중: ${BGP_IP_TUNNEL2}"
+    az network vpn-connection update -g "$AZURE_RG" -n "$AZURE_CONN_STANDBY" \
+        --set "gatewayCustomBgpIpAddresses=[{\"ipConfigurationId\":\"${GW_IPCONFIG_ID}\",\"customBgpIpAddress\":\"${BGP_IP_TUNNEL2}\"}]" \
+        --output none
+    ok "Standby BGP IP 설정 완료: ${AZURE_CONN_STANDBY}→${BGP_IP_TUNNEL2}"
+}
+
+# ── Standby 연결 BGP IP 제거 (초기 상태: BGP0) ────────────────────
+disable_standby_bgp() {
+    local standby_bgp
+    standby_bgp=$(az network vpn-connection show -g "$AZURE_RG" -n "$AZURE_CONN_STANDBY" \
+        --query 'gatewayCustomBgpIpAddresses[0].customBgpIpAddress' --output tsv 2>/dev/null || echo "")
+
+    if [[ -n "$standby_bgp" ]]; then
+        info "Standby 연결 BGP IP 제거 중 (BGP0 전환)..."
+        az network vpn-connection update -g "$AZURE_RG" -n "$AZURE_CONN_STANDBY" \
+            --set "gatewayCustomBgpIpAddresses=[]" \
+            --output none
+
+        local timeout=120 elapsed=0
+        while [[ $elapsed -lt $timeout ]]; do
+            local t2_bgp
+            t2_bgp=$(get_tunnel_bgp "$TUNNEL2_IP")
+            echo "  [${elapsed}s] Tunnel2 BGP: ${t2_bgp}"
+            if ! echo "$t2_bgp" | grep -qE "^[1-9][0-9]* BGP ROUTES"; then
+                ok "Tunnel2 BGP0 전환 완료"
+                return 0
+            fi
+            sleep 10
+            elapsed=$((elapsed + 10))
+        done
+        warn "BGP0 전환 대기 타임아웃 — 상태 확인 필요"
+    else
+        ok "Tunnel2 이미 BGP0 상태"
+    fi
 }
 
 # ── 안전 종료: PSK 복구 보장 ────────────────────────────────────
@@ -81,11 +142,17 @@ trap restore_on_exit EXIT
 
 # ── 터널 상태 조회 ────────────────────────────────────────────────
 get_tunnel_status() {
-    aws ec2 describe-vpn-connections \
+    local out
+    out=$(aws ec2 describe-vpn-connections \
         --vpn-connection-ids "$VPN_CONN_ID" \
         --region "$AWS_REGION" \
         --query 'VpnConnections[0].VgwTelemetry[*].{IP:OutsideIpAddress,Status:Status,BGP:StatusMessage}' \
-        --output json 2>/dev/null
+        --output json 2>&1) || {
+        error "AWS VPN 상태 조회 실패: ${out}"
+        echo '[]'
+        return 0
+    }
+    echo "$out"
 }
 
 get_tunnel_bgp() {
@@ -94,7 +161,7 @@ get_tunnel_bgp() {
         --vpn-connection-ids "$VPN_CONN_ID" \
         --region "$AWS_REGION" \
         --query "VpnConnections[0].VgwTelemetry[?OutsideIpAddress==\`${ip}\`].StatusMessage" \
-        --output text 2>/dev/null
+        --output text 2>/dev/null || echo "UNKNOWN"
 }
 
 get_tunnel_updown() {
@@ -103,7 +170,7 @@ get_tunnel_updown() {
         --vpn-connection-ids "$VPN_CONN_ID" \
         --region "$AWS_REGION" \
         --query "VpnConnections[0].VgwTelemetry[?OutsideIpAddress==\`${ip}\`].Status" \
-        --output text 2>/dev/null
+        --output text 2>/dev/null || echo "UNKNOWN"
 }
 
 print_tunnel_table() {
@@ -124,8 +191,8 @@ print_tunnel_table() {
     t1_mark=$([[ "$t1_status" == "UP" ]] && echo "${GREEN}UP${NC}" || echo "${RED}DOWN${NC}")
     t2_mark=$([[ "$t2_status" == "UP" ]] && echo "${GREEN}UP${NC}" || echo "${RED}DOWN${NC}")
 
-    echo -e "  │ Tunnel1 (Active)    │ ...173   │ $(printf '%-16s' "$t1_bgp") │ ${t1_mark}   │"
-    echo -e "  │ Tunnel2 (Standby)   │ ...71    │ $(printf '%-16s' "$t2_bgp") │ ${t2_mark}   │"
+    echo -e "  │ Tunnel1 (Active)    │ ...120   │ $(printf '%-16s' "$t1_bgp") │ ${t1_mark}   │"
+    echo -e "  │ Tunnel2 (Standby)   │ ...42    │ $(printf '%-16s' "$t2_bgp") │ ${t2_mark}   │"
     echo "  └─────────────────────┴──────────┴──────────────────┴────────┘"
 }
 
@@ -137,7 +204,10 @@ check_tgw_azure_route() {
         --filters "Name=route-search.subnet-of-match,Values=${AZURE_VNET_CIDR}" \
         --region "$AWS_REGION" \
         --query 'Routes[*].{CIDR:DestinationCidrBlock,State:State,Via:TransitGatewayAttachments[0].ResourceId}' \
-        --output json 2>/dev/null)
+        --output json 2>/dev/null) || {
+        error "AWS TGW 경로 조회 실패"
+        return 1
+    }
 
     local count
     count=$(echo "$result" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))" 2>/dev/null || echo "0")
@@ -213,6 +283,10 @@ cmd_failover() {
     step "사전 조건 확인"
     local t1_init
     t1_init=$(get_tunnel_updown "$TUNNEL1_IP")
+    if [[ "$t1_init" == "UNKNOWN" ]]; then
+        error "AWS CLI 조회 실패 — 인증/리전/리소스 ID 확인 후 재실행"
+        exit 1
+    fi
     if [[ "$t1_init" != "UP" ]]; then
         error "Tunnel1이 이미 DOWN 상태 — 먼저 복구 후 실행: bash $0 restore"
         exit 1
@@ -227,11 +301,15 @@ cmd_failover() {
     fi
     ok "Tunnel2 UP 확인"
 
+    local t2_bgp_init
+    t2_bgp_init=$(get_tunnel_bgp "$TUNNEL2_IP")
+    info "Tunnel2 BGP 현재 상태: ${t2_bgp_init} (Failover 후 1 이상으로 전환 예정)"
+
     echo ""
     info "테스트 전 상태:"
     print_tunnel_table
     echo ""
-    info "TGW 기준 경로 (Tunnel1 via):"
+    info "TGW 기준 경로:"
     check_tgw_azure_route || true
 
     # Tunnel1 강제 다운 (PSK 변경)
@@ -266,6 +344,10 @@ cmd_failover() {
         sleep 10
     done
 
+    # Tunnel2 BGP 활성화 (Standby → Active 전환)
+    section "Tunnel2 BGP 활성화 (Failover 전환)"
+    enable_standby_bgp
+
     # Tunnel2 BGP 경로 수신 대기 (Failover 완료 조건)
     section "Tunnel2 Failover 대기 (BGP 경로 수신)"
     info "Tunnel2(${TUNNEL2_IP})에서 BGP ROUTES > 0 될 때까지 대기..."
@@ -293,7 +375,7 @@ cmd_failover() {
             --filters "Name=route-search.subnet-of-match,Values=${AZURE_VNET_CIDR}" \
             --region "$AWS_REGION" \
             --query 'Routes[0].TransitGatewayAttachments[0].ResourceId' \
-            --output text 2>/dev/null || echo "none")
+            --output text 2>/dev/null) || tgw_via="none"
 
         if echo "$tgw_via" | grep -q "$VPN_CONN_ID"; then
             echo ""
@@ -377,6 +459,10 @@ cmd_restore() {
         elapsed=$((elapsed + 10))
     done
 
+    # Tunnel2 BGP 제거 (Standby 초기 상태 복원)
+    section "Standby BGP 초기 상태 복원"
+    disable_standby_bgp
+
     echo ""
     info "복구 후 최종 상태:"
     print_tunnel_table
@@ -386,13 +472,73 @@ cmd_restore() {
 }
 
 # ════════════════════════════════════════════════════════════════
+# prepare: 장애테스트 초기 상태 설정 (Tunnel1 BGP1, Tunnel2 BGP0)
+# ════════════════════════════════════════════════════════════════
+cmd_prepare() {
+    section "장애테스트 초기 상태 설정"
+    echo "  목표: Tunnel1(Active) BGP1, Tunnel2(Standby) BGP0"
+    echo ""
+
+    step "1/2  Tunnel1 Active BGP IP 바인딩 확인"
+    ensure_bgp_ips
+
+    step "2/2  Tunnel2 Standby BGP IP 제거 (BGP0 전환)"
+    disable_standby_bgp
+
+    section "초기 상태 확인"
+    cmd_check
+
+    local t1_bgp t2_bgp
+    t1_bgp=$(get_tunnel_bgp "$TUNNEL1_IP")
+    t2_bgp=$(get_tunnel_bgp "$TUNNEL2_IP")
+
+    echo ""
+    if echo "$t1_bgp" | grep -qE "^[1-9][0-9]* BGP ROUTES" && \
+       ! echo "$t2_bgp" | grep -qE "^[1-9][0-9]* BGP ROUTES"; then
+        ok "초기 상태 준비 완료 — Tunnel1: BGP1, Tunnel2: BGP0"
+        echo "  이제 'bash $0 failover' 또는 'bash $0 all' 실행 가능"
+    else
+        warn "초기 상태 미완료 — Tunnel1: ${t1_bgp}, Tunnel2: ${t2_bgp}"
+        warn "BGP 재수립에 시간이 필요할 수 있습니다. 잠시 후 'bash $0 check' 재확인"
+    fi
+}
+
+# ════════════════════════════════════════════════════════════════
+# setup: Azure BGP IP 바인딩 초기화 (Active 연결만)
+# ════════════════════════════════════════════════════════════════
+cmd_setup() {
+    section "Azure BGP IP 바인딩 초기화"
+    step "Active 연결 custom BGP IP 설정"
+    ensure_bgp_ips
+
+    section "Tunnel1 BGP 수신 대기"
+    local timeout=120 elapsed=0
+    while [[ $elapsed -lt $timeout ]]; do
+        local t1_bgp
+        t1_bgp=$(get_tunnel_bgp "$TUNNEL1_IP")
+        echo "  [${elapsed}s] Tunnel1 BGP: ${t1_bgp}"
+        if echo "$t1_bgp" | grep -qE "^[1-9][0-9]* BGP ROUTES"; then
+            ok "Tunnel1 BGP 경로 수신 완료"
+            break
+        fi
+        sleep 10
+        elapsed=$((elapsed + 10))
+    done
+
+    cmd_check
+}
+
+# ════════════════════════════════════════════════════════════════
 # 전체 실행
 # ════════════════════════════════════════════════════════════════
 cmd_all() {
     section "VPN Failover 시나리오 전체 실행"
     echo ""
-    echo "  단계: 상태확인 → Failover → 통신검증 → 복구 → 최종확인"
+    echo "  단계: BGP설정 → 상태확인 → Failover → 통신검증 → 복구 → 최종확인"
     echo ""
+
+    step "BGP IP 바인딩 확인"
+    ensure_bgp_ips
 
     cmd_check
 
@@ -415,9 +561,9 @@ cmd_all() {
     ok "Failover 시나리오 완료"
     echo ""
     echo "  결론:"
-    echo "  - Tunnel1 DOWN 시 Tunnel2가 자동으로 Active 전환"
+    echo "  - Tunnel1 DOWN 시 Tunnel2가 즉시 Active 전환 (BGP ECMP 구성)"
     echo "  - TGW 경로가 Tunnel2 경유로 전환되어 AWS-Azure 통신 유지"
-    echo "  - Tunnel1 복구 후 Active 복원"
+    echo "  - Tunnel1 복구 후 ECMP 복원"
 }
 
 # ════════════════════════════════════════════════════════════════
@@ -426,18 +572,22 @@ cmd_all() {
 MODE="${1:-all}"
 
 case "$MODE" in
+    prepare)  cmd_prepare ;;
+    setup)    cmd_setup ;;
     check)    cmd_check ;;
     failover) cmd_failover ;;
     verify)   cmd_verify ;;
     restore)  cmd_restore ;;
     all)      cmd_all ;;
     *)
-        echo "사용법: $0 [check|failover|verify|restore|all]"
+        echo "사용법: $0 [prepare|setup|check|failover|verify|restore|all]"
         echo ""
+        echo "  prepare   장애테스트 초기 상태 설정 (Tunnel1 BGP1, Tunnel2 BGP0) ← 먼저 실행"
+        echo "  setup     Active 연결 BGP IP 바인딩 초기화"
         echo "  check     현재 터널 상태 확인"
         echo "  failover  Tunnel1 강제 다운 + Tunnel2 전환 대기"
         echo "  verify    통신 검증 (failover 후 실행)"
-        echo "  restore   Tunnel1 PSK 복구"
+        echo "  restore   Tunnel1 PSK 복구 + Standby BGP0 복원"
         echo "  all       전체 시나리오 순서대로 실행 (기본)"
         exit 1
         ;;

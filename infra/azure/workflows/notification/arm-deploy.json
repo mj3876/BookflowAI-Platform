@@ -121,12 +121,26 @@
           },
           "default": { "actions": {} }
         },
-        "Response": {
+        "Response_Success": {
           "type": "Response",
-          "runAfter": {
-            "Switch_EventType": ["Succeeded", "Failed", "Skipped", "TimedOut"]
-          },
+          "runAfter": { "Switch_EventType": ["Succeeded"] },
           "inputs": { "statusCode": 200, "body": { "result": "ok" } }
+        },
+        "Response_Failed": {
+          "type": "Response",
+          "runAfter": { "Switch_EventType": ["Failed", "Skipped"] },
+          "inputs": {
+            "statusCode": 502,
+            "body": { "result": "error", "message": "ACS email delivery failed" }
+          }
+        },
+        "Response_TimedOut": {
+          "type": "Response",
+          "runAfter": { "Switch_EventType": ["TimedOut"] },
+          "inputs": {
+            "statusCode": 504,
+            "body": { "result": "timeout", "message": "ACS email request timed out after retries" }
+          }
         }
       }
     },

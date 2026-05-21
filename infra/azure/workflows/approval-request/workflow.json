@@ -195,15 +195,40 @@
         },
         "else": { "actions": {} }
       },
-      "Response": {
-        "description": "Check 결과와 무관하게 200 반환.",
+      "Response_Success": {
         "type": "Response",
         "runAfter": {
-          "Check_HasRecipients": ["Succeeded", "Failed", "Skipped", "TimedOut"]
+          "Check_HasRecipients": ["Succeeded", "Skipped"]
         },
         "inputs": {
           "statusCode": 200,
           "body": { "result": "ok" }
+        }
+      },
+      "Response_Failed": {
+        "type": "Response",
+        "runAfter": {
+          "Check_HasRecipients": ["Failed"]
+        },
+        "inputs": {
+          "statusCode": 502,
+          "body": {
+            "result": "error",
+            "message": "ACS email delivery failed"
+          }
+        }
+      },
+      "Response_TimedOut": {
+        "type": "Response",
+        "runAfter": {
+          "Check_HasRecipients": ["TimedOut"]
+        },
+        "inputs": {
+          "statusCode": 504,
+          "body": {
+            "result": "timeout",
+            "message": "ACS email request timed out after retries"
+          }
         }
       }
     }
