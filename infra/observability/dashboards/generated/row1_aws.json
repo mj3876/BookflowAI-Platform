@@ -1927,14 +1927,10 @@
             "type": "cloudwatch",
             "uid": "cloudwatch"
           },
-          "dimensions": {
-            "LoadBalancer": "app/bookflow-alb-external/57e62cdd02356761"
-          },
+          "expression": "SEARCH('{AWS/ApplicationELB,LoadBalancer} LoadBalancer=app/bookflow-alb-external MetricName=\"RequestCount\"', 'Sum', 300)",
           "id": "",
           "label": "요청",
-          "matchExact": true,
-          "metricEditorMode": 0,
-          "metricName": "RequestCount",
+          "metricEditorMode": 1,
           "metricQueryType": 0,
           "namespace": "AWS/ApplicationELB",
           "period": "300",
@@ -1992,14 +1988,10 @@
             "type": "cloudwatch",
             "uid": "cloudwatch"
           },
-          "dimensions": {
-            "LoadBalancer": "app/bookflow-alb-external/57e62cdd02356761"
-          },
+          "expression": "SEARCH('{AWS/ApplicationELB,LoadBalancer} LoadBalancer=app/bookflow-alb-external MetricName=\"HTTPCode_ELB_5XX_Count\"', 'Sum', 300)",
           "id": "",
           "label": "ELB 5xx",
-          "matchExact": true,
-          "metricEditorMode": 0,
-          "metricName": "HTTPCode_ELB_5XX_Count",
+          "metricEditorMode": 1,
           "metricQueryType": 0,
           "namespace": "AWS/ApplicationELB",
           "period": "300",
@@ -2013,14 +2005,10 @@
             "type": "cloudwatch",
             "uid": "cloudwatch"
           },
-          "dimensions": {
-            "LoadBalancer": "app/bookflow-alb-external/57e62cdd02356761"
-          },
+          "expression": "SEARCH('{AWS/ApplicationELB,LoadBalancer} LoadBalancer=app/bookflow-alb-external MetricName=\"HTTPCode_Target_5XX_Count\"', 'Sum', 300)",
           "id": "",
           "label": "Target 5xx",
-          "matchExact": true,
-          "metricEditorMode": 0,
-          "metricName": "HTTPCode_Target_5XX_Count",
+          "metricEditorMode": 1,
           "metricQueryType": 0,
           "namespace": "AWS/ApplicationELB",
           "period": "300",
@@ -2039,7 +2027,7 @@
         "type": "cloudwatch",
         "uid": "cloudwatch"
       },
-      "description": "AWS/ApplicationELB HealthyHostCount — bookflow-alb-external · TargetGroup bookflow-inventory-api-tg. target 메트릭은 LoadBalancer+TargetGroup 2개 차원 필요.",
+      "description": "AWS/ApplicationELB HealthyHostCount — bookflow-alb-external · inventory-api TargetGroup. SEARCH 부분일치로 ARN suffix 회전 자동 매칭.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -2088,15 +2076,10 @@
             "type": "cloudwatch",
             "uid": "cloudwatch"
           },
-          "dimensions": {
-            "LoadBalancer": "app/bookflow-alb-external/57e62cdd02356761",
-            "TargetGroup": "targetgroup/bookflow-inventory-api-tg/45c463eca58f093b"
-          },
+          "expression": "SEARCH('{AWS/ApplicationELB,LoadBalancer,TargetGroup} LoadBalancer=app/bookflow-alb-external TargetGroup=targetgroup/bookflow-inventory-api-tg MetricName=\"HealthyHostCount\"', 'Average', 300)",
           "id": "",
           "label": "healthy",
-          "matchExact": true,
-          "metricEditorMode": 0,
-          "metricName": "HealthyHostCount",
+          "metricEditorMode": 1,
           "metricQueryType": 0,
           "namespace": "AWS/ApplicationELB",
           "period": "300",
@@ -2165,10 +2148,10 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "Pipeline": "cp-eks"
+            "Pipeline": "bookflow-cp-eks"
           },
           "id": "",
-          "label": "cp-eks",
+          "label": "bookflow-cp-eks",
           "matchExact": true,
           "metricEditorMode": 0,
           "metricName": "PipelineDuration",
@@ -2186,10 +2169,10 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "Pipeline": "cp-ecs"
+            "Pipeline": "bookflow-cp-ecs"
           },
           "id": "",
-          "label": "cp-ecs",
+          "label": "bookflow-cp-ecs",
           "matchExact": true,
           "metricEditorMode": 0,
           "metricName": "PipelineDuration",
@@ -2207,10 +2190,10 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "Pipeline": "publisher-bg"
+            "Pipeline": "bookflow-publisher-bg"
           },
           "id": "",
-          "label": "publisher-bg",
+          "label": "bookflow-publisher-bg",
           "matchExact": true,
           "metricEditorMode": 0,
           "metricName": "PipelineDuration",
@@ -2286,10 +2269,10 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "Pipeline": "cp-eks"
+            "Pipeline": "bookflow-cp-eks"
           },
           "id": "",
-          "label": "cp-eks",
+          "label": "bookflow-cp-eks",
           "matchExact": true,
           "metricEditorMode": 0,
           "metricName": "PipelineDuration",
@@ -2307,10 +2290,10 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "Pipeline": "cp-ecs"
+            "Pipeline": "bookflow-cp-ecs"
           },
           "id": "",
-          "label": "cp-ecs",
+          "label": "bookflow-cp-ecs",
           "matchExact": true,
           "metricEditorMode": 0,
           "metricName": "PipelineDuration",
@@ -2328,10 +2311,10 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "Pipeline": "publisher-bg"
+            "Pipeline": "bookflow-publisher-bg"
           },
           "id": "",
-          "label": "publisher-bg",
+          "label": "bookflow-publisher-bg",
           "matchExact": true,
           "metricEditorMode": 0,
           "metricName": "PipelineDuration",
@@ -2403,10 +2386,10 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "Pipeline": "cp-eks"
+            "Pipeline": "bookflow-cp-eks"
           },
           "id": "",
-          "label": "cp-eks",
+          "label": "bookflow-cp-eks",
           "matchExact": true,
           "metricEditorMode": 0,
           "metricName": "FailedPipelineExecutions",
@@ -2424,10 +2407,10 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "Pipeline": "cp-ecs"
+            "Pipeline": "bookflow-cp-ecs"
           },
           "id": "",
-          "label": "cp-ecs",
+          "label": "bookflow-cp-ecs",
           "matchExact": true,
           "metricEditorMode": 0,
           "metricName": "FailedPipelineExecutions",
@@ -2445,10 +2428,10 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "Pipeline": "publisher-bg"
+            "Pipeline": "bookflow-publisher-bg"
           },
           "id": "",
-          "label": "publisher-bg",
+          "label": "bookflow-publisher-bg",
           "matchExact": true,
           "metricEditorMode": 0,
           "metricName": "FailedPipelineExecutions",
@@ -2522,7 +2505,7 @@
             "type": "cloudwatch",
             "uid": "cloudwatch"
           },
-          "expression": "fields @timestamp | stats count(*) as 호출수 by bin(5m)",
+          "expression": "fields @timestamp | stats count(*) as calls by bin(5m)",
           "id": "",
           "logGroupNames": [
             "/aws/cloudtrail/bookflow"

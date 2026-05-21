@@ -800,7 +800,7 @@
         "type": "cloudwatch",
         "uid": "cloudwatch"
       },
-      "description": "AWS/VPN TunnelState avg × 100 (vpn-0acce17f17cf493e7 · 0=DOWN, 1=UP)",
+      "description": "AWS/VPN TunnelState avg × 100 (bookflow-vpn-gcp · 0=DOWN, 1=UP)",
       "fieldConfig": {
         "defaults": {
           "decimals": 2,
@@ -866,15 +866,16 @@
             "type": "cloudwatch",
             "uid": "cloudwatch"
           },
-          "expression": "SEARCH('{AWS/VPN,VpnId} MetricName=\"TunnelState\" VpnId=\"vpn-0acce17f17cf493e7\"', 'Average', 300) * 100",
+          "expression": "SEARCH('{AWS/VPN,VpnId} MetricName=\"TunnelState\" VpnId=\"__VPN_GCP_ID__\"', 'Average', 300) * 100",
           "id": "",
           "label": "AWS↔GCP",
           "metricEditorMode": 1,
           "metricQueryType": 0,
-          "namespace": "",
+          "namespace": "AWS/VPN",
           "queryMode": "Metrics",
           "refId": "A",
-          "region": "ap-northeast-1"
+          "region": "ap-northeast-1",
+          "statistic": "Average"
         }
       ],
       "title": "VPN uptime · AWS↔GCP (24h)",
@@ -886,7 +887,7 @@
         "type": "cloudwatch",
         "uid": "cloudwatch"
       },
-      "description": "AWS/VPN TunnelState avg × 100 (vpn-0c5c1f736a382cd41 · 0=DOWN, 1=UP)",
+      "description": "AWS/VPN TunnelState avg × 100 (bookflow-vpn-azure · 0=DOWN, 1=UP)",
       "fieldConfig": {
         "defaults": {
           "decimals": 2,
@@ -952,15 +953,16 @@
             "type": "cloudwatch",
             "uid": "cloudwatch"
           },
-          "expression": "SEARCH('{AWS/VPN,VpnId} MetricName=\"TunnelState\" VpnId=\"vpn-0c5c1f736a382cd41\"', 'Average', 300) * 100",
+          "expression": "SEARCH('{AWS/VPN,VpnId} MetricName=\"TunnelState\" VpnId=\"__VPN_AZURE_ID__\"', 'Average', 300) * 100",
           "id": "",
           "label": "AWS↔Azure",
           "metricEditorMode": 1,
           "metricQueryType": 0,
-          "namespace": "",
+          "namespace": "AWS/VPN",
           "queryMode": "Metrics",
           "refId": "A",
-          "region": "ap-northeast-1"
+          "region": "ap-northeast-1",
+          "statistic": "Average"
         }
       ],
       "title": "VPN uptime · AWS↔Azure (24h)",

@@ -13,7 +13,7 @@ name: rds-redeploy
 
 on:
   push:
-    branches: [main, aws]
+    branches: [main]
     paths:
       - 'cicd/ansible/sql/**'
       - 'cicd/ansible/playbooks/rds-*.yml'
@@ -141,6 +141,12 @@ jobs:
             --query "Command.CommandId" \
             --output text)
 
+          # fail-fast: send-command 가 빈 CommandId 를 내면 즉시 실패 (이전엔 빈 id 가
+          # 다음 step 까지 흘러가 "Invalid length for parameter CommandId" 로 둔갑했음).
+          if [ -z "$COMMAND_ID" ] || [ "$COMMAND_ID" = "None" ]; then
+            echo "::error::SSM send-command 가 CommandId 를 반환하지 않음 (instance=${{ steps.get-instance.outputs.instance_id }} · SSM agent online/계정 확인)"
+            exit 1
+          fi
           echo "command_id=$COMMAND_ID" >> "$GITHUB_OUTPUT"
 
       - name: SSM 명령 완료 대기 (최대 30분)

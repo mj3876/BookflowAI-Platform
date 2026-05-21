@@ -491,10 +491,66 @@ def _apply_grafana_dashboards() -> None:
 
     # 계정 의존 placeholder 치환 — row5 의 S3 버킷 (bookflow-mart-__AWS_ACCOUNT__) 등이
     # 배포 계정(admin 994.. / deploy 354..) 의 실재 버킷을 가리키도록 현재 STS 계정으로 치환.
+    import boto3
     account = boto3.client("sts").get_caller_identity()["Account"]
 
+    # cross-cloud VPN / TGW ID 치환 — VpnId·TGW·attachment ID 는 매일
+    # destroy/recreate 로 회전 + 계정별로 다르므로 하드코딩 불가. row6/row8 의
+    # placeholder 를 Name 태그로 조회한 현재 ID 로 apply 시점에 치환한다.
+    ec2 = boto3.client("ec2", region_name="ap-northeast-1")
+    dyn_ids = {
+        # VPN (row6 · row8) — Name 태그 bookflow-vpn-{gcp,azure}
+        "__VPN_GCP_ID__": "", "__VPN_AZURE_ID__": "",
+        # TGW hub + VPC attachment (row6) — Name 태그 bookflow-tgw-attach-<vpc>
+        "__TGW_ID__": "",
+        "__TGW_ATTACH_BOOKFLOW_AI__": "", "__TGW_ATTACH_ANSIBLE__": "",
+        "__TGW_ATTACH_SALES_DATA__": "", "__TGW_ATTACH_DATA__": "",
+        "__TGW_ATTACH_EGRESS__": "",
+        "__TGW_ATTACH_VPN_1__": "", "__TGW_ATTACH_VPN_2__": "",
+    }
+    try:
+        for c in ec2.describe_vpn_connections(
+            Filters=[{"Name": "state", "Values": ["available", "pending"]}]
+        ).get("VpnConnections", []):
+            name = next((t["Value"] for t in c.get("Tags", []) if t["Key"] == "Name"), "")
+            if name == "bookflow-vpn-gcp":
+                dyn_ids["__VPN_GCP_ID__"] = c["VpnConnectionId"]
+            elif name == "bookflow-vpn-azure":
+                dyn_ids["__VPN_AZURE_ID__"] = c["VpnConnectionId"]
+    except Exception as e:  # VPN 미배포 phase 면 placeholder 그대로 → 패널 no-data (정상)
+        log.warn(f"VPN ID fetch 실패 (대시보드 VPN placeholder 미치환): {e}")
+    try:
+        tgws = ec2.describe_transit_gateways(
+            Filters=[{"Name": "state", "Values": ["available", "pending"]}]
+        ).get("TransitGateways", [])
+        if tgws:
+            dyn_ids["__TGW_ID__"] = tgws[0]["TransitGatewayId"]
+        attach_name_ph = {
+            "bookflow-tgw-attach-bookflow-ai": "__TGW_ATTACH_BOOKFLOW_AI__",
+            "bookflow-tgw-attach-ansible": "__TGW_ATTACH_ANSIBLE__",
+            "bookflow-tgw-attach-sales-data": "__TGW_ATTACH_SALES_DATA__",
+            "bookflow-tgw-attach-data": "__TGW_ATTACH_DATA__",
+            "bookflow-tgw-attach-egress": "__TGW_ATTACH_EGRESS__",
+        }
+        vpn_attach_phs = ["__TGW_ATTACH_VPN_1__", "__TGW_ATTACH_VPN_2__"]
+        for a in ec2.describe_transit_gateway_attachments(
+            Filters=[{"Name": "state", "Values": ["available", "pending"]}]
+        ).get("TransitGatewayAttachments", []):
+            aid = a["TransitGatewayAttachmentId"]
+            name = next((t["Value"] for t in a.get("Tags", []) if t["Key"] == "Name"), "")
+            if name in attach_name_ph:
+                dyn_ids[attach_name_ph[name]] = aid
+            elif a.get("ResourceType") == "vpn" and vpn_attach_phs:
+                dyn_ids[vpn_attach_phs.pop(0)] = aid  # VPN attachment 는 무명 → 순서대로
+    except Exception as e:  # TGW 미활성 phase (Peering 모드) 면 placeholder 그대로 → no-data (정상)
+        log.warn(f"TGW ID fetch 실패 (대시보드 TGW placeholder 미치환): {e}")
+
     def _render(path):
-        return path.read_text(encoding="utf-8").replace("__AWS_ACCOUNT__", account)
+        text = path.read_text(encoding="utf-8").replace("__AWS_ACCOUNT__", account)
+        for ph, rid in dyn_ids.items():
+            if rid:
+                text = text.replace(ph, rid)
+        return text
 
     cm = {
         "apiVersion": "v1",
@@ -512,11 +568,14 @@ def _apply_grafana_dashboards() -> None:
     log.info(f"운영 대시보드 configmap bookflow-ops-dashboards · {len(json_files)}개 대시보드")
 
     import tempfile
+    # ensure_ascii=False: 한글 dashboard 가 \uXXXX 로 escape 되며 annotation 크기 폭증 방지.
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as f:
-        f.write(_json.dumps(cm))
+        f.write(_json.dumps(cm, ensure_ascii=False))
         cm_path = f.name
     try:
-        subprocess.run(["kubectl", "apply", "-f", cm_path], check=True)
+        # server-side apply: client-side 는 last-applied-configuration annotation 에 전체 본문을
+        # 넣어 262144 byte 한계 초과 (10개 대시보드 JSON). server-side 는 annotation 미사용.
+        subprocess.run(["kubectl", "apply", "--server-side", "--force-conflicts", "-f", cm_path], check=True)
     finally:
         os.unlink(cm_path)
 

@@ -61,13 +61,9 @@ ECS_CLUSTER = "bookflow-ecs"
 RDS_ID = "bookflow-postgres"
 REDIS_ID = "bookflow-redis"
 KINESIS_STREAM = "bookflow-pos-events"
-# ALB ID — External ALB 는 데일리 destroy/create 라 식별자가 매일 회전한다.
-# 2026-05-19 실측(elbv2 describe-load-balancers): 현재 활성 LB 가 데이터를
-# 발행하는 식별자. 재배포 시 갱신 필요(IaC named LB / EventBridge 동적
-# 주입이 항구 해법). HealthyHostCount 등 target 메트릭은 LoadBalancer +
-# TargetGroup 2개 차원이 필요하다.
-ALB_EXTERNAL = "app/bookflow-alb-external/57e62cdd02356761"
-ALB_TARGET_GROUP = "targetgroup/bookflow-inventory-api-tg/45c463eca58f093b"
+# ALB — External ALB 는 데일리 destroy/create 라 ARN suffix 가 매일 회전한다.
+# 하드코딩 대신 SEARCH 부분일치(LoadBalancer=app/bookflow-alb-external)로
+# 자동 매칭한다 (_alb_* 패널 · self-healing). 별도 ID 상수 불필요.
 
 ECS_SERVICES = ["inventory-api", "online-sim", "offline-sim"]
 LAMBDA_FUNCS = [
@@ -78,7 +74,9 @@ LAMBDA_FUNCS = [
     "bookflow-event-sync",
     "bookflow-forecast-trigger",
 ]
-CODEPIPELINES = ["cp-eks", "cp-ecs", "publisher-bg"]
+# CloudWatch AWS/CodePipeline 의 Pipeline dimension 실측값 (2026-05-21 deploy):
+# bookflow- prefix 포함. 파이프라인명은 회전하지 않음(정적).
+CODEPIPELINES = ["bookflow-cp-eks", "bookflow-cp-ecs", "bookflow-publisher-bg"]
 # CloudTrail → CloudWatch Logs 그룹 (트레일 CWLG 연동 시 부여 예정 명칭)
 CLOUDTRAIL_LOG_GROUP = "/aws/cloudtrail/bookflow"
 
@@ -99,6 +97,31 @@ def _metric(ref_id, namespace, metric, dims, stat="Average", period="300", label
         .statistic(stat)
         .period(period)
         .match_exact(True)
+        .ref_id(ref_id)
+    )
+    if label:
+        q = q.label(label)
+    return q
+
+
+def _search(ref_id, namespace, expression, stat="Average", period="300", label=""):
+    """CloudWatch SEARCH 식 쿼리 빌더 (CODE mode).
+
+    SEARCH 식은 metric_editor_mode=CODE + namespace + statistic 필수 —
+    BUILDER 모드/누락 시 metricName empty 또는 plugin 500 (라이브 검증).
+    ALB ARN suffix 처럼 매일 회전하는 식별자는 unquoted 부분일치 SEARCH 로
+    자동 매칭 → 하드코딩 불필요(self-healing)."""
+    q = (
+        CWMetrics()
+        .datasource(ds.ref(ds.CLOUDWATCH))
+        .query_mode(CloudWatchQueryMode.METRICS)
+        .metric_query_type(MetricQueryType.SEARCH)
+        .metric_editor_mode(MetricEditorMode.CODE)
+        .region(REGION)
+        .namespace(namespace)
+        .expression(expression)
+        .statistic(stat)
+        .period(period)
         .ref_id(ref_id)
     )
     if label:
@@ -410,8 +433,11 @@ def _alb_requests():
         ),
     )
     return p.datasource(ds.ref(ds.CLOUDWATCH)).with_target(
-        _metric("A", "AWS/ApplicationELB", "RequestCount",
-                {"LoadBalancer": ALB_EXTERNAL}, stat="Sum", label="요청"),
+        _search("A", "AWS/ApplicationELB",
+                'SEARCH(\'{AWS/ApplicationELB,LoadBalancer} '
+                'LoadBalancer=app/bookflow-alb-external '
+                'MetricName="RequestCount"\', \'Sum\', 300)',
+                stat="Sum", label="요청"),
     )
 
 
@@ -424,10 +450,16 @@ def _alb_5xx():
     )
     return (
         p.datasource(ds.ref(ds.CLOUDWATCH))
-        .with_target(_metric("A", "AWS/ApplicationELB", "HTTPCode_ELB_5XX_Count",
-                             {"LoadBalancer": ALB_EXTERNAL}, stat="Sum", label="ELB 5xx"))
-        .with_target(_metric("B", "AWS/ApplicationELB", "HTTPCode_Target_5XX_Count",
-                             {"LoadBalancer": ALB_EXTERNAL}, stat="Sum", label="Target 5xx"))
+        .with_target(_search("A", "AWS/ApplicationELB",
+                             'SEARCH(\'{AWS/ApplicationELB,LoadBalancer} '
+                             'LoadBalancer=app/bookflow-alb-external '
+                             'MetricName="HTTPCode_ELB_5XX_Count"\', \'Sum\', 300)',
+                             stat="Sum", label="ELB 5xx"))
+        .with_target(_search("B", "AWS/ApplicationELB",
+                             'SEARCH(\'{AWS/ApplicationELB,LoadBalancer} '
+                             'LoadBalancer=app/bookflow-alb-external '
+                             'MetricName="HTTPCode_Target_5XX_Count"\', \'Sum\', 300)',
+                             stat="Sum", label="Target 5xx"))
     )
 
 
@@ -440,13 +472,15 @@ def _alb_targets():
         thresholds=pb._thresholds([(None, pb.RED), (1, pb.GREEN)]),
         description=(
             "AWS/ApplicationELB HealthyHostCount — bookflow-alb-external · "
-            "TargetGroup bookflow-inventory-api-tg. target 메트릭은 "
-            "LoadBalancer+TargetGroup 2개 차원 필요."
+            "inventory-api TargetGroup. SEARCH 부분일치로 ARN suffix 회전 자동 매칭."
         ),
     )
     return p.datasource(ds.ref(ds.CLOUDWATCH)).with_target(
-        _metric("A", "AWS/ApplicationELB", "HealthyHostCount",
-                {"LoadBalancer": ALB_EXTERNAL, "TargetGroup": ALB_TARGET_GROUP},
+        _search("A", "AWS/ApplicationELB",
+                'SEARCH(\'{AWS/ApplicationELB,LoadBalancer,TargetGroup} '
+                'LoadBalancer=app/bookflow-alb-external '
+                'TargetGroup=targetgroup/bookflow-inventory-api-tg '
+                'MetricName="HealthyHostCount"\', \'Average\', 300)',
                 stat="Average", label="healthy"),
     )
 
@@ -529,8 +563,10 @@ def _cloudtrail_activity():
         ),
     )
     return p.datasource(ds.ref(ds.CLOUDWATCH)).with_target(
+        # Logs Insights 파서는 ASCII 컬럼명만 허용 — 한글 alias(호출수) 시
+        # MalformedQueryException 400. ASCII 로 작성 (트레일 생성 시 즉시 동작).
         _logs("A", CLOUDTRAIL_LOG_GROUP,
-              "fields @timestamp | stats count(*) as 호출수 by bin(5m)"),
+              "fields @timestamp | stats count(*) as calls by bin(5m)"),
     )
 
 

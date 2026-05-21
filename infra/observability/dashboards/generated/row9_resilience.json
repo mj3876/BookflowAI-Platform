@@ -1432,10 +1432,10 @@
             "type": "cloudwatch",
             "uid": "cloudwatch"
           },
-          "expression": "SEARCH('{AWS/AutoScaling,AutoScalingGroupName} AutoScalingGroupName=\"CodeDeploy_bookflow-publisher\" MetricName=\"GroupInServiceInstances\"', 'Average', 300)",
+          "expression": "SEARCH('{AWS/AutoScaling,AutoScalingGroupName} AutoScalingGroupName=CodeDeploy_bookflow-publisher MetricName=\"GroupInServiceInstances\"', 'Average', 300)",
           "id": "",
           "label": "InService",
-          "metricEditorMode": 0,
+          "metricEditorMode": 1,
           "metricQueryType": 0,
           "namespace": "AWS/AutoScaling",
           "period": "300",
@@ -1493,10 +1493,10 @@
             "type": "cloudwatch",
             "uid": "cloudwatch"
           },
-          "expression": "SEARCH('{AWS/AutoScaling,AutoScalingGroupName} AutoScalingGroupName=\"CodeDeploy_bookflow-publisher\" MetricName=\"GroupDesiredCapacity\"', 'Average', 300)",
+          "expression": "SEARCH('{AWS/AutoScaling,AutoScalingGroupName} AutoScalingGroupName=CodeDeploy_bookflow-publisher MetricName=\"GroupDesiredCapacity\"', 'Average', 300)",
           "id": "",
           "label": "Desired",
-          "metricEditorMode": 0,
+          "metricEditorMode": 1,
           "metricQueryType": 0,
           "namespace": "AWS/AutoScaling",
           "period": "300",
@@ -1510,10 +1510,10 @@
             "type": "cloudwatch",
             "uid": "cloudwatch"
           },
-          "expression": "SEARCH('{AWS/AutoScaling,AutoScalingGroupName} AutoScalingGroupName=\"CodeDeploy_bookflow-publisher\" MetricName=\"GroupInServiceInstances\"', 'Average', 300)",
+          "expression": "SEARCH('{AWS/AutoScaling,AutoScalingGroupName} AutoScalingGroupName=CodeDeploy_bookflow-publisher MetricName=\"GroupInServiceInstances\"', 'Average', 300)",
           "id": "",
           "label": "InService",
-          "metricEditorMode": 0,
+          "metricEditorMode": 1,
           "metricQueryType": 0,
           "namespace": "AWS/AutoScaling",
           "period": "300",
@@ -1527,10 +1527,10 @@
             "type": "cloudwatch",
             "uid": "cloudwatch"
           },
-          "expression": "SEARCH('{AWS/AutoScaling,AutoScalingGroupName} AutoScalingGroupName=\"CodeDeploy_bookflow-publisher\" MetricName=\"GroupMinSize\"', 'Average', 300)",
+          "expression": "SEARCH('{AWS/AutoScaling,AutoScalingGroupName} AutoScalingGroupName=CodeDeploy_bookflow-publisher MetricName=\"GroupMinSize\"', 'Average', 300)",
           "id": "",
           "label": "Min",
-          "metricEditorMode": 0,
+          "metricEditorMode": 1,
           "metricQueryType": 0,
           "namespace": "AWS/AutoScaling",
           "period": "300",
@@ -1544,10 +1544,10 @@
             "type": "cloudwatch",
             "uid": "cloudwatch"
           },
-          "expression": "SEARCH('{AWS/AutoScaling,AutoScalingGroupName} AutoScalingGroupName=\"CodeDeploy_bookflow-publisher\" MetricName=\"GroupMaxSize\"', 'Average', 300)",
+          "expression": "SEARCH('{AWS/AutoScaling,AutoScalingGroupName} AutoScalingGroupName=CodeDeploy_bookflow-publisher MetricName=\"GroupMaxSize\"', 'Average', 300)",
           "id": "",
           "label": "Max",
-          "metricEditorMode": 0,
+          "metricEditorMode": 1,
           "metricQueryType": 0,
           "namespace": "AWS/AutoScaling",
           "period": "300",
@@ -1605,10 +1605,10 @@
             "type": "cloudwatch",
             "uid": "cloudwatch"
           },
-          "expression": "SEARCH('{AWS/EC2,AutoScalingGroupName} AutoScalingGroupName=\"CodeDeploy_bookflow-publisher\" MetricName=\"CPUUtilization\"', 'Average', 300)",
+          "expression": "SEARCH('{AWS/EC2,AutoScalingGroupName} AutoScalingGroupName=CodeDeploy_bookflow-publisher MetricName=\"CPUUtilization\"', 'Average', 300)",
           "id": "",
           "label": "{{InstanceId}} CPU",
-          "metricEditorMode": 0,
+          "metricEditorMode": 1,
           "metricQueryType": 0,
           "namespace": "AWS/EC2",
           "period": "300",
@@ -1666,10 +1666,10 @@
             "type": "cloudwatch",
             "uid": "cloudwatch"
           },
-          "expression": "SEARCH('{AWS/EC2,AutoScalingGroupName} AutoScalingGroupName=\"CodeDeploy_bookflow-publisher\" MetricName=\"StatusCheckFailed\"', 'Maximum', 300)",
+          "expression": "SEARCH('{AWS/EC2,AutoScalingGroupName} AutoScalingGroupName=CodeDeploy_bookflow-publisher MetricName=\"StatusCheckFailed\"', 'Maximum', 300)",
           "id": "",
           "label": "StatusCheckFailed",
-          "metricEditorMode": 0,
+          "metricEditorMode": 1,
           "metricQueryType": 0,
           "namespace": "AWS/EC2",
           "period": "300",
@@ -1683,10 +1683,10 @@
             "type": "cloudwatch",
             "uid": "cloudwatch"
           },
-          "expression": "SEARCH('{AWS/EC2,AutoScalingGroupName} AutoScalingGroupName=\"CodeDeploy_bookflow-publisher\" MetricName=\"StatusCheckFailed_Instance\"', 'Maximum', 300)",
+          "expression": "SEARCH('{AWS/EC2,AutoScalingGroupName} AutoScalingGroupName=CodeDeploy_bookflow-publisher MetricName=\"StatusCheckFailed_Instance\"', 'Maximum', 300)",
           "id": "",
           "label": "Instance",
-          "metricEditorMode": 0,
+          "metricEditorMode": 1,
           "metricQueryType": 0,
           "namespace": "AWS/EC2",
           "period": "300",
@@ -1700,10 +1700,10 @@
             "type": "cloudwatch",
             "uid": "cloudwatch"
           },
-          "expression": "SEARCH('{AWS/EC2,AutoScalingGroupName} AutoScalingGroupName=\"CodeDeploy_bookflow-publisher\" MetricName=\"StatusCheckFailed_System\"', 'Maximum', 300)",
+          "expression": "SEARCH('{AWS/EC2,AutoScalingGroupName} AutoScalingGroupName=CodeDeploy_bookflow-publisher MetricName=\"StatusCheckFailed_System\"', 'Maximum', 300)",
           "id": "",
           "label": "System",
-          "metricEditorMode": 0,
+          "metricEditorMode": 1,
           "metricQueryType": 0,
           "namespace": "AWS/EC2",
           "period": "300",
@@ -2266,7 +2266,7 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "VpnId": "vpn-0acce17f17cf493e7"
+            "VpnId": "__VPN_GCP_ID__"
           },
           "id": "",
           "label": "AWS↔GCP",
@@ -2366,7 +2366,7 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "VpnId": "vpn-0c5c1f736a382cd41"
+            "VpnId": "__VPN_AZURE_ID__"
           },
           "id": "",
           "label": "AWS↔Azure",
@@ -2443,10 +2443,10 @@
             "type": "cloudwatch",
             "uid": "cloudwatch"
           },
-          "expression": "SEARCH('{AWS/VPN,VpnId,TunnelIpAddress} MetricName=\"TunnelState\"', 'Maximum', 300)",
+          "expression": "SEARCH('{AWS/VPN,TunnelIpAddress} MetricName=\"TunnelState\"', 'Maximum', 300)",
           "id": "",
-          "label": "{{VpnId}} {{TunnelIpAddress}}",
-          "metricEditorMode": 0,
+          "label": "{{TunnelIpAddress}}",
+          "metricEditorMode": 1,
           "metricQueryType": 0,
           "namespace": "AWS/VPN",
           "period": "300",
@@ -2507,7 +2507,7 @@
           "expression": "SEARCH('{AWS/VPN,VpnId} MetricName=\"TunnelDataIn\"', 'Sum', 300)",
           "id": "",
           "label": "{{VpnId}} In",
-          "metricEditorMode": 0,
+          "metricEditorMode": 1,
           "metricQueryType": 0,
           "namespace": "AWS/VPN",
           "period": "300",
@@ -2524,7 +2524,7 @@
           "expression": "SEARCH('{AWS/VPN,VpnId} MetricName=\"TunnelDataOut\"', 'Sum', 300)",
           "id": "",
           "label": "{{VpnId}} Out",
-          "metricEditorMode": 0,
+          "metricEditorMode": 1,
           "metricQueryType": 0,
           "namespace": "AWS/VPN",
           "period": "300",
@@ -2585,7 +2585,7 @@
           "expression": "SEARCH('{AWS/VPN,VpnId} MetricName=\"TunnelState\"', 'Maximum', 300)",
           "id": "",
           "label": "{{VpnId}} max",
-          "metricEditorMode": 0,
+          "metricEditorMode": 1,
           "metricQueryType": 0,
           "namespace": "AWS/VPN",
           "period": "300",
@@ -2602,7 +2602,7 @@
           "expression": "SEARCH('{AWS/VPN,VpnId} MetricName=\"TunnelState\"', 'Minimum', 300)",
           "id": "",
           "label": "{{VpnId}} min",
-          "metricEditorMode": 0,
+          "metricEditorMode": 1,
           "metricQueryType": 0,
           "namespace": "AWS/VPN",
           "period": "300",
@@ -2687,7 +2687,7 @@
         {
           "azureLogAnalytics": {
             "dashboardTime": true,
-            "query": "AzureDiagnostics | where ResourceProvider == 'MICROSOFT.LOGIC' | where TimeGenerated > ago(6h) | summarize 시작=count(), 성공=countif(status_s=='Succeeded'), 실패=countif(status_s=='Failed') by bin(TimeGenerated, 5m) | order by TimeGenerated asc",
+            "query": "AzureDiagnostics | where ResourceProvider == 'MICROSOFT.LOGIC' | where TimeGenerated > ago(6h) | summarize started=count(), succeeded=countif(status_s=='Succeeded'), failed=countif(status_s=='Failed') by bin(TimeGenerated, 5m) | order by TimeGenerated asc",
             "resources": [
               "/subscriptions/e98a94bb-7532-4e49-8a36-bc42e30d5a81/resourceGroups/rg-bookflow/providers/Microsoft.OperationalInsights/workspaces/law-bookflowmj"
             ],
@@ -2971,7 +2971,7 @@
         {
           "azureLogAnalytics": {
             "dashboardTime": true,
-            "query": "AzureDiagnostics | where ResourceProvider == 'MICROSOFT.LOGIC' | where TimeGenerated > ago(6h) | where status_s in ('Succeeded','Failed') | summarize 전체=count(), timeout실패=countif(status_s=='Failed' and (error_message_s contains 'timeout' or error_code_s contains 'Timeout')) | extend timeout비율 = iff(전체==0, real(null), round(100.0*timeout실패/전체, 2)) | project timeout비율",
+            "query": "AzureDiagnostics | where ResourceProvider == 'MICROSOFT.LOGIC' | where TimeGenerated > ago(6h) | where status_s in ('Succeeded','Failed') | summarize total=count(), timeout_failed=countif(status_s=='Failed' and (error_message_s contains 'timeout' or error_code_s contains 'Timeout')) | extend timeout_ratio = iff(total==0, real(null), round(100.0*timeout_failed/total, 2)) | project timeout_ratio",
             "resources": [
               "/subscriptions/e98a94bb-7532-4e49-8a36-bc42e30d5a81/resourceGroups/rg-bookflow/providers/Microsoft.OperationalInsights/workspaces/law-bookflowmj"
             ],
@@ -3017,7 +3017,7 @@
         {
           "azureLogAnalytics": {
             "dashboardTime": true,
-            "query": "AzureDiagnostics | where ResourceProvider == 'MICROSOFT.LOGIC' | where TimeGenerated > ago(6h) | summarize 실행=count(), 성공=countif(status_s=='Succeeded'), 실패=countif(status_s=='Failed'), timeout=countif(status_s=='Failed' and (error_message_s contains 'timeout' or error_code_s contains 'Timeout')) by 워크플로=resource_workflowName_s | where 실행 > 0 | order by timeout desc, 실패 desc",
+            "query": "AzureDiagnostics | where ResourceProvider == 'MICROSOFT.LOGIC' | where TimeGenerated > ago(6h) | summarize runs=count(), succeeded=countif(status_s=='Succeeded'), failed=countif(status_s=='Failed'), timeout=countif(status_s=='Failed' and (error_message_s contains 'timeout' or error_code_s contains 'Timeout')) by workflow=resource_workflowName_s | where runs > 0 | order by timeout desc, failed desc",
             "resources": [
               "/subscriptions/e98a94bb-7532-4e49-8a36-bc42e30d5a81/resourceGroups/rg-bookflow/providers/Microsoft.OperationalInsights/workspaces/law-bookflowmj"
             ],

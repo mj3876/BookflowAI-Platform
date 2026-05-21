@@ -98,7 +98,7 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "VpnId": "vpn-0acce17f17cf493e7"
+            "VpnId": "__VPN_GCP_ID__"
           },
           "id": "",
           "label": "AWS↔GCP",
@@ -197,7 +197,7 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "VpnId": "vpn-0c5c1f736a382cd41"
+            "VpnId": "__VPN_AZURE_ID__"
           },
           "id": "",
           "label": "AWS↔Azure",
@@ -457,7 +457,7 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "VpnId": "vpn-0acce17f17cf493e7"
+            "VpnId": "__VPN_GCP_ID__"
           },
           "id": "",
           "label": "AWS↔GCP In",
@@ -477,7 +477,7 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "VpnId": "vpn-0acce17f17cf493e7"
+            "VpnId": "__VPN_GCP_ID__"
           },
           "id": "",
           "label": "AWS↔GCP Out",
@@ -497,7 +497,7 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "VpnId": "vpn-0c5c1f736a382cd41"
+            "VpnId": "__VPN_AZURE_ID__"
           },
           "id": "",
           "label": "AWS↔Azure In",
@@ -517,7 +517,7 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "VpnId": "vpn-0c5c1f736a382cd41"
+            "VpnId": "__VPN_AZURE_ID__"
           },
           "id": "",
           "label": "AWS↔Azure Out",
@@ -652,7 +652,7 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770"
+            "TransitGateway": "__TGW_ID__"
           },
           "id": "",
           "label": "hub In",
@@ -673,7 +673,7 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770"
+            "TransitGateway": "__TGW_ID__"
           },
           "id": "",
           "label": "hub Out",
@@ -741,8 +741,8 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770",
-            "TransitGatewayAttachment": "tgw-attach-00e48fdc9b237eca6"
+            "TransitGateway": "__TGW_ID__",
+            "TransitGatewayAttachment": "__TGW_ATTACH_BOOKFLOW_AI__"
           },
           "id": "",
           "label": "bookflow-ai",
@@ -763,8 +763,8 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770",
-            "TransitGatewayAttachment": "tgw-attach-01ca13ae484a58789"
+            "TransitGateway": "__TGW_ID__",
+            "TransitGatewayAttachment": "__TGW_ATTACH_ANSIBLE__"
           },
           "id": "",
           "label": "ansible",
@@ -785,8 +785,8 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770",
-            "TransitGatewayAttachment": "tgw-attach-070989bcce94a9a77"
+            "TransitGateway": "__TGW_ID__",
+            "TransitGatewayAttachment": "__TGW_ATTACH_SALES_DATA__"
           },
           "id": "",
           "label": "sales-data",
@@ -807,8 +807,8 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770",
-            "TransitGatewayAttachment": "tgw-attach-0e50c4367602a85b7"
+            "TransitGateway": "__TGW_ID__",
+            "TransitGatewayAttachment": "__TGW_ATTACH_DATA__"
           },
           "id": "",
           "label": "data",
@@ -829,8 +829,8 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770",
-            "TransitGatewayAttachment": "tgw-attach-0fc3918eb6f66ba0d"
+            "TransitGateway": "__TGW_ID__",
+            "TransitGatewayAttachment": "__TGW_ATTACH_EGRESS__"
           },
           "id": "",
           "label": "egress",
@@ -851,8 +851,8 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770",
-            "TransitGatewayAttachment": "tgw-attach-03a24f63e21f6ef81"
+            "TransitGateway": "__TGW_ID__",
+            "TransitGatewayAttachment": "__TGW_ATTACH_VPN_1__"
           },
           "id": "",
           "label": "vpn-1",
@@ -873,8 +873,8 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770",
-            "TransitGatewayAttachment": "tgw-attach-0442cc206fa2649cd"
+            "TransitGateway": "__TGW_ID__",
+            "TransitGatewayAttachment": "__TGW_ATTACH_VPN_2__"
           },
           "id": "",
           "label": "vpn-2",
@@ -942,8 +942,8 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770",
-            "TransitGatewayAttachment": "tgw-attach-00e48fdc9b237eca6"
+            "TransitGateway": "__TGW_ID__",
+            "TransitGatewayAttachment": "__TGW_ATTACH_BOOKFLOW_AI__"
           },
           "id": "",
           "label": "bookflow-ai",
@@ -964,8 +964,8 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770",
-            "TransitGatewayAttachment": "tgw-attach-01ca13ae484a58789"
+            "TransitGateway": "__TGW_ID__",
+            "TransitGatewayAttachment": "__TGW_ATTACH_ANSIBLE__"
           },
           "id": "",
           "label": "ansible",
@@ -986,8 +986,8 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770",
-            "TransitGatewayAttachment": "tgw-attach-070989bcce94a9a77"
+            "TransitGateway": "__TGW_ID__",
+            "TransitGatewayAttachment": "__TGW_ATTACH_SALES_DATA__"
           },
           "id": "",
           "label": "sales-data",
@@ -1008,8 +1008,8 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770",
-            "TransitGatewayAttachment": "tgw-attach-0e50c4367602a85b7"
+            "TransitGateway": "__TGW_ID__",
+            "TransitGatewayAttachment": "__TGW_ATTACH_DATA__"
           },
           "id": "",
           "label": "data",
@@ -1030,8 +1030,8 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770",
-            "TransitGatewayAttachment": "tgw-attach-0fc3918eb6f66ba0d"
+            "TransitGateway": "__TGW_ID__",
+            "TransitGatewayAttachment": "__TGW_ATTACH_EGRESS__"
           },
           "id": "",
           "label": "egress",
@@ -1052,8 +1052,8 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770",
-            "TransitGatewayAttachment": "tgw-attach-03a24f63e21f6ef81"
+            "TransitGateway": "__TGW_ID__",
+            "TransitGatewayAttachment": "__TGW_ATTACH_VPN_1__"
           },
           "id": "",
           "label": "vpn-1",
@@ -1074,8 +1074,8 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770",
-            "TransitGatewayAttachment": "tgw-attach-0442cc206fa2649cd"
+            "TransitGateway": "__TGW_ID__",
+            "TransitGatewayAttachment": "__TGW_ATTACH_VPN_2__"
           },
           "id": "",
           "label": "vpn-2",
@@ -1143,8 +1143,8 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770",
-            "TransitGatewayAttachment": "tgw-attach-00e48fdc9b237eca6"
+            "TransitGateway": "__TGW_ID__",
+            "TransitGatewayAttachment": "__TGW_ATTACH_BOOKFLOW_AI__"
           },
           "id": "",
           "label": "bookflow-ai",
@@ -1165,8 +1165,8 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770",
-            "TransitGatewayAttachment": "tgw-attach-01ca13ae484a58789"
+            "TransitGateway": "__TGW_ID__",
+            "TransitGatewayAttachment": "__TGW_ATTACH_ANSIBLE__"
           },
           "id": "",
           "label": "ansible",
@@ -1187,8 +1187,8 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770",
-            "TransitGatewayAttachment": "tgw-attach-070989bcce94a9a77"
+            "TransitGateway": "__TGW_ID__",
+            "TransitGatewayAttachment": "__TGW_ATTACH_SALES_DATA__"
           },
           "id": "",
           "label": "sales-data",
@@ -1209,8 +1209,8 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770",
-            "TransitGatewayAttachment": "tgw-attach-0e50c4367602a85b7"
+            "TransitGateway": "__TGW_ID__",
+            "TransitGatewayAttachment": "__TGW_ATTACH_DATA__"
           },
           "id": "",
           "label": "data",
@@ -1231,8 +1231,8 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770",
-            "TransitGatewayAttachment": "tgw-attach-0fc3918eb6f66ba0d"
+            "TransitGateway": "__TGW_ID__",
+            "TransitGatewayAttachment": "__TGW_ATTACH_EGRESS__"
           },
           "id": "",
           "label": "egress",
@@ -1253,8 +1253,8 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770",
-            "TransitGatewayAttachment": "tgw-attach-03a24f63e21f6ef81"
+            "TransitGateway": "__TGW_ID__",
+            "TransitGatewayAttachment": "__TGW_ATTACH_VPN_1__"
           },
           "id": "",
           "label": "vpn-1",
@@ -1275,8 +1275,8 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770",
-            "TransitGatewayAttachment": "tgw-attach-0442cc206fa2649cd"
+            "TransitGateway": "__TGW_ID__",
+            "TransitGatewayAttachment": "__TGW_ATTACH_VPN_2__"
           },
           "id": "",
           "label": "vpn-2",
@@ -1301,7 +1301,7 @@
         "type": "cloudwatch",
         "uid": "cloudwatch"
       },
-      "description": "attachment tgw-attach-00e48fdc9b237eca6 (VPC bookflow-ai) 의 BytesIn lastNotNull. trend area 로 24h 활동 패턴.",
+      "description": "attachment __TGW_ATTACH_BOOKFLOW_AI__ (VPC bookflow-ai) 의 BytesIn lastNotNull. trend area 로 24h 활동 패턴.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -1351,8 +1351,8 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770",
-            "TransitGatewayAttachment": "tgw-attach-00e48fdc9b237eca6"
+            "TransitGateway": "__TGW_ID__",
+            "TransitGatewayAttachment": "__TGW_ATTACH_BOOKFLOW_AI__"
           },
           "id": "",
           "label": "bookflow-ai",
@@ -1377,7 +1377,7 @@
         "type": "cloudwatch",
         "uid": "cloudwatch"
       },
-      "description": "attachment tgw-attach-01ca13ae484a58789 (VPC ansible) 의 BytesIn lastNotNull. trend area 로 24h 활동 패턴.",
+      "description": "attachment __TGW_ATTACH_ANSIBLE__ (VPC ansible) 의 BytesIn lastNotNull. trend area 로 24h 활동 패턴.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -1427,8 +1427,8 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770",
-            "TransitGatewayAttachment": "tgw-attach-01ca13ae484a58789"
+            "TransitGateway": "__TGW_ID__",
+            "TransitGatewayAttachment": "__TGW_ATTACH_ANSIBLE__"
           },
           "id": "",
           "label": "ansible",
@@ -1453,7 +1453,7 @@
         "type": "cloudwatch",
         "uid": "cloudwatch"
       },
-      "description": "attachment tgw-attach-070989bcce94a9a77 (VPC sales-data) 의 BytesIn lastNotNull. trend area 로 24h 활동 패턴.",
+      "description": "attachment __TGW_ATTACH_SALES_DATA__ (VPC sales-data) 의 BytesIn lastNotNull. trend area 로 24h 활동 패턴.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -1503,8 +1503,8 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770",
-            "TransitGatewayAttachment": "tgw-attach-070989bcce94a9a77"
+            "TransitGateway": "__TGW_ID__",
+            "TransitGatewayAttachment": "__TGW_ATTACH_SALES_DATA__"
           },
           "id": "",
           "label": "sales-data",
@@ -1529,7 +1529,7 @@
         "type": "cloudwatch",
         "uid": "cloudwatch"
       },
-      "description": "attachment tgw-attach-0e50c4367602a85b7 (VPC data) 의 BytesIn lastNotNull. trend area 로 24h 활동 패턴.",
+      "description": "attachment __TGW_ATTACH_DATA__ (VPC data) 의 BytesIn lastNotNull. trend area 로 24h 활동 패턴.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -1579,8 +1579,8 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770",
-            "TransitGatewayAttachment": "tgw-attach-0e50c4367602a85b7"
+            "TransitGateway": "__TGW_ID__",
+            "TransitGatewayAttachment": "__TGW_ATTACH_DATA__"
           },
           "id": "",
           "label": "data",
@@ -1605,7 +1605,7 @@
         "type": "cloudwatch",
         "uid": "cloudwatch"
       },
-      "description": "attachment tgw-attach-0fc3918eb6f66ba0d (VPC egress) 의 BytesIn lastNotNull. trend area 로 24h 활동 패턴.",
+      "description": "attachment __TGW_ATTACH_EGRESS__ (VPC egress) 의 BytesIn lastNotNull. trend area 로 24h 활동 패턴.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -1655,8 +1655,8 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770",
-            "TransitGatewayAttachment": "tgw-attach-0fc3918eb6f66ba0d"
+            "TransitGateway": "__TGW_ID__",
+            "TransitGatewayAttachment": "__TGW_ATTACH_EGRESS__"
           },
           "id": "",
           "label": "egress",
@@ -1681,7 +1681,7 @@
         "type": "cloudwatch",
         "uid": "cloudwatch"
       },
-      "description": "attachment tgw-attach-03a24f63e21f6ef81 (VPC vpn-1) 의 BytesIn lastNotNull. trend area 로 24h 활동 패턴.",
+      "description": "attachment __TGW_ATTACH_VPN_1__ (VPC vpn-1) 의 BytesIn lastNotNull. trend area 로 24h 활동 패턴.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -1731,8 +1731,8 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770",
-            "TransitGatewayAttachment": "tgw-attach-03a24f63e21f6ef81"
+            "TransitGateway": "__TGW_ID__",
+            "TransitGatewayAttachment": "__TGW_ATTACH_VPN_1__"
           },
           "id": "",
           "label": "vpn-1",
@@ -1757,7 +1757,7 @@
         "type": "cloudwatch",
         "uid": "cloudwatch"
       },
-      "description": "attachment tgw-attach-0442cc206fa2649cd (VPC vpn-2) 의 BytesIn lastNotNull. trend area 로 24h 활동 패턴.",
+      "description": "attachment __TGW_ATTACH_VPN_2__ (VPC vpn-2) 의 BytesIn lastNotNull. trend area 로 24h 활동 패턴.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -1807,8 +1807,8 @@
             "uid": "cloudwatch"
           },
           "dimensions": {
-            "TransitGateway": "tgw-0098d5980c95a9770",
-            "TransitGatewayAttachment": "tgw-attach-0442cc206fa2649cd"
+            "TransitGateway": "__TGW_ID__",
+            "TransitGatewayAttachment": "__TGW_ATTACH_VPN_2__"
           },
           "id": "",
           "label": "vpn-2",

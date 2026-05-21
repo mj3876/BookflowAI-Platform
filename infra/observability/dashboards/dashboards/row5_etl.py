@@ -230,8 +230,10 @@ def _glue_run_volume():
             "Crawler·Data Catalog 통계는 GetCrawlerMetrics 커스텀 메트릭 필요."
         ),
     )
+    # Logs Insights 파서는 ASCII 컬럼명만 허용 — 한글 alias(run수) 시
+    # MalformedQueryException 400 (라이브 검증). ASCII 로 작성.
     expr = (
-        "fields @logStream | stats count_distinct(@logStream) as run수 by bin(1h)"
+        "fields @logStream | stats count_distinct(@logStream) as runs by bin(1h)"
     )
     return p.datasource(ds.ref(ds.CLOUDWATCH)).with_target(
         _logs("A", GLUE_OUTPUT_LOG_GROUP, expr),

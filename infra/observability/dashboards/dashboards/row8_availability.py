@@ -301,7 +301,7 @@ def _vpn_aws_gcp_uptime() -> object:
         mappings=[_NODATA_MAP],
         span=pb.SPAN_QUARTER,
         decimals=2,
-        description="AWS/VPN TunnelState avg × 100 (vpn-0acce17f17cf493e7 · 0=DOWN, 1=UP)",
+        description="AWS/VPN TunnelState avg × 100 (bookflow-vpn-gcp · 0=DOWN, 1=UP)",
     )
     return panel.datasource(ds.ref(ds.CLOUDWATCH)).with_target(
         CloudWatchMetricsQuery()
@@ -310,7 +310,11 @@ def _vpn_aws_gcp_uptime() -> object:
         .metric_query_type(MetricQueryType.SEARCH)
         .metric_editor_mode(MetricEditorMode.CODE)
         .region(_CW_REGION)
-        .expression("SEARCH('{AWS/VPN,VpnId} MetricName=\"TunnelState\" VpnId=\"vpn-0acce17f17cf493e7\"', 'Average', 300) * 100")
+        # CODE-mode SEARCH 는 namespace + statistic 필수 — 누락 시 plugin 500 (라이브 검증).
+        # VpnId 는 매일 destroy/recreate 로 회전 → apply 시점 치환 placeholder.
+        .namespace("AWS/VPN")
+        .expression("SEARCH('{AWS/VPN,VpnId} MetricName=\"TunnelState\" VpnId=\"__VPN_GCP_ID__\"', 'Average', 300) * 100")
+        .statistic("Average")
         .ref_id("A")
         .label("AWS↔GCP")
     )
@@ -325,7 +329,7 @@ def _vpn_aws_azure_uptime() -> object:
         mappings=[_NODATA_MAP],
         span=pb.SPAN_QUARTER,
         decimals=2,
-        description="AWS/VPN TunnelState avg × 100 (vpn-0c5c1f736a382cd41 · 0=DOWN, 1=UP)",
+        description="AWS/VPN TunnelState avg × 100 (bookflow-vpn-azure · 0=DOWN, 1=UP)",
     )
     return panel.datasource(ds.ref(ds.CLOUDWATCH)).with_target(
         CloudWatchMetricsQuery()
@@ -334,7 +338,11 @@ def _vpn_aws_azure_uptime() -> object:
         .metric_query_type(MetricQueryType.SEARCH)
         .metric_editor_mode(MetricEditorMode.CODE)
         .region(_CW_REGION)
-        .expression("SEARCH('{AWS/VPN,VpnId} MetricName=\"TunnelState\" VpnId=\"vpn-0c5c1f736a382cd41\"', 'Average', 300) * 100")
+        # CODE-mode SEARCH 는 namespace + statistic 필수 — 누락 시 plugin 500 (라이브 검증).
+        # VpnId 는 매일 destroy/recreate 로 회전 → apply 시점 치환 placeholder.
+        .namespace("AWS/VPN")
+        .expression("SEARCH('{AWS/VPN,VpnId} MetricName=\"TunnelState\" VpnId=\"__VPN_AZURE_ID__\"', 'Average', 300) * 100")
+        .statistic("Average")
         .ref_id("A")
         .label("AWS↔Azure")
     )
