@@ -22,8 +22,14 @@ up)
   step "etl.sh up"
   # 직렬화 필수 — glue task 가 step-functions 만든 후 lambdas UPDATE (SF ARN 주입) 함.
   # lambdas CREATE 와 동시 실행 시 'Rollback requested by user' race.
-  step "1. lambdas (SAM) — CREATE 단독"
-  py "$PROJECT_ROOT/scripts/aws/bookflow.py" task lambdas
+  # start-day.sh 에서 step3(SAM 단독 배포) 완료 시 BOOKFLOW_LAMBDAS_DEPLOYED=1 이 export됨 → skip.
+  # etl.sh 단독 실행 시에는 플래그 없으므로 정상 배포.
+  if [[ "${BOOKFLOW_LAMBDAS_DEPLOYED:-}" == "1" ]]; then
+    log "lambdas SAM 배포 skip (start-day.sh step3 에서 완료)"
+  else
+    step "1. lambdas (SAM) — CREATE 단독"
+    py "$PROJECT_ROOT/scripts/aws/bookflow.py" task lambdas
+  fi
   step "2. glue catalog + step-functions (+ lambdas UPDATE · SF ARN 주입)"
   py "$PROJECT_ROOT/scripts/aws/bookflow.py" task glue
   step "3. step-functions idempotent re-apply"
