@@ -59,6 +59,43 @@ def _ensure_kubeconfig() -> None:
         ["aws", "eks", "update-kubeconfig", "--name", "bookflow-eks", "--region", region],
         check=True,
     )
+    kubeconfig = Path.home() / ".kube" / "config"
+    if kubeconfig.exists():
+        text = kubeconfig.read_text(encoding="utf-8")
+        wrapper = (Path(__file__).resolve().parents[1] / "eks_get_token_v1beta1.py").as_posix()
+        old_exec = f"""      apiVersion: client.authentication.k8s.io/v1alpha1
+      args:
+      - --region
+      - {region}
+      - eks
+      - get-token
+      - --cluster-name
+      - bookflow-eks
+      command: aws"""
+        new_exec = f"""      apiVersion: client.authentication.k8s.io/v1beta1
+      args:
+      - {wrapper}
+      - --region
+      - {region}
+      - --cluster-name
+      - bookflow-eks
+      command: python"""
+        text = text.replace(old_exec, new_exec)
+        old_exec_v1beta1 = old_exec.replace(
+            "client.authentication.k8s.io/v1alpha1",
+            "client.authentication.k8s.io/v1beta1",
+        )
+        text = text.replace(old_exec_v1beta1, new_exec)
+        fixed = text.replace(
+            "client.authentication.k8s.io/v1alpha1",
+            "client.authentication.k8s.io/v1beta1",
+        )
+        if fixed != text:
+            kubeconfig.write_text(fixed, encoding="utf-8")
+            log.info("patched kubeconfig exec apiVersion to client.authentication.k8s.io/v1beta1")
+        elif new_exec in text:
+            kubeconfig.write_text(text, encoding="utf-8")
+            log.info("patched kubeconfig to use EKS token compatibility wrapper")
 
 
 def _helm_repo_add() -> None:
@@ -83,6 +120,8 @@ def _helm_install_ingress_nginx() -> None:
         "--version", INGRESS_NGINX_VERSION,
         "--set", "controller.service.type=LoadBalancer",
         "--set", "controller.service.annotations.service\\.beta\\.kubernetes\\.io/aws-load-balancer-type=nlb",
+        "--set", "controller.service.annotations.service\\.beta\\.kubernetes\\.io/aws-load-balancer-scheme=internal",
+        "--set-string", "controller.service.annotations.service\\.beta\\.kubernetes\\.io/aws-load-balancer-internal=true",
         "--wait", "--timeout", "5m",
     ], check=True)
 
@@ -585,6 +624,8 @@ ROUTE53_ZONE_ACCOUNT = "354493396671"            # myosoon.store zone 소유 계
 ROUTE53_XACCT_ROLE = "arn:aws:iam::354493396671:role/bookflow-route53-xacct"
 NLB_HOSTED_ZONE_ID = "Z31USIVHYNEOWT"  # NLB ap-northeast-1
 PUBLIC_FQDN = "bookflow.myosoon.store"
+STAFF_DASHBOARD_FQDN = os.environ.get("BOOKFLOW_STAFF_DASHBOARD_FQDN", PUBLIC_FQDN)
+STAFF_DASHBOARD_ZONE_EXPORT = "bookflow-r53-staff-dashboard-zone-id"
 
 
 def _route53_client():
@@ -602,9 +643,7 @@ def _route53_client():
                         aws_session_token=cr["SessionToken"])
 
 
-def _update_route53_a_alias() -> None:
-    """매일 새 NLB DNS → Route53 A alias 자동 UPSERT (bookflow.myosoon.store)."""
-    import boto3
+def _get_nlb_dns() -> str:
     r = subprocess.run(
         ["kubectl", "get", "svc", "-n", "ingress-nginx", "ingress-nginx-controller",
          "-o", "jsonpath={.status.loadBalancer.ingress[0].hostname}"],
@@ -614,23 +653,83 @@ def _update_route53_a_alias() -> None:
     if not nlb_dns:
         log.err("NLB DNS not found · ingress-nginx LoadBalancer 미배포")
         raise SystemExit(1)
-    log.info(f"Route53 UPSERT {PUBLIC_FQDN} → {nlb_dns}")
-    _route53_client().change_resource_record_sets(
-        HostedZoneId=ROUTE53_HOSTED_ZONE_ID,
+    return nlb_dns
+
+
+def _get_cfn_export(name: str) -> str | None:
+    import boto3
+    cf = boto3.client("cloudformation", region_name=os.environ.get("AWS_REGION", "ap-northeast-1"))
+    paginator = cf.get_paginator("list_exports")
+    for page in paginator.paginate():
+        for export in page.get("Exports", []):
+            if export.get("Name") == name:
+                return export.get("Value")
+    return None
+
+
+def _update_private_route53_a_alias() -> None:
+    """VPN/VPC 내부 DNS만 staff dashboard → internal ingress NLB로 연결."""
+    import boto3
+    zone_id = _get_cfn_export(STAFF_DASHBOARD_ZONE_EXPORT)
+    if not zone_id:
+        log.err(f"{STAFF_DASHBOARD_ZONE_EXPORT} export missing · bookflow-10-route53 stack update 필요")
+        raise SystemExit(1)
+    nlb_dns = _get_nlb_dns()
+    elbv2 = boto3.client("elbv2", region_name=os.environ.get("AWS_REGION", "ap-northeast-1"))
+    ec2 = boto3.client("ec2", region_name=os.environ.get("AWS_REGION", "ap-northeast-1"))
+    lbs = elbv2.describe_load_balancers()["LoadBalancers"]
+    lb = next((item for item in lbs if item["DNSName"] == nlb_dns), None)
+    if not lb:
+        log.err(f"NLB not found for DNS name: {nlb_dns}")
+        raise SystemExit(1)
+    enis = ec2.describe_network_interfaces(Filters=[
+        {"Name": "description", "Values": [f"ELB net/{lb['LoadBalancerName']}/*"]},
+    ])["NetworkInterfaces"]
+    private_ips = sorted({eni["PrivateIpAddress"] for eni in enis})
+    if not private_ips:
+        log.err(f"NLB private IPs not found: {lb['LoadBalancerName']}")
+        raise SystemExit(1)
+    log.info(f"Private Route53 UPSERT {STAFF_DASHBOARD_FQDN} → {', '.join(private_ips)}")
+    boto3.client("route53").change_resource_record_sets(
+        HostedZoneId=zone_id,
         ChangeBatch={"Changes": [{
             "Action": "UPSERT",
             "ResourceRecordSet": {
-                "Name": f"{PUBLIC_FQDN}.",
+                "Name": f"{STAFF_DASHBOARD_FQDN}.",
                 "Type": "A",
-                "AliasTarget": {
-                    "HostedZoneId": NLB_HOSTED_ZONE_ID,
-                    "DNSName": nlb_dns + ".",
-                    "EvaluateTargetHealth": False,
-                },
+                "TTL": 60,
+                "ResourceRecords": [{"Value": ip} for ip in private_ips],
             },
         }]},
     )
-    log.info(f"  ✓ {PUBLIC_FQDN} alias updated")
+    log.info(f"  ✓ private {STAFF_DASHBOARD_FQDN} alias updated")
+
+
+def _remove_public_route53_a_alias() -> None:
+    """직원용 dashboard의 public A alias를 제거해 VPN 없는 공개 접근을 차단."""
+    r53 = _route53_client()
+    response = r53.list_resource_record_sets(
+        HostedZoneId=ROUTE53_HOSTED_ZONE_ID,
+        StartRecordName=f"{PUBLIC_FQDN}.",
+        StartRecordType="A",
+        MaxItems="1",
+    )
+    records = [
+        record for record in response.get("ResourceRecordSets", [])
+        if record.get("Name") == f"{PUBLIC_FQDN}." and record.get("Type") == "A"
+    ]
+    if not records:
+        log.info(f"public {PUBLIC_FQDN} A alias already absent")
+        return
+    log.info(f"Route53 DELETE public {PUBLIC_FQDN} A alias")
+    r53.change_resource_record_sets(
+        HostedZoneId=ROUTE53_HOSTED_ZONE_ID,
+        ChangeBatch={"Changes": [{
+            "Action": "DELETE",
+            "ResourceRecordSet": records[0],
+        }]},
+    )
+    log.info(f"  ✓ public {PUBLIC_FQDN} alias removed")
 
 
 def _apply_cluster_secret_store() -> None:
@@ -905,7 +1004,8 @@ def deploy() -> None:
     _helm_install_prometheus()
     _helm_install_grafana()
     _apply_grafana_dashboards()
-    _update_route53_a_alias()
+    _update_private_route53_a_alias()
+    _remove_public_route53_a_alias()
     _apply_manifests()
     # BOOKFLOW_SKIP_RDS_SYNC=1 이면 ALTER ROLE + rollout restart 건너뜀
     # eks.sh 병렬 실행 시 seed.sh 미완료로 role 없어 실패하는 문제 방지
@@ -925,7 +1025,7 @@ def deploy() -> None:
     )
 
     log.step("=== task-eks-addons done ===")
-    log.info("https://bookflow.myosoon.store/ should serve in 60-90s after first cert issuance")
+    log.info(f"https://{STAFF_DASHBOARD_FQDN}/ is available only through Client VPN/private DNS")
 
 
 def destroy() -> None:

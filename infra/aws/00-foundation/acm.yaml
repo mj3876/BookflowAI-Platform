@@ -1,4 +1,4 @@
-﻿AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: '2010-09-09'
 Description: BOOKFLOW - Tier 00 - ACM Client VPN server cert skeleton (easy-rsa generated, imported via aws acm import-certificate; ARN stored in Parameter Store)
 Parameters:
   ProjectName:

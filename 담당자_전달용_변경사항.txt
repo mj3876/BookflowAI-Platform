@@ -1,0 +1,198 @@
+BookFlowAI 담당자 전달용 변경사항 정리
+작성일: 2026-05-22
+
+1. Client VPN 관련
+
+- AWS Client VPN을 재배포했습니다.
+- 기존 Client VPN 접속에서 TLS handshake 오류가 발생하여 인증서 문제를 확인했습니다.
+- 새 CA / Server / Client 인증서를 다시 생성했습니다.
+- 새 인증서는 Key Usage / Extended Key Usage를 포함하도록 재생성했습니다.
+  - Server 인증서: serverAuth
+  - Client 인증서: clientAuth
+- ACM에 새 인증서를 import했습니다.
+- 기존 Client VPN CloudFormation 스택을 삭제 후 재생성했습니다.
+- 새 Client VPN Endpoint:
+  - cvpn-endpoint-072c0ffd0cba0fbd6
+- 새 접속 파일:
+  - D:\gcp\_client_vpn_certs_v2\bookflow-client-desktop-1.ovpn
+- AWS VPN Client를 통해 실제 접속 성공을 확인했습니다.
+- 확인된 VPN 클라이언트 IP:
+  - 172.20.0.3
+- AWS CLI에서 active connection 확인했습니다.
+
+2. Client VPN YAML 관련
+
+- Client VPN 관련 CloudFormation 파일 위치:
+  - D:\gcp\BookFlowAI-Platform\infra\aws\60-network-cross-cloud\client-vpn.yaml
+- ACM 관련 파일 위치:
+  - D:\gcp\BookFlowAI-Platform\infra\aws\00-foundation\acm.yaml
+- 두 YAML 파일에서 UTF-8 BOM 문제를 제거했습니다.
+- BOM 때문에 CloudFormation/YAML 파싱 문제가 날 수 있어 정리했습니다.
+
+3. AWS-GCP Site-to-Site VPN / TGW 관련
+
+- AWS-GCP VPN 연결을 TGW 기반으로 맞추는 작업을 진행했습니다.
+- 기존 VPC Peering 기반 잔여 설정을 정리하고 TGW 모드로 전환했습니다.
+- 사용한 전환 명령:
+  - bash scripts/aws/ops/network-mode.sh tgw
+- CloudFormation 기준으로 다음 스택 상태를 확인했습니다.
+  - bookflow-60-tgw: CREATE_COMPLETE
+  - bookflow-60-tgw-vpc-routes: CREATE_COMPLETE
+  - bookflow-60-vpn-site-to-site: CREATE_COMPLETE
+- GCP VPN 쪽도 AWS 터널 정보와 맞도록 동기화했습니다.
+- GCP terraform 설정 중 tunnel1의 vpn_gateway_interface 값을 수정했습니다.
+  - 파일: D:\gcp\BookFlowAI-Platform\infra\gcp\20-network-daily\terraform.tfvars
+  - 수정 내용: tunnel1.vpn_gateway_interface = 0
+- 최종적으로 AWS/GCP 양쪽 VPN 터널이 모두 정상 상태로 확인되었습니다.
+  - AWS VPN 터널 2개: UP
+  - GCP HA VPN 터널 2개: ESTABLISHED
+  - GCP Cloud Router BGP: UP / UP
+
+4. GCP VPN 장애 / Failover 시나리오 관련
+
+- 기존 gcp-vpn-failure-test.sh 실행 중 gcloud 옵션 오류가 발생했습니다.
+  - 기존 옵션: --enable / --no-enable
+  - 현재 gcloud에서는 --enabled / --no-enabled 형식을 사용해야 했습니다.
+- 장애 시나리오 스크립트를 정리했습니다.
+  - D:\gcp\BookFlowAI-Platform\scripts\scenarios\gcp-vpn-failure-test.sh
+- 단일 터널 장애 시 서비스 연속성을 보여주기 위한 failover 스크립트를 추가했습니다.
+  - D:\gcp\BookFlowAI-Platform\scripts\scenarios\gcp-vpn-failover-test.sh
+- active/standby 형태로 더 직관적인 녹화가 가능하도록 별도 스크립트를 추가했습니다.
+  - D:\gcp\BookFlowAI-Platform\scripts\scenarios\gcp-vpn-active-standby-failover-test.sh
+- 해당 스크립트 실행 결과:
+  - 초기: tunnel0 UP / BGP routes 3, tunnel1 DOWN / BGP routes 0
+  - 장애 전환 후: tunnel0 DOWN / BGP routes 0, tunnel1 UP / BGP routes 3
+  - 복구 후: tunnel0 UP / tunnel1 UP
+- 이 시나리오는 실제 active-active 전체 구조를 임시로 active/standby처럼 보이게 만들어 녹화하기 위한 테스트용입니다.
+
+5. Publisher EC2 Auto Scaling 시나리오 관련
+
+- 출판사 트래픽 증가/감소에 따른 Auto Scaling 녹화용 스크립트를 조정했습니다.
+- 파일:
+  - D:\gcp\BookFlowAI-Platform\scripts\scenarios\publisher_asg_test.py
+- 테스트 목적:
+  - 기본 인스턴스 2대 유지
+  - 트래픽 증가 상황에서 3대 또는 4대로 증가
+  - 부하 감소 후 정상 용량 2대로 복귀
+- 녹화 시 보기 쉽도록 문구를 추가했습니다.
+  - 출판사 트래픽 증가
+  - Scale-out 진행
+  - 부하 감소
+  - 정상 용량으로 Scale-in
+- 테스트 후 실제로 Desired=2, Instances=2 상태로 복귀 확인했습니다.
+
+6. GCP BigQuery / Cloud Function 장애 시나리오 관련
+
+- 확인한 스크립트:
+  - D:\gcp\BookFlowAI-Platform\scripts\scenarios\gcp_bq_load_cf_test.py
+- 해당 스크립트 용도:
+  - Glue Spark Job이 GCS에 쓰는 .spark-staging-* 또는 _temporary/ 경로가 Eventarc/Workflow를 통해 bq-load Cloud Function으로 잘못 전달되는 문제 검증
+  - 현재는 Workflow에서 해당 내부 임시 경로를 필터링하는지 확인
+- 테스트 결과:
+  - .spark-staging- 패턴 확인 OK
+  - /_temporary/ 패턴 확인 OK
+  - Workflow routing test OK
+  - PASS 4/4
+- 최근 로그에 남은 404/NotFound는 이전 재시도 로그일 가능성이 높고, 현재 필터 자체는 정상 동작하는 것으로 확인했습니다.
+
+7. 화면 녹화 파일 변환
+
+- Windows 화면 녹화 파일이 일부 플레이어/Google Drive에서 재생 호환성 문제가 있을 수 있어 ffmpeg 변환을 진행했습니다.
+- 원본:
+  - C:\Users\1\Videos\화면 녹화\EC2_AutoScaling.mp4
+- 변환본:
+  - C:\Users\1\Videos\화면 녹화\EC2_AutoScaling_compatible.mp4
+- 변환 목적:
+  - H.264 + AAC 형식으로 호환성 개선
+
+8. 현재 대시보드 접근 구조 확인
+
+- 현재 대시보드 URL:
+  - https://bookflow.myosoon.store/books
+- 현재 이 주소는 퍼블릭 접근 구조입니다.
+- 14페이지의 목표 구조는 다음과 다릅니다.
+  - 직원 AWS Client VPN 연결
+  - Private DNS 접근
+  - Internal ALB 또는 Internal Ingress
+  - auth-pod
+  - Azure Entra ID OIDC
+  - JWT 발급 후 dashboard 접근
+- 현재 확인된 차이:
+  - Client VPN은 구축 및 접속 성공
+  - auth-pod / dashboard-svc Ingress 매핑은 파일상 존재
+  - 그러나 dashboard 접근 경로는 아직 Private DNS/Internal LB가 아니라 public domain + internet-facing LB 구조
+- 따라서 14페이지 구조와 완전히 일치시키려면 추가 작업이 필요합니다.
+
+9. 14페이지 구조로 맞추기 위해 남은 작업
+
+- EKS ingress-nginx LoadBalancer를 internal로 변경해야 합니다.
+- 현재 public Route53 alias를 직원용 dashboard에 그대로 쓰면 안 됩니다.
+- Private Route53 Hosted Zone 또는 내부 DNS 레코드를 구성해야 합니다.
+- 예시 내부 주소:
+  - dashboard.bookflow.internal
+- Apps 쪽 dashboard ingress host도 내부 도메인으로 변경해야 합니다.
+- 관련 파일 후보:
+  - D:\gcp\BookFlowAI-Platform\scripts\aws\tasks\eks_addons.py
+  - D:\gcp\BookFlowAI-Apps\eks-pods\dashboard-svc\k8s\ingress.yaml
+- 외부 출판사용 ALB와 직원용 내부 dashboard 접근 경로는 분리해야 합니다.
+
+10. 주의사항
+
+- 직원용 dashboard를 internal로 바꾸면 기존 public 접속 테스트 방식이 바뀔 수 있습니다.
+- Publisher 외부 접수용 public ALB는 별도 경로로 유지해야 합니다.
+- EKS Ingress를 internal로 바꾸는 작업은 LoadBalancer 재생성이 발생할 수 있으므로 담당자와 영향 범위 확인 후 진행하는 것이 좋습니다.
+- Client VPN 인증서와 ovpn 파일은 민감 정보이므로 외부 공유 시 주의가 필요합니다.
+
+11. 직원용 대시보드 내부화 작업 추가 진행
+
+- 목표:
+  - 기존 `bookflow.myosoon.store` public 접근을 직원용 대시보드에서 제거
+  - AWS Client VPN 연결 사용자만 내부 DNS를 통해 대시보드 접근
+  - Publisher 외부 ALB는 유지
+- Route53 변경:
+  - `infra/aws/10-network-core/route53.yaml`에 직원 대시보드용 Private Hosted Zone을 추가했습니다.
+  - Private Hosted Zone 이름:
+    - `bookflow.myosoon.store`
+  - 기존 TLS 인증서와 Entra ID Redirect URI를 유지하기 위해 도메인 이름은 그대로 사용하고, public DNS가 아닌 private DNS로만 해석되게 구성했습니다.
+  - CloudFormation stack:
+    - `bookflow-10-route53`
+  - 적용 결과:
+    - `UPDATE_COMPLETE`
+  - 새 export:
+    - `bookflow-r53-staff-dashboard-zone-id = Z0943873YQF1H6UKD7SJ`
+    - `bookflow-staff-dashboard-domain-name = bookflow.myosoon.store`
+- EKS ingress-nginx 변경:
+  - `scripts/aws/tasks/eks_addons.py`에서 ingress-nginx LoadBalancer annotation을 internal로 변경했습니다.
+  - 추가한 annotation:
+    - `service.beta.kubernetes.io/aws-load-balancer-scheme=internal`
+    - `service.beta.kubernetes.io/aws-load-balancer-internal=true`
+  - 기존 internet-facing NLB는 annotation 변경만으로 internal 전환이 되지 않아 `ingress-nginx-controller` Service를 재생성했습니다.
+  - 새 ingress NLB:
+    - `ad231358f89c94aa4823522b3b22bf87-a9fde48ea4127a3f.elb.ap-northeast-1.amazonaws.com`
+  - AWS 확인 결과:
+    - Scheme: `internal`
+    - Type: `network`
+- DNS 연결:
+  - public Route53 hosted zone `Z0061717U502ZCK2HCCF`에서 `bookflow.myosoon.store` A 레코드를 삭제했습니다.
+  - public DNS `8.8.8.8` 기준으로 `bookflow.myosoon.store` A 레코드가 조회되지 않는 것을 확인했습니다.
+  - private Route53 zone에는 `bookflow.myosoon.store` A 레코드를 internal NLB private IP로 등록했습니다.
+  - 현재 private DNS 응답:
+    - `10.0.1.56`
+    - `10.0.2.245`
+  - `Resolve-DnsName bookflow.myosoon.store -Server 10.0.0.2 -Type A`에서 위 private IP 2개가 응답되는 것을 확인했습니다.
+- EKS 접근 권한 보정:
+  - 현재 IAM 사용자 `arn:aws:iam::354493396671:user/alpaco5`가 EKS API 인증에서 거절되어 EKS Access Entry를 추가했습니다.
+  - 연결 정책:
+    - `AmazonEKSClusterAdminPolicy`
+  - 이후 kubectl namespace 조회 성공 확인했습니다.
+- kubeconfig 보정:
+  - 현재 Windows AWS CLI가 오래된 버전이라 EKS token을 `client.authentication.k8s.io/v1alpha1`로 반환했습니다.
+  - 최신 kubectl/helm은 해당 버전을 거부하므로 wrapper를 추가했습니다.
+  - 추가 파일:
+    - `scripts/aws/eks_get_token_v1beta1.py`
+  - `scripts/aws/tasks/eks_addons.py`도 kubeconfig 갱신 후 wrapper를 사용하도록 보정했습니다.
+- 현재 남은 확인 사항:
+  - 서버 측 구성은 내부화 완료 상태입니다.
+  - 현재 Windows Client VPN 세션에서 `10.0.0.0/16` route가 라우팅 테이블에 안정적으로 반영되지 않아 로컬 curl 테스트는 실패했습니다.
+  - AWS Client VPN을 재연결한 뒤 `route print 10.0.1.56` 또는 브라우저 접속을 다시 확인해야 합니다.
+  - 필요한 경우 Windows를 관리자 권한으로 실행하거나 AWS VPN Client를 재연결해야 합니다.
