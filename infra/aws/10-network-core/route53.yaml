@@ -1,5 +1,5 @@
-﻿AWSTemplateFormatVersion: '2010-09-09'
-Description: "BOOKFLOW - Tier 10 - Route 53 PHZ: vpn.bookflow.internal + googleapis.com (PSC override → VPN 경유 GCS 접근)"
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "BOOKFLOW - Tier 10 - Route 53 PHZ: vpn.bookflow.internal + staff dashboard private DNS + googleapis.com (PSC override → VPN 경유 GCS 접근)"
 Parameters:
   ProjectName:
     Type: String
@@ -11,6 +11,10 @@ Parameters:
     Type: String
     Default: '10.50.0.10'
     Description: GCP PSC endpoint IP (cidrhost("10.50.0.0/24", 10)) — storage.googleapis.com을 VPN 경유로 강제
+  StaffDashboardDomainName:
+    Type: String
+    Default: bookflow.myosoon.store
+    Description: Staff dashboard private DNS name. Public Route53 A record is not used for this service.
 
 Resources:
   PrivateZone:
@@ -77,6 +81,31 @@ Resources:
       ResourceRecords:
         - !Ref GcpPscEndpointIp
 
+  # Staff dashboard PHZ.
+  # The name intentionally matches the HTTPS/OIDC domain so the existing TLS
+  # certificate and Entra redirect URI remain valid, while VPC/VPN users resolve
+  # it to the internal ingress NLB only.
+  StaffDashboardPrivateZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !Ref StaffDashboardDomainName
+      HostedZoneConfig:
+        Comment: !Sub ${ProjectName} staff dashboard private DNS
+      VPCs:
+        - VPCId: !ImportValue { 'Fn::Sub': '${ProjectName}-vpc-bookflow-ai-id' }
+          VPCRegion: !Ref AWS::Region
+        - VPCId: !ImportValue { 'Fn::Sub': '${ProjectName}-vpc-sales-data-id' }
+          VPCRegion: !Ref AWS::Region
+        - VPCId: !ImportValue { 'Fn::Sub': '${ProjectName}-vpc-egress-id' }
+          VPCRegion: !Ref AWS::Region
+        - VPCId: !ImportValue { 'Fn::Sub': '${ProjectName}-vpc-data-id' }
+          VPCRegion: !Ref AWS::Region
+        - VPCId: !ImportValue { 'Fn::Sub': '${ProjectName}-vpc-ansible-id' }
+          VPCRegion: !Ref AWS::Region
+      HostedZoneTags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-staff-dashboard-private-zone'
+
 Outputs:
   HostedZoneId:
     Value: !Ref PrivateZone
@@ -89,3 +118,11 @@ Outputs:
   GoogleapisPrivateZoneId:
     Value: !Ref GoogleapisPrivateZone
     Export: { Name: !Sub '${ProjectName}-r53-googleapis-zone-id' }
+
+  StaffDashboardPrivateZoneId:
+    Value: !Ref StaffDashboardPrivateZone
+    Export: { Name: !Sub '${ProjectName}-r53-staff-dashboard-zone-id' }
+
+  StaffDashboardDomainName:
+    Value: !Ref StaffDashboardDomainName
+    Export: { Name: !Sub '${ProjectName}-staff-dashboard-domain-name' }
