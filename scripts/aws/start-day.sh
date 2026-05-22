@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # start-day.sh · 매일 실행
-# 흐름: base → peering → 4 서비스 병렬 → seed → eks-addons resync → 데이터 파이프라인
+# 흐름: base → peering → SAM 재배포 → 4 서비스 병렬 → seed → eks-addons resync → 데이터 파이프라인
 # 데이터 파이프라인 (6단계):
 #   aladin-sync Lambda → event-sync Lambda → ETL Step Functions 트리거
 #   → Step Functions 완료 대기 → forecast-svc BQ 동기화 → decision-svc plan-daily
@@ -18,10 +18,10 @@ pre_flight
 
 T0=$(date +%s)
 
-step "1/5 base · prereq"
+step "1/7 base · prereq"
 "$SCRIPT_DIR/ops/base.sh" up
 
-step "2/5 network · TGW 활성이면 cross-cloud 유지 · 아니면 peering"
+step "2/7 network · TGW 활성이면 cross-cloud 유지 · 아니면 peering"
 TGW_ACTIVE=$(AWS_PROFILE="${AWS_PROFILE:-bookflow-deploy}" AWS_REGION="${AWS_REGION:-ap-northeast-1}" \
   aws cloudformation describe-stacks --stack-name bookflow-60-tgw \
   --query "Stacks[0].StackStatus" --output text 2>/dev/null || echo "NONE")
@@ -31,7 +31,13 @@ else
   "$SCRIPT_DIR/ops/peering.sh" up
 fi
 
-step "3/5 4 서비스 병렬 (eks · ecs · publisher · etl)"
+# SAM 먼저 단독 배포 — etl.sh 병렬 실행 전 sam-template.yaml 변경사항을 확정.
+# etl.sh 내부의 lambdas 단계는 BOOKFLOW_LAMBDAS_DEPLOYED=1 이면 skip.
+step "3/7 SAM (99-serverless) · sam-template.yaml 반영 배포"
+py "$PROJECT_ROOT/scripts/aws/bookflow.py" task lambdas
+export BOOKFLOW_LAMBDAS_DEPLOYED=1
+
+step "4/7 4 서비스 병렬 (eks · ecs · publisher · etl)"
 "$SCRIPT_DIR/ops/eks.sh" up &        EKS_PID=$!
 "$SCRIPT_DIR/ops/ecs.sh" up &        ECS_PID=$!
 "$SCRIPT_DIR/ops/publisher.sh" up &  PUB_PID=$!
@@ -46,15 +52,15 @@ if [ $FAILED -gt 0 ]; then
   exit 1
 fi
 
-step "4/5 seed · parquet → RDS (003_grants.sql · 11 pod role 생성)"
+step "5/7 seed · parquet → RDS (003_grants.sql · 11 pod role 생성)"
 "$SCRIPT_DIR/ops/seed.sh" up
 
-# 5단계: seed 후 eks-addons 의 _sync_rds_pod_roles 재호출 (role password 정합 + 7 pod restart)
-# 3단계 병렬에서 eks-addons 가 seed 보다 먼저 끝나 ALTER ROLE fail 한 경우 자동 정정.
-step "5/5 eks-addons resync · ALTER ROLE 11 + 7 pod rollout (DB pool 정합)"
+# 6단계: seed 후 eks-addons 의 _sync_rds_pod_roles 재호출 (role password 정합 + 7 pod restart)
+# 4단계 병렬에서 eks-addons 가 seed 보다 먼저 끝나 ALTER ROLE fail 한 경우 자동 정정.
+step "6/7 eks-addons resync · ALTER ROLE 11 + 7 pod rollout (DB pool 정합)"
 py "$PROJECT_ROOT/scripts/aws/bookflow.py" task eks-addons || warn "eks-addons resync 실패 (이미 정합이면 무시)"
 
-step "6/6 데이터 파이프라인 (aladin-sync → event-sync → ETL → forecast → plan-daily)"
+step "7/7 데이터 파이프라인 (aladin-sync → event-sync → ETL → forecast → plan-daily)"
 
 AWS_REGION="${AWS_REGION:-ap-northeast-1}"
 
