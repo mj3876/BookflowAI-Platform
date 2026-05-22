@@ -93,6 +93,9 @@ GRANT INSERT                                            ON audit_log TO auth_pod
 -- publish-watcher: new_book_requests writer (external publisher source)
 GRANT INSERT, UPDATE        ON new_book_requests TO publish_watcher;
 GRANT INSERT                ON audit_log         TO publish_watcher;
+-- 신간 ISBN 이 books 마스터에 없을 수 있어 BOOKS_UPSERT (INSERT ... ON CONFLICT DO NOTHING) 수행 →
+-- INSERT 권한 필요 (publisher-api 가 이미 넣어 대개 no-op 이나 statement 실행에 INSERT 권한 필수).
+GRANT INSERT                ON books             TO publish_watcher;
 -- intervention-svc: HQ approves/rejects new book requests (FR-A1.4 / A11.1)
 GRANT INSERT, UPDATE        ON new_book_requests TO intervention_svc;
 
