@@ -58,7 +58,10 @@ class Stack:
         if not self.template_path.exists():
             raise FileNotFoundError(f"Template not found: {self.template_path}")
 
-        template_body = self.template_path.read_text(encoding="utf-8")
+        try:
+            template_body = self.template_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            template_body = self.template_path.read_text(encoding="utf-8", errors="replace")
 
         current = self.status()
         if current in ("ROLLBACK_COMPLETE", "REVIEW_IN_PROGRESS"):
