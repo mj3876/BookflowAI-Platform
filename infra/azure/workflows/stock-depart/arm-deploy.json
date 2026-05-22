@@ -51,11 +51,12 @@
           "inputs": {
             "retryPolicy": {
               "type": "fixed",
-              "count": 2,
-              "interval": "PT15S"
+              "count": 1,
+              "interval": "PT30S"
             },
             "method": "POST",
             "uri": "@parameters('ACS_EMAIL_URI')",
+            "timeout": "PT40S",
             "authentication": {
               "type": "ManagedServiceIdentity",
               "identity": "@parameters('LA_IDENTITY_ID')",

@@ -76,10 +76,10 @@ restore_on_exit() {
                 --peer-name "$peer" \
                 --region "$GCP_REGION" \
                 --project "$GCP_PROJECT" \
-                --enable \
+                --enabled \
                 --quiet 2>/dev/null && \
                 ok "BGP 피어 복구: $peer" || \
-                error "복구 실패: $peer — 수동 복구 명령:"$'\n'"  gcloud compute routers update-bgp-peer $GCP_ROUTER --peer-name $peer --region $GCP_REGION --project $GCP_PROJECT --enable"
+                error "복구 실패: $peer — 수동 복구 명령:"$'\n'"  gcloud compute routers update-bgp-peer $GCP_ROUTER --peer-name $peer --region $GCP_REGION --project $GCP_PROJECT --enabled"
         done
     fi
 }
@@ -160,11 +160,18 @@ get_aws_tunnel_statuses() {
 # ── GCP VPN 터널 상태 출력 ────────────────────────────────────────
 print_gcp_tunnel_table() {
     echo ""
-    gcloud compute vpn-tunnels list \
+    local out err
+    out=$(gcloud compute vpn-tunnels list \
         --region "$GCP_REGION" \
         --project "$GCP_PROJECT" \
         --format "table[box](name:label=TUNNEL, status:label=IPSEC_STATUS, detailedStatus:label=DETAIL)" \
-        2>/dev/null || echo "  (gcloud 조회 실패 — VPN 미배포 상태일 수 있음)"
+        2>&1) || {
+        echo "  (gcloud vpn-tunnels list 실패)"
+        echo "  → 실제 에러: ${out}"
+        echo "  → 전체 터널 조회: gcloud compute vpn-tunnels list --project ${GCP_PROJECT}"
+        return
+    }
+    echo "$out"
 }
 
 # ── GCP BGP 세션 상태 출력 ────────────────────────────────────────
@@ -196,6 +203,31 @@ print('  └' + '─'*33 + '┴' + '─'*8 + '┴' + '─'*14 + '┘')
 " 2>/dev/null || echo "  (BGP 상태 조회 실패)"
 }
 
+# ── GCP IPSEC ESTABLISHED 터널 수 반환 ───────────────────────────
+get_gcp_tunnel_up_count() {
+    gcloud compute vpn-tunnels list \
+        --region "$GCP_REGION" \
+        --project "$GCP_PROJECT" \
+        --filter "status=ESTABLISHED" \
+        --format "value(name)" 2>/dev/null | wc -l | tr -d ' '
+}
+
+# ── GCP 전체 터널 수 반환 ─────────────────────────────────────────
+get_gcp_tunnel_total() {
+    gcloud compute vpn-tunnels list \
+        --region "$GCP_REGION" \
+        --project "$GCP_PROJECT" \
+        --format "value(name)" 2>/dev/null | wc -l | tr -d ' '
+}
+
+# ── AWS UP 터널 수 반환 ───────────────────────────────────────────
+get_aws_tunnel_up_count() {
+    local conn_id="$1"
+    local statuses
+    statuses=$(get_aws_tunnel_statuses "$conn_id")
+    echo "$statuses" | tr '\t' '\n' | grep "^UP$" | wc -l | tr -d ' '
+}
+
 # ── GCP BGP UP 피어 수 반환 ───────────────────────────────────────
 get_gcp_bgp_up_count() {
     local status_json
@@ -218,7 +250,7 @@ disable_bgp_peers() {
             --peer-name "$peer" \
             --region "$GCP_REGION" \
             --project "$GCP_PROJECT" \
-            --no-enable \
+            --no-enabled \
             --quiet
         ok "비활성화 완료: $peer"
     done
@@ -232,7 +264,7 @@ enable_bgp_peers() {
             --peer-name "$peer" \
             --region "$GCP_REGION" \
             --project "$GCP_PROJECT" \
-            --enable \
+            --enabled \
             --quiet
         ok "활성화 완료: $peer"
     done
@@ -280,6 +312,87 @@ print_pending_orders_sql() {
 }
 
 # ════════════════════════════════════════════════════════════════
+# prepare: 장애테스트 초기 상태 설정
+#   - 양쪽 IPSEC 터널 UP
+#   - tunnel0: BGP1 (Active), tunnel1: BGP0 (Standby)
+# ════════════════════════════════════════════════════════════════
+cmd_prepare() {
+    section "장애테스트 초기 상태 설정"
+    echo "  목표: IPSEC 양쪽 UP  /  ${GCP_BGP_PEERS[0]} BGP1  /  ${GCP_BGP_PEERS[1]} BGP0"
+    echo ""
+
+    # AWS VPN 연결 확인
+    step "1/4  AWS VPN 연결 확인"
+    local conn_id
+    conn_id=$(get_aws_vpn_conn_id)
+    if [[ -z "$conn_id" || "$conn_id" == "None" ]]; then
+        error "AWS VPN 연결을 찾을 수 없음 — 태그(${AWS_VPN_TAG_NAME}) 또는 CGW IP(${GCP_CGW_IP}) 확인 필요"
+        exit 1
+    fi
+    ok "AWS VPN Connection: $conn_id"
+
+    # 양쪽 BGP 피어 활성화 → IPSEC 재협상 트리거
+    step "2/4  GCP BGP 피어 전체 활성화 (IPSEC 재협상)"
+    enable_bgp_peers
+
+    # GCP IPSEC 터널 현재 상태 확인 (단순 조회 — 강제 UP 불가)
+    step "3/4  GCP IPSEC 터널 현재 상태 확인"
+    local gcp_up
+    gcp_up=$(timeout 15 gcloud compute vpn-tunnels list \
+        --region "$GCP_REGION" \
+        --project "$GCP_PROJECT" \
+        --filter "status=ESTABLISHED" \
+        --format "value(name)" 2>/dev/null | wc -l | tr -d ' ')
+    local aws_up
+    aws_up=$(get_aws_tunnel_up_count "$conn_id")
+
+    echo "  GCP IPSEC ESTABLISHED: ${gcp_up}개  /  AWS Tunnel UP: ${aws_up}/2"
+
+    if [[ "$gcp_up" -ge 1 && "$aws_up" -ge 1 ]]; then
+        ok "터널 연결 정상"
+    else
+        warn "터널 일부 또는 전체 DOWN — IPSEC 상태는 PSK·IKE 설정에 따라 자동 복구됩니다"
+        warn "  GCP 전체 터널 상태: gcloud compute vpn-tunnels list --project ${GCP_PROJECT}"
+        warn "BGP 설정은 계속 진행합니다"
+    fi
+
+    # tunnel1 BGP 비활성화 → BGP0 (Standby)
+    step "4/4  ${GCP_BGP_PEERS[1]} BGP 비활성화 (BGP0 설정)"
+    gcloud compute routers update-bgp-peer "$GCP_ROUTER" \
+        --peer-name "${GCP_BGP_PEERS[1]}" \
+        --region "$GCP_REGION" \
+        --project "$GCP_PROJECT" \
+        --no-enabled \
+        --quiet
+    ok "${GCP_BGP_PEERS[1]} 비활성화 완료"
+
+    # BGP 상태 안정화 대기
+    info "BGP 상태 안정화 대기 (30초)..."
+    sleep 30
+
+    section "초기 상태 확인"
+    cmd_check
+
+    echo ""
+    local bgp_up
+    bgp_up=$(get_gcp_bgp_up_count)
+    local gcp_up aws_up
+    gcp_up=$(get_gcp_tunnel_up_count)
+    aws_up=$(get_aws_tunnel_up_count "$conn_id")
+
+    if [[ "$gcp_up" -eq "${#GCP_TUNNELS[@]}" && "$bgp_up" -eq 1 ]]; then
+        ok "초기 상태 준비 완료"
+        echo "  - GCP IPSEC: 양쪽 UP"
+        echo "  - ${GCP_BGP_PEERS[0]}: BGP1 (Active)"
+        echo "  - ${GCP_BGP_PEERS[1]}: BGP0 (Standby)"
+        echo "  이제 'bash $0 all' 또는 'bash $0 simulate' 실행 가능"
+    else
+        warn "상태 불완전 — GCP IPSEC UP: ${gcp_up}, BGP UP: ${bgp_up}"
+        warn "잠시 후 'bash $0 check' 로 재확인하세요"
+    fi
+}
+
+# ════════════════════════════════════════════════════════════════
 # check: 현재 상태 확인
 # ════════════════════════════════════════════════════════════════
 cmd_check() {
@@ -308,10 +421,10 @@ cmd_check() {
 cmd_simulate() {
     section "장애 시뮬레이션 — GCP BGP 피어 비활성화"
     echo ""
-    echo "  방법: GCP Cloud Router BGP 피어 비활성화 (--no-enable)"
+    echo "  방법: GCP Cloud Router BGP 피어 비활성화 (--no-enabled)"
     echo "  효과: BGP 세션 종료 → AWS TGW ${GCP_PSC_CIDR} 경로 철회"
     echo "        forecast-svc PSC(10.50.0.10) → BigQuery 연결 불가"
-    echo "  복구: BGP 피어 재활성화 (--enable) → 즉시 재수립 가능"
+    echo "  복구: BGP 피어 재활성화 (--enabled) → 즉시 재수립 가능"
     echo ""
 
     # 사전 조건: BGP가 UP 상태인지 확인
@@ -478,6 +591,36 @@ cmd_all() {
 
     cmd_check
 
+    # 사전 조건 검증 — 초기 상태가 정상이어야 장애 시뮬레이션 의미 있음
+    echo ""
+    step "사전 조건 검증"
+
+    local conn_id
+    conn_id=$(get_aws_vpn_conn_id)
+    if [[ -z "$conn_id" || "$conn_id" == "None" ]]; then
+        error "AWS GCP VPN 연결을 찾을 수 없습니다 — VPN 미배포 상태이거나 태그/CGW IP 확인 필요"
+        error "  태그: Name=${AWS_VPN_TAG_NAME}, CGW IP: ${GCP_CGW_IP}"
+        exit 1
+    fi
+
+    local aws_statuses
+    aws_statuses=$(get_aws_tunnel_statuses "$conn_id")
+    if ! echo "$aws_statuses" | grep -q "UP"; then
+        error "AWS VPN 터널이 모두 DOWN 상태입니다 — GCP VPN 배포 및 BGP 설정 확인 필요"
+        error "  현재 상태: ${aws_statuses}"
+        exit 1
+    fi
+    ok "AWS VPN 터널 UP 확인"
+
+    local bgp_up
+    bgp_up=$(get_gcp_bgp_up_count)
+    if [[ "$bgp_up" -eq 0 ]]; then
+        error "GCP BGP 피어가 모두 DOWN 상태입니다 — 시뮬레이션 전 정상 상태 필요"
+        error "  복구 시도: bash $0 restore"
+        exit 1
+    fi
+    ok "GCP BGP 피어 ${bgp_up}개 UP 확인"
+
     echo ""
     warn "GCP BGP 피어를 비활성화합니다 (forecast-svc BigQuery 연결 중단)."
     warn "계속하려면 Enter, 취소는 Ctrl+C"
@@ -509,14 +652,16 @@ cmd_all() {
 MODE="${1:-all}"
 
 case "$MODE" in
+    prepare)  cmd_prepare ;;
     check)    cmd_check ;;
     simulate) cmd_simulate ;;
     verify)   cmd_verify ;;
     restore)  cmd_restore ;;
     all)      cmd_all ;;
     *)
-        echo "사용법: $0 [check|simulate|verify|restore|all]"
+        echo "사용법: $0 [prepare|check|simulate|verify|restore|all]"
         echo ""
+        echo "  prepare   장애테스트 초기 상태 설정 (IPSEC UP + BGP1/BGP0) ← 먼저 실행"
         echo "  check     현재 AWS/GCP VPN·BGP 상태 확인"
         echo "  simulate  GCP BGP 피어 비활성화 (장애 유발)"
         echo "  verify    장애 영향 검증 (simulate 후 실행)"

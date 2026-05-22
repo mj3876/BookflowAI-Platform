@@ -60,10 +60,10 @@ Resources:
         Cron:
           Type: Schedule
           Properties:
-            Schedule: 'cron(40 2 * * ? *)'
+            Schedule: 'cron(15 7 * * ? *)'
             Enabled: true
             Name: !Sub ${ProjectName}-aladin-sync-cron
-            Description: daily 11:40 KST (02:40 UTC)
+            Description: daily 16:15 KST (07:15 UTC)
 
   # 2. event-sync (cron daily 11:40 KST)
   EventSyncFn:
@@ -90,10 +90,10 @@ Resources:
         Cron:
           Type: Schedule
           Properties:
-            Schedule: 'cron(40 2 * * ? *)'
+            Schedule: 'cron(15 7 * * ? *)'
             Enabled: true
             Name: !Sub ${ProjectName}-event-sync-cron
-            Description: daily 11:40 KST (02:40 UTC)
+            Description: daily 16:15 KST (07:15 UTC)
 
   # 3. sns-gen (cron 10min)
   SnsGenFn:
@@ -189,10 +189,10 @@ Resources:
         Cron:
           Type: Schedule
           Properties:
-            Schedule: 'cron(43 2 * * ? *)'
+            Schedule: 'cron(17 7 * * ? *)'
             Enabled: true
             Name: !Sub ${ProjectName}-forecast-trigger-cron
-            Description: daily 11:43 KST (02:43 UTC)
+            Description: daily 16:17 KST (07:17 UTC)
 
   # 5b. cost-publisher (Cost Explorer → CloudWatch custom metric, 1h cron)
   CostPublisherFn:
