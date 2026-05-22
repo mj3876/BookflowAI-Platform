@@ -9,11 +9,12 @@ INFRA="$PROJECT_ROOT/infra/aws"
 
 case "$ACTION" in
 up)
-  step "ecs.sh up · 3 ECS sims (3 병렬)"
+  # inventory-api 는 publisher.sh(task publisher) 가 ALB TargetGroupArn 주입 후 배포.
+  # 이 스크립트와 동시에 배포하면 UPDATE_IN_PROGRESS 충돌 → ROLLBACK 발생.
+  step "ecs.sh up · 2 ECS sims (2 병렬)"
   cfn_parallel_deploy <<EOF
 bookflow-40-ecs-online-sim|$INFRA/40-compute-runtime/ecs-online-sim.yaml
 bookflow-40-ecs-offline-sim|$INFRA/40-compute-runtime/ecs-offline-sim.yaml
-bookflow-40-ecs-inventory-api|$INFRA/40-compute-runtime/ecs-inventory-api.yaml
 EOF
   state_write "ecs" "up"; step "ecs.sh up done" ;;
 down)

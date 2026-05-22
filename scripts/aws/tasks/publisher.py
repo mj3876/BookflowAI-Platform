@@ -9,8 +9,13 @@ def deploy() -> None:
     if not Stack(tier="20", name="rds", template="").exists():
         log.warn("RDS  · inventory-api DB    task-data ")
 
-    Stack(tier="10", name="peering-egress-data",
-          template="10-network-core/peering/egress-data.yaml").deploy()
+    # TGW 모드에서는 TGW 가 egress↔data 라우팅 처리 → peering 과 공존 시 RT 충돌.
+    tgw_active = Stack(tier="60", name="tgw", template="").exists()
+    if tgw_active:
+        log.info("TGW 모드 감지 · peering-egress-data skip (TGW 가 라우팅)")
+    else:
+        Stack(tier="10", name="peering-egress-data",
+              template="10-network-core/peering/egress-data.yaml").deploy()
 
     alb = Stack(tier="50", name="alb-external", template="50-network-traffic/alb-external.yaml")
     alb.deploy()

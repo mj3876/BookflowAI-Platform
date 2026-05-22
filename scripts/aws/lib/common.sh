@@ -205,8 +205,11 @@ def deploy(spec):
         return f"  ✓ {name}"
     except Exception as e:
         return f"  ✗ {name}: {str(e)[:120]}"
-with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
-    for r in ex.map(deploy, specs): print(r, flush=True)
+results = list(ex.map(deploy, specs))
+for r in results:
+    print(r, flush=True)
+if any(r.strip().startswith('✗') for r in results):
+    sys.exit(1)
 PYEOF
   local rc=$?
   rm -f "$spec_file"

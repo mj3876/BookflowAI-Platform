@@ -6,7 +6,7 @@ CLAUDE.md
 # ─── 로컬 임시 산출물 (PR 제외) ───
 .playwright-cli/
 kpi-loaded.yml
-infra/aws/20-data-persistent/seed-data/gen_history_365.py
+# gen_history_365.py: generate.py 의 의존 모듈 → 추적 (gitignore 제외)
 
 # ─── Cross-cloud exports (매일 새로 생성 · 팀 단톡 공유용) ───
 exports/
