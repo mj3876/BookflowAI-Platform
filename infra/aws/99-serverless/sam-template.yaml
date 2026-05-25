@@ -36,7 +36,7 @@ Resources:
           Description: egress all
       Tags: [{ Key: Name, Value: !Sub '${ProjectName}-lambda-vpc-sg' }]
 
-  # 1. aladin-sync (cron daily 13:00 KST)
+  # 1. aladin-sync (cron daily 12:35 KST)
   AladinSyncFn:
     Type: AWS::Serverless::Function
     Properties:
@@ -60,12 +60,12 @@ Resources:
         Cron:
           Type: Schedule
           Properties:
-            Schedule: 'cron(0 4 * * ? *)'
+            Schedule: 'cron(35 3 * * ? *)'
             Enabled: true
             Name: !Sub ${ProjectName}-aladin-sync-cron
-            Description: daily 13:00 KST (04:00 UTC)
+            Description: daily 12:35 KST (03:35 UTC)
 
-  # 2. event-sync (cron daily 13:00 KST)
+  # 2. event-sync (cron daily 12:35 KST)
   EventSyncFn:
     Type: AWS::Serverless::Function
     Properties:
@@ -90,10 +90,10 @@ Resources:
         Cron:
           Type: Schedule
           Properties:
-            Schedule: 'cron(0 4 * * ? *)'
+            Schedule: 'cron(35 3 * * ? *)'
             Enabled: true
             Name: !Sub ${ProjectName}-event-sync-cron
-            Description: daily 13:00 KST (04:00 UTC)
+            Description: daily 12:35 KST (03:35 UTC)
 
   # 3. sns-gen (cron 10min)
   SnsGenFn:
@@ -156,7 +156,7 @@ Resources:
             Enabled: true
             Name: !Sub ${ProjectName}-spike-detect-cron
 
-  # 5. forecast-trigger (cron daily 13:02 KST)
+  # 5. forecast-trigger (cron daily 12:37 KST)
   ForecastTriggerFn:
     Type: AWS::Serverless::Function
     Properties:
@@ -189,10 +189,10 @@ Resources:
         Cron:
           Type: Schedule
           Properties:
-            Schedule: 'cron(2 4 * * ? *)'
+            Schedule: 'cron(37 3 * * ? *)'
             Enabled: true
             Name: !Sub ${ProjectName}-forecast-trigger-cron
-            Description: daily 13:02 KST (04:02 UTC)
+            Description: daily 12:37 KST (03:37 UTC)
 
   # 5b. cost-publisher (Cost Explorer → CloudWatch custom metric, 1h cron)
   CostPublisherFn:

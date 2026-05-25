@@ -27,6 +27,8 @@ for g in asg.describe_auto_scaling_groups()['AutoScalingGroups']:
         except Exception as e: print(f"  err: {e}")
 PYEOF
   cfn_bulk_delete "bookflow-40-publisher-asg" "bookflow-00-"
+  # WAF WebACLAssociation blocks ALB deletion - delete WAF stack first
+  cfn_bulk_delete "bookflow-50-waf" "bookflow-00-"
   cfn_bulk_delete "bookflow-50-alb-external" "bookflow-00-"
   state_write "publisher" "down"; step "publisher.sh down done" ;;
 *) err "usage: $0 up|down"; exit 2 ;;

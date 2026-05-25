@@ -157,10 +157,43 @@ PYEOF
 
 down)
   step "cross-cloud.sh down"
-  py "$PROJECT_ROOT/scripts/aws/bookflow.py" task client-vpn --down 2>/dev/null || true
-  cfn_bulk_delete "bookflow-50-waf" "bookflow-00-"
-  cfn_bulk_delete "bookflow-60-" "bookflow-00-"
+
+  # 1. Client VPN 선행 완전 삭제 (Hyperplane ENI 해제 → VPC subnet 삭제 선행 조건)
+  py "$PROJECT_ROOT/scripts/aws/bookflow.py" task client-vpn --down || true
+
+  # 2. Client VPN Hyperplane ENI 해제 대기 (스택 삭제 후 ENI 잔존 → VPC 삭제 블로킹 방지)
+  py - <<'PYEOF'
+import boto3, os, sys, time
+sys.stdout.reconfigure(encoding='utf-8', line_buffering=True)
+ec2 = boto3.Session(profile_name=os.environ['AWS_PROFILE'], region_name=os.environ['AWS_REGION']).client('ec2')
+vpcs = ec2.describe_vpcs(Filters=[{'Name': 'tag:Name', 'Values': ['bookflow-vpc-bookflow-ai']}])['Vpcs']
+if not vpcs:
+    print("  bookflow-ai VPC 없음 — ENI 대기 skip"); sys.exit(0)
+vpc_id = vpcs[0]['VpcId']
+for i in range(20):
+    enis = ec2.describe_network_interfaces(
+        Filters=[{'Name': 'vpc-id', 'Values': [vpc_id]},
+                 {'Name': 'description', 'Values': ['*lient VPN*']}])['NetworkInterfaces']
+    if not enis:
+        print(f"  Client VPN ENI 해제 완료 ({i*15}s 경과)"); break
+    print(f"  Client VPN ENI 대기 중 ({len(enis)}개 잔존 · {i*15}s)")
+    time.sleep(15)
+else:
+    print("  WARN: Client VPN ENI 잔존 — VPC 삭제 실패 가능성 있음")
+PYEOF
+
+  # 3. Site-to-Site VPN 먼저 삭제 → TGW VPN attachment 자동 해제 후 TGW 삭제 가능
+  cfn_bulk_delete "bookflow-60-vpn-site-to-site" "bookflow-00-"
+
+  # 4. TGW VPC routes 삭제 (route 항목 정리)
+  cfn_bulk_delete "bookflow-60-tgw-vpc-routes" "bookflow-00-"
+
+  # 5. TGW 삭제 (VPN attachment 해제 완료 후)
+  cfn_bulk_delete "bookflow-60-tgw" "bookflow-00-"
+
+  # 6. Customer Gateway 삭제
   cfn_bulk_delete "bookflow-10-customer-gateway" "bookflow-00-"
+
   state_write "cross-cloud" "down"
   step "cross-cloud.sh down done"
   ;;
