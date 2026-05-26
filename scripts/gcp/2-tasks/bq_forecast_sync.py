@@ -74,10 +74,16 @@ def fetch_rows(client: bigquery.Client, days: int) -> list[dict]:
     # 가장 최근 prediction_date 배치에서 target_date 최근 N일치만 동기화
     # (35M 행 전체 대신 대시보드에 필요한 최신 예측 슬라이스만 가져옴)
     query = f"""
-    WITH latest AS (
-      SELECT MAX(prediction_date) AS pred_date,
-             MAX(target_date)     AS max_tgt
+    WITH latest_prediction AS (
+      SELECT MAX(prediction_date) AS pred_date
       FROM `{project}.{dataset}.{table}`
+    ),
+    latest AS (
+      SELECT lp.pred_date,
+             MAX(f.target_date) AS max_tgt
+      FROM `{project}.{dataset}.{table}` f
+      JOIN latest_prediction lp ON f.prediction_date = lp.pred_date
+      GROUP BY lp.pred_date
     )
     SELECT
       f.target_date       AS snapshot_date,

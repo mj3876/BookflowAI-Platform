@@ -45,6 +45,12 @@ resource "google_compute_vpn_tunnel" "aws_tunnels" {
     google_compute_ha_vpn_gateway.bookflow_aws_ha_vpn,
     google_compute_external_vpn_gateway.aws_tgw,
   ]
+
+  lifecycle {
+    ignore_changes = [
+      shared_secret,
+    ]
+  }
 }
 
 resource "google_compute_router_interface" "aws_interfaces" {
