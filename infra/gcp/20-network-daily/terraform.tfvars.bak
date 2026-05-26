@@ -8,8 +8,8 @@ aws_tgw_bgp_asn = 64512
 gcp_router_asn  = 64514
 
 aws_peer_ips = [
-  "13.193.143.37",
-  "54.178.47.94"
+  "3.115.179.188",
+  "13.113.85.107"
 ]
 
 vpn_shared_secret = "i42C4JbefD9yoXIB_BFlm42K5pmF4mBG"
@@ -31,7 +31,7 @@ bgp_sessions = {
     advertised_route_priority       = 100
   }
   tunnel1 = {
-    vpn_gateway_interface           = 1
+    vpn_gateway_interface           = 0
     peer_external_gateway_interface = 1
     router_ip_cidr                  = "169.254.100.74/30"
     peer_ip_address                 = "169.254.100.73"
@@ -39,5 +39,6 @@ bgp_sessions = {
     advertised_route_priority       = 100
   }
 }
+
 
 
