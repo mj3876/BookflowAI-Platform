@@ -15,6 +15,16 @@ pre_flight
 
 T0=$(date +%s)
 
+step "0/3 EventBridge 고아 룰 정리 (bookflow- prefix · 다음 배포 AlreadyExists 방지)"
+aws events list-rules --name-prefix bookflow- --query "Rules[].Name" --output text 2>/dev/null \
+  | tr '\t' '\n' | grep -v '^$' \
+  | while read -r rule; do
+      targets=$(aws events list-targets-by-rule --rule "$rule" --query "Targets[].Id" --output text 2>/dev/null || true)
+      [ -n "$targets" ] && [ "$targets" != "None" ] && \
+        aws events remove-targets --rule "$rule" --ids $targets >/dev/null 2>&1 || true
+      aws events delete-rule --name "$rule" --force >/dev/null 2>&1 && log "  EventBridge rule 삭제: $rule" || true
+    done
+
 step "1/3 4 서비스 병렬 down (eks · ecs · publisher · etl) + cicd"
 "$SCRIPT_DIR/ops/eks.sh" down &
 "$SCRIPT_DIR/ops/ecs.sh" down &

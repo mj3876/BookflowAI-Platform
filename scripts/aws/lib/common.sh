@@ -205,7 +205,8 @@ def deploy(spec):
         return f"  ✓ {name}"
     except Exception as e:
         return f"  ✗ {name}: {str(e)[:120]}"
-results = list(ex.map(deploy, specs))
+with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(specs), 8)) as ex:
+    results = list(ex.map(deploy, specs))
 for r in results:
     print(r, flush=True)
 if any(r.strip().startswith('✗') for r in results):

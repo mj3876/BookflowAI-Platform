@@ -139,3 +139,6 @@ sa-key.json
 _token.env
 GoogleBigQueryJDBC42.jar
 *.jar
+*.ovpn
+infra/gcp/20-network-daily/terraform.tfvars.js
+infra/gcp/*/BigQuery)

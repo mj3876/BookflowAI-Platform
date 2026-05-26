@@ -22,13 +22,22 @@ def deploy() -> None:
 
     azure_ip = os.environ.get("BOOKFLOW_AZURE_VPN_GW_IP", "").strip()
     azure_psk = os.environ.get("BOOKFLOW_AZURE_VPN_PSK", "").strip()
+    gcp_ip = os.environ.get("BOOKFLOW_GCP_VPN_GW_IP", "").strip()
+    gcp_psk = os.environ.get("BOOKFLOW_GCP_VPN_PSK", "").strip()
     if azure_ip and azure_ip != "0.0.0.0":
+        cgw_params: dict = {"AzureVpnGatewayIp": azure_ip}
+        if gcp_ip and gcp_ip != "0.0.0.0":
+            cgw_params["GcpHaVpnIp"] = gcp_ip
         Stack(tier="10", name="customer-gateway",
               template="10-network-core/customer-gateway.yaml",
-              parameters={"AzureVpnGatewayIp": azure_ip}).deploy()
-        params = {"EnableAzureVpn": "true"}
+              parameters=cgw_params).deploy()
+        params: dict = {"EnableAzureVpn": "true"}
         if azure_psk:
             params["AzurePresharedKey"] = azure_psk
+        if gcp_ip and gcp_ip != "0.0.0.0":
+            params["EnableGcpVpn"] = "true"
+            if gcp_psk:
+                params["GcpPresharedKey"] = gcp_psk
         Stack(tier="60", name="vpn-site-to-site",
               template="60-network-cross-cloud/vpn-site-to-site.yaml",
               parameters=params).deploy()
