@@ -421,7 +421,6 @@ WORKFLOW_DIR="${BICEP_DIR}/workflows"
 
 deploy_logicapp "la-${PREFIX}-notification"     "${WORKFLOW_DIR}/notification/arm-deploy.json"
 deploy_logicapp "la-${PREFIX}-approval-request" "${WORKFLOW_DIR}/approval-request/arm-deploy.json"
-deploy_logicapp "la-${PREFIX}-daily-digest"     "${WORKFLOW_DIR}/daily-digest/arm-deploy.json"
 deploy_logicapp "la-${PREFIX}-stock-depart"     "${WORKFLOW_DIR}/stock-depart/arm-deploy.json"
 deploy_logicapp "la-${PREFIX}-stock-arrival"    "${WORKFLOW_DIR}/stock-arrival/arm-deploy.json"
 
