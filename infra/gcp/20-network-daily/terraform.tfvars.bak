@@ -1,0 +1,44 @@
+﻿project_id = "project-8ab6bf05-54d2-4f5d-b8d"
+region     = "asia-northeast1"
+vpc_name   = "bookflow-vpc"
+
+aws_vpc_cidrs   = ["10.0.0.0/16", "10.1.0.0/16", "10.2.0.0/16", "10.3.0.0/16", "10.4.0.0/16"]
+azure_vnet_cidr = "10.1.0.0/16"
+aws_tgw_bgp_asn = 64512
+gcp_router_asn  = 64514
+
+aws_peer_ips = [
+  "3.115.179.188",
+  "13.113.85.107"
+]
+
+vpn_shared_secret = "i42C4JbefD9yoXIB_BFlm42K5pmF4mBG"
+
+gcp_routed_cidr          = "10.50.0.0/24"
+psc_endpoint_host_offset = 10
+
+private_service_target_tags   = ["bookflow-private-api"]
+cross_cloud_ingress_tcp_ports = ["443"]
+cross_cloud_egress_tcp_ports  = ["443"]
+
+bgp_sessions = {
+  tunnel0 = {
+    vpn_gateway_interface           = 0
+    peer_external_gateway_interface = 0
+    router_ip_cidr                  = "169.254.213.138/30"
+    peer_ip_address                 = "169.254.213.137"
+    shared_secret                   = "i42C4JbefD9yoXIB_BFlm42K5pmF4mBG"
+    advertised_route_priority       = 100
+  }
+  tunnel1 = {
+    vpn_gateway_interface           = 0
+    peer_external_gateway_interface = 1
+    router_ip_cidr                  = "169.254.100.74/30"
+    peer_ip_address                 = "169.254.100.73"
+    shared_secret                   = "i42C4JbefD9yoXIB_BFlm42K5pmF4mBG"
+    advertised_route_priority       = 100
+  }
+}
+
+
+

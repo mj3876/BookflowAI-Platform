@@ -268,6 +268,52 @@ CREATE TABLE IF NOT EXISTS notifications_log (
 );
 
 -- =========================================================================
+-- 16b. goods event campaigns (HQ manual event-only display recommendations)
+-- =========================================================================
+CREATE TABLE IF NOT EXISTS goods_campaigns (
+    campaign_id             UUID         PRIMARY KEY,
+    title                   VARCHAR(200) NOT NULL,
+    campaign_type           VARCHAR(40)  NOT NULL DEFAULT 'EVENT',
+    start_date              DATE         NOT NULL,
+    end_date                DATE         NOT NULL,
+    isbn13s                 JSONB        NOT NULL DEFAULT '[]'::jsonb,
+    target_branch_ids       INTEGER[]    NOT NULL DEFAULT '{}',
+    objective               TEXT,
+    status                  VARCHAR(20)  NOT NULL DEFAULT 'DRAFT',
+    created_by              VARCHAR(100),
+    created_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS goods_recommendations (
+    recommendation_id       UUID         PRIMARY KEY,
+    campaign_id             UUID         NOT NULL REFERENCES goods_campaigns(campaign_id) ON DELETE CASCADE,
+    isbn13                  CHAR(13)     NOT NULL,
+    branch_id               INTEGER      NOT NULL,
+    recommended_goods       JSONB        NOT NULL DEFAULT '[]'::jsonb,
+    display_position        VARCHAR(120),
+    reason                  TEXT,
+    priority                VARCHAR(20)  NOT NULL DEFAULT 'MEDIUM',
+    email_subject           VARCHAR(200),
+    email_body              TEXT,
+    ai_model                VARCHAR(80),
+    source                  VARCHAR(20)  NOT NULL DEFAULT 'gemini',
+    created_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    UNIQUE (campaign_id, isbn13, branch_id)
+);
+
+CREATE TABLE IF NOT EXISTS goods_campaign_send_history (
+    send_id                 UUID         PRIMARY KEY,
+    campaign_id             UUID         NOT NULL REFERENCES goods_campaigns(campaign_id) ON DELETE CASCADE,
+    branch_id               INTEGER      NOT NULL,
+    recipient_email         VARCHAR(200),
+    send_status             VARCHAR(20)  NOT NULL,
+    notification_id         UUID,
+    sent_at                 TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+-- =========================================================================
 -- 17. sales_realtime (POS transactions - 14d retention)
 -- =========================================================================
 CREATE TABLE IF NOT EXISTS sales_realtime (

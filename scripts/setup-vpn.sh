@@ -12,6 +12,7 @@ set -euo pipefail
 REGION="ap-northeast-1"
 SECRET_NAME="bookflow/vpn/ca"
 CFN_STACK="bookflow-60-client-vpn"
+VPN_ENDPOINT="${VPN_ENDPOINT:-}"
 OUTPUT_DIR="${HOME}/.bookflow-vpn"
 
 # ── 색상 출력 ──────────────────────────────────────────────────────────
@@ -45,19 +46,36 @@ aws sts get-caller-identity --region "$REGION" >/dev/null 2>&1 \
 
 info "AWS 인증 확인 완료"
 
-# ── Client VPN endpoint ID 동적 조회 (CFN outputs) ────────────────────
-info "Client VPN endpoint 조회 중 (${CFN_STACK})..."
-ENDPOINT_ID=$(aws cloudformation describe-stacks \
-  --stack-name "$CFN_STACK" \
-  --region "$REGION" \
-  --query "Stacks[0].Outputs[?OutputKey=='ClientVpnEndpointId'].OutputValue" \
-  --output text 2>/dev/null || echo "")
+# ── Client VPN endpoint ID 동적 조회 (env var → CFN describe-stacks → list-exports → ec2) ──
+if [[ -z "$VPN_ENDPOINT" ]]; then
+  info "Client VPN endpoint 조회 중 (${CFN_STACK})..."
+  ENDPOINT_ID=$(aws cloudformation describe-stacks \
+    --stack-name "$CFN_STACK" \
+    --region "$REGION" \
+    --query "Stacks[0].Outputs[?OutputKey=='ClientVpnEndpointId'].OutputValue" \
+    --output text 2>/dev/null || echo "")
 
-[[ -z "$ENDPOINT_ID" ]] && \
-  error "Client VPN endpoint 조회 실패.\n  스택 '${CFN_STACK}'이 배포돼 있는지 확인하세요:\n    bash scripts/aws/ops/cicd.sh up  (또는 start-day.sh)"
+  if [[ -z "$ENDPOINT_ID" || "$ENDPOINT_ID" == "None" ]]; then
+    ENDPOINT_ID=$(aws cloudformation list-exports \
+      --region "$REGION" \
+      --query "Exports[?Name=='bookflow-client-vpn-endpoint-id'].Value | [0]" \
+      --output text 2>/dev/null || true)
+  fi
 
-VPN_ENDPOINT="${ENDPOINT_ID}.prod.clientvpn.${REGION}.amazonaws.com"
-info "endpoint: ${VPN_ENDPOINT}"
+  if [[ -z "$ENDPOINT_ID" || "$ENDPOINT_ID" == "None" ]]; then
+    ENDPOINT_ID=$(aws ec2 describe-client-vpn-endpoints \
+      --region "$REGION" \
+      --filters "Name=tag:Name,Values=bookflow-client-vpn" \
+      --query "sort_by(ClientVpnEndpoints[?Status.Code=='available'], &CreationTime)[-1].ClientVpnEndpointId" \
+      --output text 2>/dev/null || true)
+  fi
+
+  [[ -n "$ENDPOINT_ID" && "$ENDPOINT_ID" != "None" ]] \
+    || error "Client VPN endpoint 조회 실패.\n  스택 '${CFN_STACK}'이 배포돼 있는지 확인하세요:\n    bash scripts/aws/ops/cicd.sh up  (또는 start-day.sh)"
+
+  VPN_ENDPOINT="${ENDPOINT_ID}.prod.clientvpn.${REGION}.amazonaws.com"
+fi
+info "Client VPN endpoint: ${VPN_ENDPOINT}"
 
 # ── 이름 입력 ──────────────────────────────────────────────────────────
 echo ""

@@ -33,7 +33,13 @@ _connect_client_vpn() {
     log "Client VPN 이미 연결됨 (DNS: 10.0.0.2)"
     return 0
   fi
-  local ovpn="$SCRIPT_DIR/../bookflow-client-desktop-1.ovpn"
+  local sync_script="$SCRIPT_DIR/../../../scripts/sync-client-vpn-profile.ps1"
+  if command -v powershell.exe >/dev/null 2>&1 && [[ -f "$sync_script" ]]; then
+    powershell.exe -ExecutionPolicy Bypass -File "$(cygpath -w "$sync_script")" >/dev/null 2>&1 \
+      || warn "Client VPN profile sync failed; continuing with existing ovpn"
+  fi
+
+  local ovpn="$SCRIPT_DIR/../../../_client_vpn_certs_v2/bookflow-client-desktop-1.ovpn"
   local openvpn_bin=""
   for _p in \
     "/c/Program Files/OpenVPN/bin/openvpn.exe" \
