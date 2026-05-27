@@ -81,114 +81,6 @@
                       }
                     }
                   }
-                },
-                "NewBookSubmittedToHq": {
-                  "case": "NewBookSubmittedToHq",
-                  "actions": {
-                    "Send_NewBookSubmittedToHq": {
-                      "type": "Http",
-                      "operationOptions": "DisableAsyncPattern",
-                      "inputs": {
-                        "method": "POST",
-                        "uri": "@parameters('ACS_EMAIL_URI')",
-                        "authentication": {
-                          "type": "ManagedServiceIdentity",
-                          "identity": "@parameters('LA_IDENTITY_ID')",
-                          "audience": "https://communication.azure.com"
-                        },
-                        "body": {
-                          "senderAddress": "@parameters('ACS_SENDER')",
-                          "recipients": { "to": "@triggerBody()?['recipients']" },
-                          "content": {
-                            "subject": "[BookFlow] 신간 정보 접수 확인 요청",
-                            "html": "<p>출판사에서 신간 정보를 제출했습니다. 본사 담당자는 대시보드에서 내용을 확인해 주세요.</p><p>도서명: @{coalesce(triggerBody()?['payload']?['title'], '미입력')}</p><p>ISBN: @{coalesce(triggerBody()?['payload']?['isbn13'], '미입력')}</p><p><a href=\"@{parameters('DASHBOARD_URL')}\">BookFlow 대시보드 바로가기</a></p>"
-                          },
-                          "importance": "normal"
-                        }
-                      }
-                    }
-                  }
-                },
-                "NewBookAcceptedToPublisher": {
-                  "case": "NewBookAcceptedToPublisher",
-                  "actions": {
-                    "Send_NewBookAcceptedToPublisher": {
-                      "type": "Http",
-                      "operationOptions": "DisableAsyncPattern",
-                      "inputs": {
-                        "method": "POST",
-                        "uri": "@parameters('ACS_EMAIL_URI')",
-                        "authentication": {
-                          "type": "ManagedServiceIdentity",
-                          "identity": "@parameters('LA_IDENTITY_ID')",
-                          "audience": "https://communication.azure.com"
-                        },
-                        "body": {
-                          "senderAddress": "@parameters('ACS_SENDER')",
-                          "recipients": { "to": "@triggerBody()?['recipients']" },
-                          "content": {
-                            "subject": "[BookFlow] 신간 편입 확정 안내",
-                            "html": "<p>검토 결과 귀사의 신간을 BookFlow 판매 도서로 편입하기로 확정했습니다.</p><p>도서명: @{coalesce(triggerBody()?['payload']?['title'], '미입력')}</p><p>ISBN: @{coalesce(triggerBody()?['payload']?['isbn13'], '미입력')}</p>"
-                          },
-                          "importance": "normal"
-                        }
-                      }
-                    }
-                  }
-                },
-                "NewBookRejectedToPublisher": {
-                  "case": "NewBookRejectedToPublisher",
-                  "actions": {
-                    "Send_NewBookRejectedToPublisher": {
-                      "type": "Http",
-                      "operationOptions": "DisableAsyncPattern",
-                      "inputs": {
-                        "method": "POST",
-                        "uri": "@parameters('ACS_EMAIL_URI')",
-                        "authentication": {
-                          "type": "ManagedServiceIdentity",
-                          "identity": "@parameters('LA_IDENTITY_ID')",
-                          "audience": "https://communication.azure.com"
-                        },
-                        "body": {
-                          "senderAddress": "@parameters('ACS_SENDER')",
-                          "recipients": { "to": "@triggerBody()?['recipients']" },
-                          "content": {
-                            "subject": "[BookFlow] 신간 편입 검토 결과 안내",
-                            "html": "<p>검토 결과 이번 신간은 BookFlow 판매 도서로 편입하지 않기로 했습니다.</p><p>도서명: @{coalesce(triggerBody()?['payload']?['title'], '미입력')}</p><p>ISBN: @{coalesce(triggerBody()?['payload']?['isbn13'], '미입력')}</p><p>사유: @{coalesce(triggerBody()?['payload']?['reason'], '별도 사유 없음')}</p>"
-                          },
-                          "importance": "normal"
-                        }
-                      }
-                    }
-                  }
-                },
-                "NewBookDisplayRequest": {
-                  "case": "NewBookDisplayRequest",
-                  "actions": {
-                    "Send_NewBookDisplayRequest": {
-                      "type": "Http",
-                      "operationOptions": "DisableAsyncPattern",
-                      "inputs": {
-                        "method": "POST",
-                        "uri": "@parameters('ACS_EMAIL_URI')",
-                        "authentication": {
-                          "type": "ManagedServiceIdentity",
-                          "identity": "@parameters('LA_IDENTITY_ID')",
-                          "audience": "https://communication.azure.com"
-                        },
-                        "body": {
-                          "senderAddress": "@parameters('ACS_SENDER')",
-                          "recipients": { "to": "@triggerBody()?['recipients']" },
-                          "content": {
-                            "subject": "[BookFlow] 신간 진열 준비 요청",
-                            "html": "<p>본사에서 신간 편입을 확정했습니다. 물류센터와 지점 담당자는 해당 신간의 입고 및 진열 준비를 진행해 주세요.</p><p>도서명: @{coalesce(triggerBody()?['payload']?['title'], '미입력')}</p><p>ISBN: @{coalesce(triggerBody()?['payload']?['isbn13'], '미입력')}</p><p><a href=\"@{parameters('DASHBOARD_URL')}\">BookFlow 대시보드 바로가기</a></p>"
-                          },
-                          "importance": "normal"
-                        }
-                      }
-                    }
-                  }
                 }
               },
               "default": { "actions": {} }
@@ -196,6 +88,7 @@
           },
           "else": { "actions": {} }
         },
+
         "Response_Success": {
           "type": "Response",
           "runAfter": { "Check_HasRecipients": ["Succeeded"] },
