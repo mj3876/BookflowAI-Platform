@@ -376,7 +376,9 @@ deploy_logicapp() {
   fi
 
   local tmp_file="/tmp/la-arm-${la_name}.json"
-  envsubst < "$template" > "$tmp_file"
+  # 변수 목록 명시 필수: 미명시 시 $schema 등 ARM 내장 필드도 치환되어 배포 실패
+  envsubst '${LOCATION} ${LOGICAPP_IDENTITY_ID} ${ACS_EMAIL_URI} ${ACS_SENDER} ${DASHBOARD_URL}' \
+    < "$template" > "$tmp_file"
 
   echo "  배포 중: $la_name ..."
   if az rest --method PUT \
@@ -425,19 +427,66 @@ deploy_logicapp "la-${PREFIX}-stock-depart"     "${WORKFLOW_DIR}/stock-depart/ar
 deploy_logicapp "la-${PREFIX}-stock-arrival"    "${WORKFLOW_DIR}/stock-arrival/arm-deploy.json"
 
 echo ""
-echo "[5-2] Logic Apps SAS URL (ConfigMap/Secret 업데이트 필요)"
-for la_name in \
-  "la-${PREFIX}-notification" \
-  "la-${PREFIX}-approval-request" \
-  "la-${PREFIX}-stock-depart" \
-  "la-${PREFIX}-stock-arrival"; do
-  sas_url=$(az rest --method POST \
-    --url "https://management.azure.com/subscriptions/${SUB_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.Logic/workflows/${la_name}/triggers/manual/listCallbackUrl?api-version=2016-06-01" \
-    --query "value" --output tsv 2>/dev/null || echo "조회 실패")
-  echo "  ${la_name}:"
-  echo "    ${sas_url}"
-done
-echo "  위 URL을 notification-svc Secret에 설정하세요."
+echo "[5-2] SAS URL 발급 및 AWS Secrets Manager 업데이트"
+
+_sas_url() {
+  az rest --method POST \
+    --url "https://management.azure.com/subscriptions/${SUB_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.Logic/workflows/$1/triggers/manual/listCallbackUrl?api-version=2016-06-01" \
+    --query "value" --output tsv 2>/dev/null || echo ""
+}
+
+SAS_NOTIFICATION=$(_sas_url    "la-${PREFIX}-notification")
+SAS_APPROVAL=$(_sas_url        "la-${PREFIX}-approval-request")
+SAS_STOCK_DEPART=$(_sas_url    "la-${PREFIX}-stock-depart")
+SAS_STOCK_ARRIVAL=$(_sas_url   "la-${PREFIX}-stock-arrival")
+
+echo "  la-${PREFIX}-notification:     ${SAS_NOTIFICATION:-(조회 실패)}"
+echo "  la-${PREFIX}-approval-request: ${SAS_APPROVAL:-(조회 실패)}"
+echo "  la-${PREFIX}-stock-depart:     ${SAS_STOCK_DEPART:-(조회 실패)}"
+echo "  la-${PREFIX}-stock-arrival:    ${SAS_STOCK_ARRIVAL:-(조회 실패)}"
+
+# ── AWS Secrets Manager 업데이트 ──────────────────────────────────────────
+# SAS URL은 Logic App 재배포마다 변경됨.
+# ESO가 이 Secret을 읽어 K8s Secret(notification-svc-secret)을 자동 생성하므로
+# 여기서 Secrets Manager를 업데이트해야 파드에 새 URL이 반영됨.
+_AWS_REGION="${AWS_REGION:-ap-northeast-1}"
+_AWS_PROFILE="${AWS_PROFILE:-bookflow-deploy}"
+_SECRET_ID="bookflow/azure/logic-apps-urls"
+
+echo ""
+echo "  AWS Secrets Manager 업데이트: ${_SECRET_ID}"
+_SECRET_JSON=$(printf '{"notification":"%s","approval_request":"%s","stock_depart":"%s","stock_arrival":"%s"}' \
+  "$SAS_NOTIFICATION" "$SAS_APPROVAL" "$SAS_STOCK_DEPART" "$SAS_STOCK_ARRIVAL")
+
+if aws secretsmanager put-secret-value \
+    --secret-id "$_SECRET_ID" \
+    --region   "$_AWS_REGION" \
+    --profile  "$_AWS_PROFILE" \
+    --secret-string "$_SECRET_JSON" \
+    --output none 2>/tmp/sm_err; then
+  echo "  ✓ Secrets Manager 업데이트 완료"
+else
+  echo "  ✗ Secrets Manager 업데이트 실패 (수동 실행 필요):"
+  cat /tmp/sm_err | sed 's/^/    /'
+  echo ""
+  echo "  수동 명령:"
+  echo "    aws secretsmanager put-secret-value \\"
+  echo "      --secret-id ${_SECRET_ID} \\"
+  echo "      --region ${_AWS_REGION} --profile ${_AWS_PROFILE} \\"
+  echo "      --secret-string '${_SECRET_JSON}'"
+fi
+
+# ── ESO 즉시 동기화 (1시간 대기 없이 K8s Secret 즉시 반영) ─────────────
+echo ""
+echo "  ESO force-sync → K8s Secret 즉시 반영 중..."
+if kubectl annotate externalsecret notification-svc-secret -n bookflow \
+    "force-sync=$(date +%s)" --overwrite 2>/tmp/eso_err; then
+  echo "  ✓ ESO force-sync 완료 (수 초 내 파드 환경변수 반영)"
+else
+  echo "  ✗ ESO sync 실패 (kubectl 미연결 또는 EKS 미접근):"
+  cat /tmp/eso_err | sed 's/^/    /'
+  echo "  수동 실행: kubectl annotate externalsecret notification-svc-secret -n bookflow force-sync=\$(date +%s) --overwrite"
+fi
 
 # ════════════════════════════════════════════
 # STACK 6: Network (VPN Gateway, 30~45)
