@@ -144,6 +144,34 @@
                 }
               }
             }
+          },
+          "GoodsDisplayCampaign": {
+            "case": "GoodsDisplayCampaign",
+            "actions": {
+              "Email_GoodsDisplayCampaign": {
+                "description": "굿즈 이벤트 캠페인 — 지점 담당자 1명에게 진열 지시 메일 발송.",
+                "type": "Http",
+                "operationOptions": "DisableAsyncPattern",
+                "inputs": {
+                  "method": "POST",
+                  "uri": "@parameters('ACS_EMAIL_URI')",
+                  "authentication": {
+                    "type": "ManagedServiceIdentity",
+                    "identity": "@parameters('LA_IDENTITY_ID')",
+                    "audience": "https://communication.azure.com"
+                  },
+                  "body": {
+                    "senderAddress": "@parameters('ACS_SENDER')",
+                    "recipients": { "to": "@triggerBody()?['recipients']" },
+                    "content": {
+                      "subject": "@{coalesce(triggerBody()?['payload']?['email_subject'], concat('[BOOKFLOW] 굿즈 이벤트 캠페인: ', coalesce(triggerBody()?['payload']?['campaign_title'], '캠페인')))}",
+                      "html": "@{concat('<h2 style=\"color:#1a73e8;\">[굿즈 이벤트 캠페인] ', coalesce(triggerBody()?['payload']?['campaign_title'], '캠페인'), '</h2><table border=\"1\" cellpadding=\"8\" cellspacing=\"0\" style=\"border-collapse:collapse;font-size:14px;\"><tbody><tr><td><b>캠페인 기간</b></td><td>', coalesce(triggerBody()?['payload']?['campaign_period'], '—'), '</td></tr><tr><td><b>대상 지점</b></td><td>지점 ', string(coalesce(triggerBody()?['payload']?['branch_id'], '—')), '</td></tr></tbody></table><br/><h3>진열 지시 내용</h3><pre style=\"background:#f8f9fa;padding:12px;font-size:13px;white-space:pre-wrap;\">', replace(coalesce(triggerBody()?['payload']?['email_body'], '내용 없음'), '<', '&lt;'), '</pre><br/><p><a href=\"', parameters('DASHBOARD_URL'), '\" style=\"background:#1a73e8;color:#fff;padding:10px 20px;text-decoration:none;border-radius:4px;font-weight:bold;\">BookFlow 대시보드 바로가기</a></p><hr/><p style=\"font-size:12px;color:#666;\">본 메일은 BookFlow 굿즈 캠페인 시스템에서 자동 발송되었습니다.</p>')}"
+                    },
+                    "importance": "normal"
+                  }
+                }
+              }
+            }
           }
         },
         "default": { "actions": {} }
