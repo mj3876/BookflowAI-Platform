@@ -126,7 +126,7 @@ jobs:
         id: send-command
         run: |
           # playbook 시퀀스를 shell 명령으로 조립
-          COMMANDS='["set -e", "git config --global --add safe.directory /opt/bookflow", "cd /opt/bookflow && git pull origin ${{ github.ref_name }}"'
+          COMMANDS='["set -e", "cd /opt/bookflow && git -c safe.directory=/opt/bookflow pull origin ${{ github.ref_name }}"'
           for p in ${{ steps.playbooks.outputs.seq }}; do
             COMMANDS="$COMMANDS, \"ansible-playbook cicd/ansible/playbooks/${p}.yml --roles-path cicd/ansible/roles -e github_sha=${{ github.sha }}\""
           done
