@@ -1028,10 +1028,46 @@ def deploy() -> None:
     log.info(f"https://{STAFF_DASHBOARD_FQDN}/ is available only through Client VPN/private DNS")
 
 
+def _clear_staff_dashboard_private_zone() -> None:
+    """stop-day: StaffDashboardPrivateZone 의 non-NS/SOA 레코드를 모두 삭제.
+    eks-addons deploy 시 추가되는 A record(NLB 사설 IP)와
+    cert-manager DNS-01 TXT record 가 남아 Route53 스택 DELETE_FAILED 유발."""
+    import boto3
+    cf = boto3.client("cloudformation", region_name=os.environ.get("AWS_REGION", "ap-northeast-1"))
+    exports = {e["Name"]: e["Value"] for e in cf.list_exports().get("Exports", [])}
+    zone_id = exports.get(STAFF_DASHBOARD_ZONE_EXPORT)
+    if not zone_id:
+        log.info("StaffDashboardPrivateZone export 없음 — skip")
+        return
+
+    r53 = boto3.client("route53")
+    paginator = r53.get_paginator("list_resource_record_sets")
+    changes = []
+    for page in paginator.paginate(HostedZoneId=zone_id):
+        for rrs in page["ResourceRecordSets"]:
+            if rrs["Type"] in ("NS", "SOA"):
+                continue
+            changes.append({"Action": "DELETE", "ResourceRecordSet": rrs})
+
+    if not changes:
+        log.info("StaffDashboardPrivateZone 정리할 레코드 없음")
+        return
+
+    log.info(f"StaffDashboardPrivateZone 레코드 {len(changes)}개 삭제: "
+             f"{[c['ResourceRecordSet']['Name'] for c in changes]}")
+    r53.change_resource_record_sets(
+        HostedZoneId=zone_id,
+        ChangeBatch={"Changes": changes},
+    )
+    log.info("  StaffDashboardPrivateZone 정리 완료")
+
+
 def destroy() -> None:
     log.step("=== task-eks-addons-down ===")
     _ensure_tools()
     _ensure_kubeconfig()
+
+    _clear_staff_dashboard_private_zone()
 
     # Reverse order
     for cmd in [
