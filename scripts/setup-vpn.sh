@@ -11,7 +11,7 @@ set -euo pipefail
 
 REGION="ap-northeast-1"
 SECRET_NAME="bookflow/vpn/ca"
-VPN_ENDPOINT="cvpn-endpoint-072c0ffd0cba0fbd6.prod.clientvpn.ap-northeast-1.amazonaws.com"
+VPN_ENDPOINT="${VPN_ENDPOINT:-}"
 OUTPUT_DIR="${HOME}/.bookflow-vpn"
 
 # ── 색상 출력 ──────────────────────────────────────────────────────────
@@ -44,6 +44,24 @@ aws sts get-caller-identity --region "$REGION" >/dev/null 2>&1 \
   || error "AWS 인증 실패. 'aws configure' 또는 SSO 로그인을 먼저 완료하세요."
 
 info "AWS 인증 확인 완료"
+
+if [[ -z "$VPN_ENDPOINT" ]]; then
+    ENDPOINT_ID=$(aws cloudformation list-exports \
+        --region "$REGION" \
+        --query "Exports[?Name=='bookflow-client-vpn-endpoint-id'].Value | [0]" \
+        --output text 2>/dev/null || true)
+    if [[ -z "$ENDPOINT_ID" || "$ENDPOINT_ID" == "None" ]]; then
+        ENDPOINT_ID=$(aws ec2 describe-client-vpn-endpoints \
+            --region "$REGION" \
+            --filters "Name=tag:Name,Values=bookflow-client-vpn" \
+            --query "sort_by(ClientVpnEndpoints[?Status.Code=='available'], &CreationTime)[-1].ClientVpnEndpointId" \
+            --output text)
+    fi
+    [[ -n "$ENDPOINT_ID" && "$ENDPOINT_ID" != "None" ]] \
+      || error "Client VPN endpoint 조회 실패. 먼저 AWS Client VPN을 배포하세요."
+    VPN_ENDPOINT="${ENDPOINT_ID}.prod.clientvpn.${REGION}.amazonaws.com"
+fi
+info "Client VPN endpoint: ${VPN_ENDPOINT}"
 
 # ── 이름 입력 ──────────────────────────────────────────────────────────
 echo ""
