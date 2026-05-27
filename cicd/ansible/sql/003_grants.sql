@@ -53,6 +53,9 @@ GRANT INSERT                ON audit_log        TO inventory_svc;
 -- forecast-svc: forecast cache writer (BQ -> RDS sync)
 GRANT INSERT, UPDATE, DELETE ON forecast_cache  TO forecast_svc;
 GRANT INSERT                ON audit_log        TO forecast_svc;
+GRANT INSERT, UPDATE, DELETE ON goods_campaigns TO forecast_svc;
+GRANT INSERT, UPDATE, DELETE ON goods_recommendations TO forecast_svc;
+GRANT INSERT, UPDATE        ON goods_campaign_send_history TO forecast_svc;
 
 -- decision-svc: pending_orders creator + plan-daily 멱등성 (같은 snapshot_date 재호출 시 기존 plan rows cleanup)
 GRANT INSERT, UPDATE, DELETE ON pending_orders   TO decision_svc;
