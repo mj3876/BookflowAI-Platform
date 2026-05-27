@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # start-day.sh · 매일 실행
-# 흐름: base → network(+vpn-attach) → SAM+ClientVPN+CICD 병렬
-#        → seed+VPN연결 병렬 → 4서비스 병렬 → eks-addons resync
+# 흐름: base → network(+vpn-attach) → SAM+ClientVPN 병렬 → seed+VPN연결 병렬
+#        → 4서비스 병렬 → CICD → eks-addons resync
 # 발표일: + ./scripts/ops/network-mode.sh tgw + ./scripts/ops/eks-mode.sh private
 #
 # Env:
@@ -92,25 +92,24 @@ else
   "$SCRIPT_DIR/ops/peering.sh" up
 fi
 
-# SAM + Client VPN + CICD 병렬 배포 — 셋 다 base.sh 완료 후 독립적으로 실행 가능.
+# SAM + Client VPN 병렬 배포 — base.sh 완료 후 독립적으로 실행 가능.
+# CICD(eks·publisher)는 EKS cluster·Publisher ASG ImportValue 의존 → step 5 완료 후 step 6에서 배포.
 # etl.sh 내부의 lambdas 단계는 BOOKFLOW_LAMBDAS_DEPLOYED=1 이면 skip.
-step "3/7 SAM (99-serverless) + Client VPN + CICD 병렬 배포"
+step "3/8 SAM (99-serverless) + Client VPN 병렬 배포"
 py "$PROJECT_ROOT/scripts/aws/bookflow.py" task lambdas    &  LAMBDAS_PID=$!
 py "$PROJECT_ROOT/scripts/aws/bookflow.py" task client-vpn &  CVPN_PID=$!
-"$SCRIPT_DIR/ops/cicd.sh" up                               &  CICD_PID=$!
 if ! wait $LAMBDAS_PID; then
   err "SAM 배포 실패 — logs/ 확인"
-  wait $CVPN_PID || true; wait $CICD_PID || true
+  wait $CVPN_PID || true
   exit 1
 fi
 export BOOKFLOW_LAMBDAS_DEPLOYED=1
 wait $CVPN_PID || warn "client-vpn 배포 경고 (이미 존재하면 정상)"
-wait $CICD_PID || warn "cicd 배포 경고 (이미 존재하면 정상)"
 
 # seed 를 eks 병렬 실행 전에 완료 — eks.sh 내부 BOOKFLOW_SKIP_RDS_SYNC=1 은 그대로이나
 # step 6 resync 시 role/password 가 이미 확정된 상태로 실행되므로 ALTER ROLE 1회로 충분.
 # Client VPN 연결(~30s)을 seed(~2분)와 병렬 실행해 전체 대기 시간 최소화.
-step "4/7 seed + Client VPN 병렬 준비 (parquet→RDS · VPN 연결)"
+step "4/8 seed + Client VPN 병렬 준비 (parquet→RDS · VPN 연결)"
 "$SCRIPT_DIR/ops/seed.sh" up &  SEED_PID=$!
 _connect_client_vpn           &  VPN_PID=$!
 if ! wait $SEED_PID; then
@@ -120,7 +119,7 @@ if ! wait $SEED_PID; then
 fi
 wait $VPN_PID || true  # VPN 연결 실패는 치명적이지 않음 (warn 후 계속)
 
-step "5/7 4 서비스 병렬 (eks · ecs · publisher · etl)"
+step "5/8 4 서비스 병렬 (eks · ecs · publisher · etl)"
 "$SCRIPT_DIR/ops/eks.sh" up &        EKS_PID=$!
 "$SCRIPT_DIR/ops/ecs.sh" up &        ECS_PID=$!
 "$SCRIPT_DIR/ops/publisher.sh" up &  PUB_PID=$!
@@ -135,16 +134,21 @@ if [ $FAILED -gt 0 ]; then
   exit 1
 fi
 
+# CICD: eks-pipeline(CodeBuildEksAccessEntry→bookflow-eks-cluster-name)·publisher-codedeploy
+#        (PublisherDeploymentGroup→bookflow-publisher-asg-name) 둘 다 step 5 완료 후 ImportValue 충족.
+step "6/8 CICD 3 CodePipeline (step 5 완료 후 · ImportValue 의존 해소)"
+"$SCRIPT_DIR/ops/cicd.sh" up || warn "cicd 배포 경고 (이미 존재하면 정상)"
+
 # eks.sh 내부 BOOKFLOW_SKIP_RDS_SYNC=1 로 ALTER ROLE 건너뜀.
 # seed 가 step 4 에서 이미 완료됐으므로 role/password 확정 후 full resync.
-step "6/7 eks-addons resync · ALTER ROLE 11 + 7 pod rollout (DB pool 정합)"
+step "7/8 eks-addons resync · ALTER ROLE 11 + 7 pod rollout (DB pool 정합)"
 py "$PROJECT_ROOT/scripts/aws/bookflow.py" task eks-addons || warn "eks-addons resync 실패 (이미 정합이면 무시)"
 
-step "7/7 eks-addons resync 완료 · 인프라 배포 끝"
+step "8/8 eks-addons resync 완료 · 인프라 배포 끝"
 
 ELAPSED=$(( $(date +%s) - T0 ))
 state_write "last-start-day" "$(date +%Y-%m-%dT%H:%M:%S)"
 state_write "last-start-elapsed" "$ELAPSED"
 echo ""
-echo "═══ start-day done · ${ELAPSED}s · failed=${FAILED} ═══"
+echo "═══ start-day done · ${ELAPSED}s ═══"
 echo "  발표일 추가:    ./scripts/ops/network-mode.sh tgw && ./scripts/ops/eks-mode.sh private"
