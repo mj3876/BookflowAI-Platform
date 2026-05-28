@@ -3,11 +3,13 @@
 CREATE OR REPLACE VIEW vw_branch_inventory_summary AS
 SELECT
     l.location_id,
-    l.location_name,
-    COUNT(DISTINCT i.book_id) AS distinct_books,
-    SUM(i.qty)                AS total_qty
+    l.name      AS location_name,
+    l.region,
+    l.location_type,
+    COUNT(DISTINCT i.isbn13) AS distinct_books,
+    SUM(i.on_hand)            AS total_qty
 FROM locations l
 LEFT JOIN inventory i ON i.location_id = l.location_id
-GROUP BY l.location_id, l.location_name;
+GROUP BY l.location_id, l.name, l.region, l.location_type;
 
-COMMENT ON VIEW vw_branch_inventory_summary IS 'CI/CD 시연용 view — 매장별 재고 요약';
+COMMENT ON VIEW vw_branch_inventory_summary IS 'CI/CD 시연용 view — 매장별 재고 요약 (locations.name / inventory.on_hand 기준)';
